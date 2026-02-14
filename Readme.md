@@ -38,6 +38,7 @@ Questo progetto fornisce un'interfaccia web intuitiva per:
 
 ![RNID_GUI](img/rnsMonitor2.jpg)
 
+
 ## 🚀 Installazione
 
 ### Prerequisiti
@@ -69,6 +70,7 @@ Poi apri il browser su:
     Aspect Monitor: http://localhost:5000/monitor
 ```
 
+
 <h3>📁 Struttura del progetto</h3>
 
 ```ini
@@ -82,6 +84,8 @@ rns-identity-manager/
 │   └── monitor.html            # Aspect Monitor
 └── README.md
 ```
+
+
 <h3>🗂️ Directory utilizzate</h3>
 
 Il programma cerca identità in:
@@ -107,7 +111,10 @@ Cache e downloads:
 
     ~/.rns_manager/storage/ - Imported identities
 ```
-🎮 Utilizzo
+
+
+<h3>🎮 Utilizzo</h3>
+
 Identity Manager
 
     Carica identità: Premi "Carica" per visualizzare le identità trovate
@@ -142,7 +149,9 @@ Aspect Monitor
 
         🕳️ rnpath -p - Controlla blackhole
 
+
 <h3>🔧 Configurazione
+
 Cache identità
 
 Le identità vengono cachate per 6 ore per prestazioni ottimali. Per forzare una scansione completa, premi "Ricerca profonda".
@@ -152,6 +161,7 @@ Gli annunci vengono salvati automaticamente ogni 60 secondi e mantenuti per 7 gi
 Personalizzazione percorsi
 
 Modifica USER_DIRECTORIES in manager.py per aggiungere/rimuovere directory di ricerca.
+
 
 <h3>📊 API disponibili</h3>
 
@@ -189,6 +199,7 @@ Comandi RNS
 
     POST /api/rns/probe - rnprobe
 
+
 <h3>🤝 Contribuire</h3>
 
     Fai un fork del progetto
@@ -201,9 +212,11 @@ Comandi RNS
 
     Apri una Pull Request
 
+
 <h3>📝 Licenza</h3>
 
 Distribuito sotto licenza MIT. Vedi LICENSE per maggiori informazioni.
+
 
 <h3>🙏 Ringraziamenti
 
@@ -211,11 +224,13 @@ Distribuito sotto licenza MIT. Vedi LICENSE per maggiori informazioni.
 
     Flask - Framework web leggero
 
+
 <h3>📧 Contatto</h3>
 
 Il tuo nome - arg0netds.gmail.com
 
 Link progetto: https://github.com/tuousername/rns-identity-manager
+
 
 <h3>🐛 Problemi noti</h3>
 
@@ -224,6 +239,7 @@ Link progetto: https://github.com/tuousername/rns-identity-manager
     Alcuni aspect potrebbero non essere riconosciuti correttamente
 
     Su dispositivi mobili, alcune tabelle potrebbero richiedere scorrimento orizzontale
+
 
 <h3>🔜 Roadmap</h3>
 
