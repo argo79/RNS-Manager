@@ -227,9 +227,9 @@ Distribuito sotto licenza MIT. Vedi LICENSE per maggiori informazioni.
 
 <h3>📧 Contatto</h3>
 
-Il tuo nome - arg0netds.gmail.com
+Arg0net - arg0netds.gmail.com
 
-Link progetto: https://github.com/tuousername/rns-identity-manager
+Link progetto: https://github.com/argo79/RNS-Manager
 
 
 <h3>🐛 Problemi noti</h3>

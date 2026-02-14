@@ -226,7 +226,7 @@ Distributed under the MIT License.
 
 Arg0net - Arg0netds@gmail.com
 
-Project Link: https://github.com/yourusername/rns-identity-manager
+Project Link: https://github.com/argo79/RNS-Manager
 
 
 <h3>🐛 Known Issues</h3>
@@ -265,21 +265,22 @@ Project Link: https://github.com/yourusername/rns-identity-manager
 <h3>⚙️ Advanced Configuration</h3>
 Cache Duration
 
-You can modify cache duration in manager.py:
-python
+You can modify cache duration in rns_manager.py:
 
-<h4> Identity cache (default: 6 hours)</h4>
+```ini
+Identity cache (default: 6 hours)
 identity_cache = IdentityCache(cache_duration=3600)
 
-<h4> Announce cache (default: 7 days)</h4>
+Announce cache (default: 7 days)
 announce_cache = PersistentAnnounceCache(
     max_age_days=7,
     save_interval=60
 )
+```
 
 Adding Custom Aspects
 
-Edit RNS_ASPECTS list in manager.py to add custom aspects for recognition.
+Edit RNS_ASPECTS list in rns_manager.py and rns_monitor.html to add custom aspects for recognition.
 
 
 <h3>🖥️ System Requirements</h3>
