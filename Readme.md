@@ -36,7 +36,7 @@ Questo progetto fornisce un'interfaccia web intuitiva per:
 - 💾 Cache persistente su disco (7 giorni di storico)
 - 🖱️ Interfaccia interattiva con modal per comandi rnpath/rnprobe
 
-![RNID_GUI](img/rnsMonitor1.jpg)
+![RNID_GUI](img/rnsMonitor2.jpg)
 
 ## 🚀 Installazione
 
