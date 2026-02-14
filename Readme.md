@@ -59,12 +59,8 @@ pip install flask
 pip install rns
 
 # Avvia il server
-python3 manager.py
+python3 rns_manager.py
 
-Avvio rapido
-bash
-
-python3 manager.py
 
 Poi apri il browser su:
 
@@ -78,6 +74,7 @@ Poi apri il browser su:
 ```ini
 rns-identity-manager/
 ├── manager.py                 # Server Flask principale
+├── Readme.md                  @ This file
 ├── static/
 │   └── rns_monitor.css        # Stili CSS
 ├── templates/
@@ -107,6 +104,8 @@ Cache e downloads:
     ~/.rns_manager/Cache/ - Cache annunci e identità
 
     ~/.rns_manager/Downloads/ - File elaborati
+
+    ~/.rns_manager/storage/ - Imported identities
 ```
 🎮 Utilizzo
 Identity Manager
