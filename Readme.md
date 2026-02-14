@@ -150,7 +150,7 @@ Aspect Monitor
         🕳️ rnpath -p - Controlla blackhole
 
 
-<h3>🔧 Configurazione
+<h3>🔧 Configurazione</h3>
 
 Cache identità
 
