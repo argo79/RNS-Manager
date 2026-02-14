@@ -237,13 +237,13 @@ Link progetto: https://github.com/argo79/RNS-Manager
 
 
 <h3>🐛 Problemi noti</h3>
-
+<p>
     La scansione iniziale delle identità può richiedere 10-30 secondi con molte identità
 
     Alcuni aspect potrebbero non essere riconosciuti correttamente
 
     Su dispositivi mobili, alcune tabelle potrebbero richiedere scorrimento orizzontale
-
+</p>
 
 <h3>🔜 Roadmap</h3>
 
