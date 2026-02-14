@@ -215,7 +215,11 @@ Comandi RNS
 
 <h3>📝 Licenza</h3>
 
-Distribuito sotto licenza MIT. Vedi LICENSE per maggiori informazioni.
+Distribuito sotto licenza MIT.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)](https://flask.palletsprojects.com/)
 
 
 <h3>🙏 Ringraziamenti
@@ -256,7 +260,3 @@ Link progetto: https://github.com/argo79/RNS-Manager
     Dark/light mode toggle
 
 
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-[![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)](https://flask.palletsprojects.com/)
