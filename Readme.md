@@ -5,7 +5,8 @@
 Interfaccia web completa per la gestione delle identità Reticulum (RNS) e il monitoraggio in tempo reale degli annunci di rete.
 
 <h3> 📋 Panoramica</h3>
-![RNID GUI](img/rnidGUI.jpg)
+
+![RNID_GUI](img/rnidGUI.jpg)
 
 Questo progetto fornisce un'interfaccia web intuitiva per:
 - **Gestire identità RNS** (creare, importare, esportare, visualizzare)
@@ -67,8 +68,7 @@ Poi apri il browser su:
 
     Aspect Monitor: http://localhost:5000/monitor
 ```
-<h3>📁 Struttura del progetto
-text
+<h3>📁 Struttura del progetto</h3>
 
 rns-identity-manager/
 ├── manager.py                 # Server Flask principale
@@ -79,7 +79,7 @@ rns-identity-manager/
 │   └── monitor.html            # Aspect Monitor
 └── README.md
 
-<h3>🗂️ Directory utilizzate
+<h3>🗂️ Directory utilizzate</h3>
 
 Il programma cerca identità in:
 ```ini
