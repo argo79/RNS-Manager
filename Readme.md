@@ -1,5 +1,5 @@
 <h1 align="center">
- 🌐 RNS Identity Manager & Monitor
+ 🔑  RNS Identity Manager & Monitor 🌐
 </h1>
 
 Interfaccia web completa per la gestione delle identità Reticulum (RNS) e il monitoraggio in tempo reale degli annunci di rete.
