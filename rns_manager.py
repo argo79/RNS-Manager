@@ -998,7 +998,7 @@ def list_identities():
                                             break
                             
                             # Limita a 10 aspect per performance
-                            aspects_to_check = RNS_ASPECTS[:10]
+                            aspects_to_check = RNS_ASPECTS[:5]
                             for aspect in aspects_to_check:
                                 try:
                                     hash_result = subprocess.run(

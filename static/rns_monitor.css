@@ -30,21 +30,76 @@ body {
     width: min(1600px, 100%); 
 }
 
+/* ============================================
+   HEADER UNIFICATO
+   ============================================ */
 header {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: baseline;
+    min-height: 70px;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 8px;
+    padding: 10px 0;
     margin-bottom: 20px;
 }
 
-h1 {
-    font-size: 16px;
+header h1 {
+    margin: 0;
+    font-size: 24px;
     font-weight: normal;
     letter-spacing: 1px;
+    line-height: 1.2;
+    height: 29px;
 }
 
+.header-subtitle {
+    color: var(--dim);
+    font-size: 12px;
+    line-height: 1.4;
+    margin-top: 2px;
+    height: 17px;
+}
+
+header > div:first-child {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 70px;
+}
+
+/* Pulsanti navigazione */
+.back-button,
+.monitor-button,
+.id-mgr .monitor-button {
+    background: #1a1a1a;
+    color: #88ff88;
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    border: 1px solid #88ff88;
+    font-size: 14px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    white-space: nowrap;
+    height: 42px;
+    line-height: 1;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+.back-button:hover,
+.monitor-button:hover,
+.id-mgr .monitor-button:hover {
+    background: #2a2a2a;
+    color: #aaffaa;
+}
+
+/* ============================================
+   STATO ONLINE/OFFLINE
+   ============================================ */
 .stats { 
     color: var(--dim); 
 }
@@ -66,6 +121,9 @@ h1 {
     background: #ff0000; 
 }
 
+/* ============================================
+   TABS PRINCIPALI
+   ============================================ */
 .tabs-main {
     display: flex;
     gap: 2px;
@@ -92,6 +150,9 @@ h1 {
     margin-bottom: -1px;
 }
 
+/* ============================================
+   TABS ASPECT
+   ============================================ */
 .tabs-aspect-container {
     display: flex;
     flex-direction: column;
@@ -131,6 +192,9 @@ h1 {
     margin-bottom: -1px;
 }
 
+/* ============================================
+   VIEWS
+   ============================================ */
 .view { 
     display: none; 
 }
@@ -139,6 +203,9 @@ h1 {
     display: block; 
 }
 
+/* ============================================
+   FILTRI
+   ============================================ */
 .filters {
     display: flex;
     gap: 15px;
@@ -162,7 +229,7 @@ h1 {
     text-transform: uppercase;
 }
 
-select, input {
+select, input, textarea {
     background: var(--bg);
     color: var(--fg);
     border: 1px solid var(--border);
@@ -171,6 +238,9 @@ select, input {
     font-size: 11px;
 }
 
+/* ============================================
+   TABELLE
+   ============================================ */
 .table {
     width: 100%;
     border-collapse: collapse;
@@ -204,6 +274,9 @@ select, input {
     background: var(--hover); 
 }
 
+/* ============================================
+   BADGE
+   ============================================ */
 .badge {
     display: inline-block;
     padding: 2px 8px;
@@ -220,6 +293,9 @@ select, input {
     text-align: center;
 }
 
+/* ============================================
+   COLORI TESTO
+   ============================================ */
 .identity { 
     color: #8888ff; 
 }
@@ -248,6 +324,9 @@ select, input {
     font-style: italic; 
 }
 
+/* ============================================
+   IDENTITY GROUP (Monitor)
+   ============================================ */
 .identity-group {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -318,6 +397,9 @@ select, input {
     font-size: 10px; 
 }
 
+/* ============================================
+   IDENTITY SORT BAR
+   ============================================ */
 .identity-sort-bar {
     display: flex;
     gap: 15px;
@@ -343,87 +425,6 @@ select, input {
     background: var(--hover);
     color: var(--fg);
     border-color: var(--fg);
-}
-
-.pagination {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 15px;
-    color: var(--dim);
-    font-size: 10px;
-}
-
-.btn {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    color: var(--fg);
-    padding: 4px 10px;
-    cursor: pointer;
-    font-size: 10px;
-}
-
-.btn:hover { 
-    background: var(--hover); 
-}
-
-.btn:disabled { 
-    opacity: 0.3; 
-    cursor: not-allowed; 
-}
-
-.grid-2 {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.stat-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    padding: 12px;
-}
-
-.stat-number { 
-    font-size: 18px; 
-    color: var(--fg); 
-}
-
-.stat-label { 
-    color: var(--dim); 
-    font-size: 10px; 
-    text-transform: uppercase; 
-}
-
-.app-data-preview {
-    color: #88ff88;
-    margin-left: 10px;
-    font-size: 10px;
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-@media (max-width: 768px) {
-    body { padding: 10px; }
-    .filters { flex-direction: column; align-items: stretch; }
-    .identity-sort-bar { flex-direction: column; align-items: stretch; }
-}
-
-.sort-indicator::after {
-    content: " ▼";
-    font-size: 8px;
-}
-
-.sort-indicator.asc::after {
-    content: " ▲";
-}
-
-.tooltip {
-    position: relative;
-    cursor: help;
-    border-bottom: 1px dotted var(--dim);
 }
 
 .sort-controls {
@@ -457,7 +458,88 @@ select, input {
     font-size: 11px;
 }
 
-/* Hash cliccabili */
+/* ============================================
+   PAGINAZIONE
+   ============================================ */
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+    color: var(--dim);
+    font-size: 10px;
+}
+
+/* ============================================
+   BOTTONI GENERICI
+   ============================================ */
+.btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 10px;
+}
+
+.btn:hover { 
+    background: var(--hover); 
+}
+
+.btn:disabled { 
+    opacity: 0.3; 
+    cursor: not-allowed; 
+}
+
+.button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 8px 0;
+}
+
+/* ============================================
+   STATISTICHE (GRID)
+   ============================================ */
+.grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 12px;
+}
+
+.stat-number { 
+    font-size: 18px; 
+    color: var(--fg); 
+}
+
+.stat-label { 
+    color: var(--dim); 
+    font-size: 10px; 
+    text-transform: uppercase; 
+}
+
+/* ============================================
+   APP DATA PREVIEW
+   ============================================ */
+.app-data-preview {
+    color: #88ff88;
+    margin-left: 10px;
+    font-size: 10px;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ============================================
+   HASH CLICCABILI
+   ============================================ */
 .clickable-hash {
     cursor: pointer;
     color: #8888ff;
@@ -470,7 +552,9 @@ select, input {
     border-bottom-color: #88ff88;
 }
 
-/* Pulsanti di pulizia nei filtri */
+/* ============================================
+   PULSANTI PULIZIA
+   ============================================ */
 .clear-search-btn {
     background: var(--tab);
     border: 1px solid var(--border);
@@ -486,7 +570,9 @@ select, input {
     color: var(--fg);
 }
 
-/* Modal */
+/* ============================================
+   MODAL
+   ============================================ */
 #aspect-modal {
     display: none;
     position: fixed;
@@ -636,21 +722,32 @@ select, input {
 }
 
 /* ============================================
-   STILI SPECIFICI PER IDENTITY MANAGER
-   (NON MODIFICANO QUELLI DEL MONITOR)
+   UTILITY
    ============================================ */
+.success { color: #00ff00; }
+.error { color: #ff6666; }
+.warning { color: #ffff88; }
 
-/* Variabili specifiche per identity manager (non sovrascrivono le root) */
-.id-mgr-vars {
-    --id-bg: #0a0a0a;
-    --id-fg: #00ff00;
-    --id-border: #008800;
-    --id-accent: #00aa00;
-    --id-panel: #111111;
-    --id-hover: #1a1a1a;
+.sort-indicator::after {
+    content: " ▼";
+    font-size: 8px;
 }
 
-/* Layout a colonne - usato solo in identity manager */
+.sort-indicator.asc::after {
+    content: " ▲";
+}
+
+.tooltip {
+    position: relative;
+    cursor: help;
+    border-bottom: 1px dotted var(--dim);
+}
+
+/* ============================================
+   STILI IDENTITY MANAGER (isolati con .id-mgr)
+   ============================================ */
+
+/* Layout a colonne */
 .id-mgr .row {
     display: flex;
     flex-direction: column;
@@ -663,33 +760,12 @@ select, input {
     width: 100%;
 }
 
-/* Header con pulsante monitor - per identity manager */
-.id-mgr .monitor-button {
-    background: #1a1a1a;
-    color: #88ff88;
-    text-decoration: none;
-    padding: 8px 16px;
-    border-radius: 4px;
-    border: 1px solid #88ff88;
-    font-size: 12px;
-    font-weight: 500;
-    display: inline-block;
-    transition: all 0.2s;
-    white-space: nowrap;
-    cursor: pointer;
-}
-
-.id-mgr .monitor-button:hover {
-    background: #2a2a2a;
-    color: #aaffaa;
-}
-
 .id-mgr .header-title {
     flex: 1;
     min-width: 200px;
 }
 
-/* Sezioni identity manager */
+/* Sezioni */
 .id-mgr .section {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -709,7 +785,7 @@ select, input {
     letter-spacing: 1px;
 }
 
-/* Lista identità identity manager */
+/* Lista identità */
 .id-mgr .identities-list {
     max-height: 300px;
     overflow-y: auto;
@@ -760,7 +836,7 @@ select, input {
     flex-shrink: 0;
 }
 
-/* Form elements identity manager */
+/* Form elements */
 .id-mgr .form-group {
     margin-bottom: 10px;
 }
@@ -790,7 +866,7 @@ select, input {
     resize: vertical;
 }
 
-/* File input wrapper identity manager */
+/* File input */
 .id-mgr .file-input-wrapper {
     position: relative;
     overflow: hidden;
@@ -808,16 +884,9 @@ select, input {
     cursor: pointer;
 }
 
-/* Button groups identity manager */
-.id-mgr .button-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin: 8px 0;
-}
-
+/* Bottoni identity manager */
 .id-mgr button {
-    background: var(--accent-color, #00aa00);
+    background: #00aa00;
     color: black;
     border: none;
     padding: 8px 10px;
@@ -836,7 +905,11 @@ select, input {
     color: var(--fg);
 }
 
-/* Tabs interni identity manager */
+.id-mgr button.secondary:hover {
+    background: #444;
+}
+
+/* Tabs interni */
 .id-mgr .tabs {
     display: flex;
     border-bottom: 1px solid var(--border);
@@ -876,7 +949,7 @@ select, input {
     display: block;
 }
 
-/* Aspect buttons identity manager */
+/* Aspect buttons */
 .id-mgr .aspect-input-group {
     display: flex;
     gap: 8px;
@@ -911,7 +984,7 @@ select, input {
     background: var(--hover);
 }
 
-/* Export buttons identity manager */
+/* Export buttons */
 .id-mgr .export-buttons {
     display: flex;
     gap: 8px;
@@ -948,7 +1021,7 @@ select, input {
     color: var(--fg);
 }
 
-/* Command area identity manager */
+/* Command area */
 .id-mgr .command-area textarea {
     width: 100%;
     height: 60px;
@@ -961,7 +1034,7 @@ select, input {
     resize: vertical;
 }
 
-/* Output area identity manager */
+/* Output area */
 .id-mgr .output {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -974,7 +1047,7 @@ select, input {
     font-size: 11px;
 }
 
-/* Verify result area identity manager */
+/* Verify result */
 .id-mgr #verifyResult {
     font-size: 11px;
     max-height: 250px;
@@ -984,12 +1057,15 @@ select, input {
     border: 1px solid #222;
 }
 
-/* Utility classes identity manager */
-.id-mgr .success { color: var(--fg); }
-.id-mgr .error { color: #ff6666; }
-.id-mgr .warning { color: #ffff88; }
+/* ============================================
+   MEDIA QUERIES
+   ============================================ */
+@media (max-width: 768px) {
+    body { padding: 10px; }
+    .filters { flex-direction: column; align-items: stretch; }
+    .identity-sort-bar { flex-direction: column; align-items: stretch; }
+}
 
-/* Media queries per identity manager - solo quando .id-mgr è presente */
 @media (min-width: 1024px) {
     .id-mgr .container {
         max-width: 1400px;
@@ -1039,34 +1115,36 @@ select, input {
 }
 
 @media (max-width: 480px) {
-    .id-mgr body {
-        padding: 10px;
-    }
+    body { padding: 10px; }
     
-    .id-mgr h1 {
-        font-size: 16px;
+    .id-mgr h1 { font-size: 16px; }
+    .id-mgr .section { padding: 10px; }
+    .id-mgr .aspect-buttons { grid-template-columns: 1fr; }
+    .id-mgr .identity-item { flex-direction: column; gap: 4px; }
+    .id-mgr header { flex-direction: column; align-items: stretch; gap: 10px; }
+    .id-mgr .monitor-button { text-align: center; }
+}
+
+@media (orientation: portrait) and (max-height: 700px) {
+    .id-mgr .identities-list { max-height: 200px; }
+    .id-mgr .output { max-height: 200px; min-height: 120px; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1023px) {
+    .container { max-width: 100%; }
+    .row { flex-direction: row; flex-wrap: wrap; }
+    .col { flex: 1; min-width: 300px; }
+    .identities-list { max-height: 180px; }
+    .output { max-height: 180px; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+    button, .tab, .aspect-btn, .identity-item {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
-    
-    .id-mgr .section {
-        padding: 10px;
-    }
-    
-    .id-mgr .aspect-buttons {
-        grid-template-columns: 1fr;
-    }
-    
-    .id-mgr .identity-item {
-        flex-direction: column;
-        gap: 4px;
-    }
-    
-    .id-mgr header {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
-    }
-    
-    .id-mgr .monitor-button {
-        text-align: center;
-    }
+    .identity-item { min-height: 50px; }
+    input, select, textarea { font-size: 16px; }
 }
