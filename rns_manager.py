@@ -311,7 +311,7 @@ identity_cache = IdentityCache(cache_duration=3600)  # 6 ore
 # ============================================
 RNS_ASPECTS = [
     "lxmf.delivery","nomadnetwork.node","lxst.telephony","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
-    "rnstransport.probe","rnstransport.info.blackhole","rnsh","rncp","rncp.receive","rnsh.custom","rnsh.default",
+    "rnstransport.probe","rnstransport.info.blackhole","rnsh","rncp","rncp.receive","rnsh.listen","rnsh.default",
     "rns_unit_tests.link.establish",
     "rnstransport.discovery.interface",
     "rnstransport.tunnel.synthesize",
