@@ -248,11 +248,71 @@ class PersistentAnnounceCache:
         print(f"[Cache] Cache fermata")
 
 # ============================================
+# === CACHE IDENTITÀ (server-side) ===
+# ============================================
+
+class IdentityCache:
+    """Cache server-side per le identità"""
+    def __init__(self, cache_duration=300):  # 5 minuti default
+        self.cache = {}
+        self.timestamps = {}
+        self.cache_duration = cache_duration
+        self.lock = threading.Lock()
+        
+    def get(self, key='all_identities'):
+        """Recupera dalla cache se non scaduta"""
+        with self.lock:
+            if key in self.cache:
+                age = time.time() - self.timestamps.get(key, 0)
+                if age < self.cache_duration:
+                    print(f"[Cache ID] Hit per {key} (età: {age:.1f}s)")
+                    return self.cache[key]
+                else:
+                    print(f"[Cache ID] Scaduta per {key} (età: {age:.1f}s)")
+            return None
+    
+    def set(self, data, key='all_identities'):
+        """Salva in cache"""
+        with self.lock:
+            self.cache[key] = data
+            self.timestamps[key] = time.time()
+            print(f"[Cache ID] Salvati {len(data)} elementi per {key}")
+    
+    def clear(self, key=None):
+        """Pulisce cache"""
+        with self.lock:
+            if key:
+                self.cache.pop(key, None)
+                self.timestamps.pop(key, None)
+                print(f"[Cache ID] Pulito {key}")
+            else:
+                self.cache.clear()
+                self.timestamps.clear()
+                print(f"[Cache ID] Pulita tutta la cache")
+    
+    def get_stats(self, key='all_identities'):
+        """Statistiche cache"""
+        with self.lock:
+            if key in self.cache:
+                age = time.time() - self.timestamps[key]
+                return {
+                    'exists': True,
+                    'age': age,
+                    'size': len(self.cache[key]),
+                    'timestamp': self.timestamps[key]
+                }
+            return {'exists': False}
+
+# Inizializza cache identità
+identity_cache = IdentityCache(cache_duration=3600)  # 6 ore
+
+# ============================================
 # === ASPECTS DEFINITI UNA SOLA VOLTA ===
 # ============================================
 RNS_ASPECTS = [
     "lxmf.delivery","nomadnetwork.node","lxst.telephony","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
-    "rnstransport.probe","rnstransport.info.blackhole","rnsh","rnsh.rnsh","rnsh.custom","rnsh.default",
+    "rnstransport.probe","rnstransport.info.blackhole","rnsh","rncp","rncp.receive","rnsh.custom","rnsh.default",
+    "rns_unit_tests.link.establish",
     "rnstransport.discovery.interface",
     "rnstransport.tunnel.synthesize",
     "rnstransport.path.request",
@@ -871,6 +931,20 @@ def execute_rnid():
 
 @app.route('/api/identities/list', methods=['GET'])
 def list_identities():
+    # Controlla parametro force
+    force_refresh = request.args.get('force', 'false').lower() == 'true'
+    
+    # Se non forza refresh, prova a usare cache
+    if not force_refresh:
+        cached = identity_cache.get()
+        if cached is not None:
+            return jsonify({
+                'identities': cached,
+                'from_cache': True,
+                'cache_age': time.time() - identity_cache.timestamps.get('all_identities', 0)
+            })
+    
+    print(f"[Cache ID] Scansione completa delle identità (force={force_refresh})")
     identities = []
     
     storage_dirs = [
@@ -923,13 +997,15 @@ def list_identities():
                                             identity['rns_hash'] = line[start:end]
                                             break
                             
-                            for aspect in RNS_ASPECTS:
+                            # Limita a 10 aspect per performance
+                            aspects_to_check = RNS_ASPECTS[:10]
+                            for aspect in aspects_to_check:
                                 try:
                                     hash_result = subprocess.run(
                                         ['rnid', '-i', item_path, '-H', aspect],
                                         capture_output=True,
                                         text=True,
-                                        timeout=4
+                                        timeout=2
                                     )
                                     
                                     if hash_result.returncode == 0:
@@ -958,7 +1034,46 @@ def list_identities():
                         identities.append(identity)
     
     identities.sort(key=lambda x: (not x['valid'], x['name']))
-    return jsonify({'identities': identities})
+    
+    # Salva in cache
+    identity_cache.set(identities)
+    
+    return jsonify({
+        'identities': identities,
+        'from_cache': False,
+        'cache_saved': True
+    })
+
+# ============================================
+# === ENDPOINT GESTIONE CACHE IDENTITÀ ===
+# ============================================
+
+@app.route('/api/cache/identities/clear', methods=['POST'])
+def cache_identities_clear():
+    """Pulisce cache identità"""
+    identity_cache.clear('all_identities')
+    return jsonify({
+        'success': True,
+        'message': 'Cache identità pulita'
+    })
+
+@app.route('/api/cache/identities/status')
+def cache_identities_status():
+    """Stato cache identità"""
+    stats = identity_cache.get_stats()
+    return jsonify({
+        'success': True,
+        'cache': stats
+    })
+
+@app.route('/api/cache/identities/refresh', methods=['POST'])
+def cache_identities_refresh():
+    """Forza refresh cache"""
+    identity_cache.clear('all_identities')
+    return jsonify({
+        'success': True,
+        'message': 'Cache invalidata, prossima richiesta farà scansione'
+    })
 
 # ============================================
 # === TUTTE LE ALTRE ROUTE IDENTITY ===
