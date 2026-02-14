@@ -252,7 +252,7 @@ class PersistentAnnounceCache:
 # ============================================
 RNS_ASPECTS = [
     "lxmf.delivery","nomadnetwork.node","lxst.telephony","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
-    "rnstransport.probe","rnstransport.info.blackhole",
+    "rnstransport.probe","rnstransport.info.blackhole","rnsh","rnsh.rnsh","rnsh.custom","rnsh.default",
     "rnstransport.discovery.interface",
     "rnstransport.tunnel.synthesize",
     "rnstransport.path.request",
