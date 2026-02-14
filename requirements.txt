@@ -1,0 +1,26 @@
+# RNS Manager + Monitor Requirements
+# Python 3.8+ recommended
+
+# Core framework
+Flask==2.3.3
+
+# Reticulum core (installato separatamente via pip)
+# Nota: Reticulum deve essere installato per il funzionamento completo
+rns>=0.7.0
+
+# Utilità di sistema (già incluse in Python standard library)
+# - subprocess
+# - os
+# - threading
+# - multiprocessing
+# - queue
+# - json
+# - time
+# - socket
+# - uuid
+# - tempfile
+# - shutil
+# - binascii
+# - base64
+# - shlex
+# - re
