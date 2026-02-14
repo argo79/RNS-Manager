@@ -4,7 +4,7 @@
 
 A comprehensive web interface for managing Reticulum (RNS) identities and real-time monitoring of network announces.
 
-<h3> 📋 Overview
+<h3> 📋 Overview</h3>
 
 ![RNID_GUI](img/rnidGUI.jpg)
 
@@ -15,7 +15,7 @@ This project provides an intuitive web interface for:
 - **Encrypting/decrypting** files and text with RNS identities
 - **Signing and verifying** files digitally
 
-<h3> ✨ Features
+<h3> ✨ Features</h3>
 
 ### Identity Manager
 - ✅ Display all RNS identities (reticulum, nomadnet, lxmf, rnphone, meshchat)
@@ -38,7 +38,7 @@ This project provides an intuitive web interface for:
 
 ![RNID_GUI](img/rnsMonitor2.jpg)
 
-<h3> 🚀 Installation
+<h3> 🚀 Installation</h3>
 
 ### Prerequisites
 - Python 3.7 or higher
