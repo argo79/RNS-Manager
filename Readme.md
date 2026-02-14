@@ -49,8 +49,8 @@ Questo progetto fornisce un'interfaccia web intuitiva per:
 
 ```bash
 # Clona il repository
-git clone https://github.com/tuousername/rns-identity-manager.git
-cd rns-identity-manager
+git clone git@github.com:argo79/RNS-Manager.git
+cd RNS-Manager
 
 # Installa le dipendenze
 pip install flask

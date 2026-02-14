@@ -49,8 +49,8 @@ This project provides an intuitive web interface for:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/rns-identity-manager.git
-cd rns-identity-manager
+git clone git@github.com:argo79/RNS-Manager.git
+cd RNS-Manager
 
 # Install dependencies
 pip install flask
@@ -59,12 +59,8 @@ pip install flask
 pip install rns
 
 # Start the server
-python3 manager.py
+python3 rns_manager.py
 
-Quick Start
-bash
-
-python3 manager.py
 
 Then open your browser at:
 
@@ -72,6 +68,7 @@ Then open your browser at:
 
     Aspect Monitor: http://localhost:5000/monitor
 ```
+
 
 <h3>📁 Project Structure</h3>
 
