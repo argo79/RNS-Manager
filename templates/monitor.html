@@ -9,21 +9,52 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <div style="display: flex; align-items: center; gap: 20px;">
-                <h1>rns/monitor</h1>
-                <a href="/" style="color: var(--dim); text-decoration: none; font-size: 11px;">← identities</a>
+        <header style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <h1 style="margin:0; font-size:24px;">RETICULUM MONITOR 1.0.0</h1>
+                <div style="color: var(--dim); font-size:12px;">Monitoraggio annunci e identità Reticulum</div>
             </div>
-            <div class="stats">
-                <span id="status" class="status offline"></span>
-                <span id="total-announces">0</span> · <span id="unique-sources">0</span> id
+            <div>
+                <a href="/" style="
+                    background: #1a1a1a;
+                    color: #88ff88;
+                    text-decoration: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    border: 1px solid #88ff88;
+                    font-size: 14px;
+                    font-weight: 500;
+                    display: inline-block;
+                    transition: all 0.2s;
+                " onmouseover="this.style.background='#2a2a2a'; this.style.color='#aaffaa';" 
+                   onmouseout="this.style.background='#1a1a1a'; this.style.color='#88ff88';">
+                    ← TORNA A IDENTITY MANAGER
+                </a>
             </div>
         </header>
+
+        <div style="margin: 20px 0; display: flex; gap: 20px; align-items: center;">
+            <div class="stats">
+                <span id="status" class="status offline"></span>
+                <span id="total-announces">0</span> annunci · <span id="unique-sources">0</span> identità uniche
+            </div>
+            <div style="flex:1;"></div>
+            <div class="cache-controls" style="display: flex; gap: 10px; align-items: center;">
+                <span style="color:var(--dim); font-size:11px;">💾 cache:</span>
+                <select id="cache-source-select" style="background:#1a1a1a; color:var(--fg); border:1px solid #333; padding:4px 8px; border-radius:4px;">
+                    <option value="memory">📱 memoria (ultimi 1000)</option>
+                    <option value="cache">💾 disco (ultimi 7 giorni)</option>
+                </select>
+                <button class="btn" id="cache-clear-btn" style="background:#331100; color:#ffaa66; font-size:11px; padding:4px 8px;">pulisci cache</button>
+                <button class="btn" id="cache-save-btn" style="background:#113311; color:#88ff88; font-size:11px; padding:4px 8px;">salva ora</button>
+            </div>
+        </div>
 
         <div class="tabs-main">
             <div class="tab-main active" data-view="live">📡 live</div>
             <div class="tab-main" data-view="identities">🆔 identità</div>
             <div class="tab-main" data-view="stats">📊 statistiche</div>
+            <div class="tab-main" data-view="cache">💾 cache storage</div>
         </div>
 
         <div id="view-live" class="view active">
@@ -146,6 +177,38 @@
             <h3 style="font-size:12px; margin:20px 0 10px; font-weight:normal; color:var(--dim);">top identità</h3>
             <div id="stats-identities" class="grid-2" style="grid-template-columns:repeat(auto-fill, minmax(300px,1fr));"></div>
         </div>
+
+        <div id="view-cache" class="view">
+            <h2 style="font-size:16px; margin-bottom:20px;">💾 Cache Storage</h2>
+            
+            <div class="grid-2" style="margin-bottom:30px;">
+                <div class="stat-card" id="cache-size-card">
+                    <div class="stat-number" id="cache-size">0</div>
+                    <div class="stat-label">annunci in cache</div>
+                </div>
+                <div class="stat-card" id="cache-age-card">
+                    <div class="stat-number" id="cache-age">0</div>
+                    <div class="stat-label">giorni di storico</div>
+                </div>
+                <div class="stat-card" id="cache-saves-card">
+                    <div class="stat-number" id="cache-saves">0</div>
+                    <div class="stat-label">salvataggi</div>
+                </div>
+                <div class="stat-card" id="cache-file-card">
+                    <div class="stat-number" id="cache-file">-</div>
+                    <div class="stat-label">file cache</div>
+                </div>
+            </div>
+
+            <h3 style="font-size:12px; margin:20px 0 10px; font-weight:normal; color:var(--dim);">distribuzione aspect in cache</h3>
+            <div id="cache-aspects" class="grid-2" style="grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); margin-bottom:30px;"></div>
+
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button class="btn" id="cache-refresh-stats" style="background:#1a1a1a;">⟳ aggiorna statistiche</button>
+                <button class="btn" id="cache-cleanup-old" style="background:#331100; color:#ffaa66;">🧹 pulizia vecchi (>7gg)</button>
+                <button class="btn" id="cache-export" style="background:#113311; color:#88ff88;">📤 esporta cache</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -157,18 +220,27 @@
         const INACTIVE_TIMEOUT = 3600;
         
         const ASPECTS = [
-            "call.audio", "lxmf.delivery", "lxmf.propagation", "rnstransport.probe",
-            "rnstransport.discovery.interface", "rnstransport.tunnel.synthesize",
-            "rnstransport.path.request", "rnstransport.remote.management",
-            "rnstransport.info.blackhole", "rnstransport.network.instance",
-            "rnstransport.network", "example_utilities.minimalsample",
-            "example_utilities.echo.request", "example_utilities.broadcast",
-            "example_utilities.bufferexample", "example_utilities.channelexample",
-            "example_utilities.filetransfer.server", "example_utilities.identifyexample",
-            "example_utilities.linkexample", "example_utilities.ratchet.echo.request",
-            "example_utilities.requestexample", "example_utilities.resourceexample",
-            "example_utilities.speedtest", "retibbs.bbs", "lxst.telephony",
-            "discovery.interface", "nomadnetwork.node", "rrc.hub"
+            "lxmf.delivery","nomadnetwork.node","lxst.telephony","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
+            "rnstransport.probe","rnstransport.info.blackhole","rnsh.custom","rnsh.default",
+            "rnstransport.discovery.interface",
+            "rnstransport.tunnel.synthesize",
+            "rnstransport.path.request",
+            "rnstransport.remote.management",    
+            "rnstransport.network.instance",
+            "rnstransport.network",
+            "example_utilities.minimalsample",
+            "example_utilities.execute",
+            "example_utilities.echo.request",
+            "example_utilities.broadcast",
+            "example_utilities.bufferexample",
+            "example_utilities.channelexample",
+            "example_utilities.filetransfer.server",
+            "example_utilities.identifyexample",
+            "example_utilities.linkexample",
+            "example_utilities.ratchet.echo.request",
+            "example_utilities.requestexample",
+            "example_utilities.resourceexample",
+            "example_utilities.speedtest","discovery.interface",
         ];
 
         const state = {
@@ -182,7 +254,8 @@
             lastId: 0,
             identities: new Map(),
             expandedIdentities: new Set(),
-            identitySort: 'count_desc'
+            identitySort: 'count_desc',
+            cacheSource: 'memory'  // 'memory' o 'cache'
         };
 
         // ============================================
@@ -703,11 +776,15 @@
                     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
                     document.getElementById(`view-${this.dataset.view}`).classList.add('active');
                     state.view = this.dataset.view;
+                    
                     if (state.view === 'identities') {
                         renderIdentities();
                     }
                     if (state.view === 'stats') {
                         renderStats();
+                    }
+                    if (state.view === 'cache') {
+                        loadCacheStats();
                     }
                 });
             });
@@ -1127,6 +1204,35 @@
             document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
         }
 
+        function loadCacheStats() {
+            fetch('/api/monitor/cache/stats')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const stats = data.stats;
+                        
+                        document.getElementById('cache-size').textContent = stats.size || 0;
+                        document.getElementById('cache-age').textContent = (stats.age_days || 0).toFixed(1);
+                        document.getElementById('cache-saves').textContent = stats.stats?.save_count || 0;
+                        document.getElementById('cache-file').textContent = stats.cache_file?.split('/').pop() || '-';
+                        
+                        // Mostra distribuzione aspect
+                        let aspectsHtml = '';
+                        const aspectEntries = Object.entries(stats.aspects || {}).sort((a,b) => b[1] - a[1]).slice(0, 8);
+                        
+                        aspectEntries.forEach(([asp, cnt]) => {
+                            aspectsHtml += `<div class="stat-card"><div style="display:flex; justify-content:space-between;">`;
+                            aspectsHtml += `<span style="color:var(--fg);">${asp.slice(0,15)} </span>`;
+                            aspectsHtml += `<span style="color:var(--dim);"> ${cnt} ann.</span>`;
+                            aspectsHtml += `</div></div>`;
+                        });
+                        
+                        document.getElementById('cache-aspects').innerHTML = aspectsHtml || '<div style="color:var(--dim);">nessun dato</div>';
+                    }
+                })
+                .catch(err => console.error('Errore caricamento cache stats:', err));
+        }
+
         function updatePagination(total) {
             const pages = Math.ceil(total / state.limit) || 1;
             const start = (state.page - 1) * state.limit + 1;
@@ -1142,12 +1248,15 @@
         }
 
         function loadHistory() {
+            const source = state.cacheSource;
+            
             const params = new URLSearchParams({
                 aspect: state.aspect,
                 search: state.search,
                 limit: state.limit,
                 offset: (state.page - 1) * state.limit,
-                sort: state.sort
+                sort: state.sort,
+                source: source
             });
 
             fetch(`/api/monitor/history?${params}`)
@@ -1157,7 +1266,9 @@
                         let html = '';
                         data.announces.forEach(a => {
                             html += createAnnounceRow(a);
-                            updateIdentityStats(a);
+                            if (source === 'memory') {
+                                updateIdentityStats(a);
+                            }
                         });
                         document.getElementById('announce-body').innerHTML = html || '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
                         updatePagination(data.total);
@@ -1193,7 +1304,7 @@
                             updateIdentityStats(ann);
                             if (window.updateAspectTabs) window.updateAspectTabs();
                             
-                            if (state.view === 'live') {
+                            if (state.view === 'live' && state.cacheSource === 'memory') {
                                 let shouldShow = true;
                                 
                                 if (state.aspect !== 'all') {
@@ -1280,8 +1391,14 @@
                 renderIdentities();
             });
 
+            document.getElementById('cache-source-select').addEventListener('change', function() {
+                state.cacheSource = this.value;
+                state.page = 1;
+                loadHistory();
+            });
+
             document.getElementById('clear-btn').addEventListener('click', function() {
-                if (confirm('Pulisci tutto lo storico?')) {
+                if (confirm('Pulisci tutto lo storico in memoria?')) {
                     fetch('/api/monitor/clear', { method: 'POST' })
                         .then(() => {
                             state.identities.clear();
@@ -1297,6 +1414,40 @@
                             if (window.updateAspectTabs) window.updateAspectTabs();
                         });
                 }
+            });
+
+            document.getElementById('cache-clear-btn').addEventListener('click', function() {
+                if (confirm('PULIRE TUTTA LA CACHE PERSISTENTE SU DISCO?')) {
+                    fetch('/api/monitor/cache/clear', { method: 'POST' })
+                        .then(() => {
+                            alert('Cache pulita');
+                            if (state.view === 'cache') loadCacheStats();
+                        });
+                }
+            });
+
+            document.getElementById('cache-save-btn').addEventListener('click', function() {
+                fetch('/api/monitor/cache/save', { method: 'POST' })
+                    .then(() => {
+                        alert('Cache salvata su disco');
+                    });
+            });
+
+            document.getElementById('cache-cleanup-old').addEventListener('click', function() {
+                fetch('/api/monitor/cache/cleanup', { method: 'POST' })
+                    .then(res => res.json())
+                    .then(data => {
+                        alert(`Rimossi ${data.removed} annunci vecchi`);
+                        loadCacheStats();
+                    });
+            });
+
+            document.getElementById('cache-refresh-stats').addEventListener('click', function() {
+                loadCacheStats();
+            });
+
+            document.getElementById('cache-export').addEventListener('click', function() {
+                window.open('/api/monitor/history/persistent?days=7&limit=5000', '_blank');
             });
 
             document.getElementById('prev-page').addEventListener('click', function() {

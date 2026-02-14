@@ -14,7 +14,7 @@ import json
 import re
 import multiprocessing
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 
 app = Flask(__name__)
@@ -48,11 +48,233 @@ for key, path in USER_DIRECTORIES.items():
 
 globals().update(execution_vars)
 
+# Crea directory per Downloads e Cache
 DOWNLOADS_DIR = os.path.expanduser("~/.rns_manager/Downloads")
+CACHE_DIR = os.path.expanduser("~/.rns_manager/Cache")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+os.makedirs(CACHE_DIR, exist_ok=True)
 
 # ============================================
-# === MONITOR ANNUNCI RNS - IL TUO CODICE FUNZIONANTE ===
+# === CACHE PERSISTENTE PER ANNUNCI ===
+# ============================================
+
+class PersistentAnnounceCache:
+    """Cache persistente su disco per annunci RNS"""
+    
+    def __init__(self, cache_file='announce_cache.json', save_interval=60, max_age_days=7, max_size=10000):
+        self.cache_file = os.path.join(CACHE_DIR, cache_file)
+        self.save_interval = save_interval
+        self.max_age = timedelta(days=max_age_days)
+        self.max_size = max_size
+        
+        # Cache in memoria
+        self.cache = []
+        self.lock = threading.Lock()
+        self.stats = {
+            'total_saved': 0,
+            'last_save': None,
+            'save_count': 0,
+            'load_count': 0
+        }
+        
+        # Carica cache esistente
+        self._load_cache()
+        
+        # Avvia thread di salvataggio automatico
+        self.running = True
+        self.save_thread = threading.Thread(target=self._auto_save, daemon=True)
+        self.save_thread.start()
+        
+        print(f"[Cache] Inizializzata: {self.cache_file}")
+        print(f"[Cache] {len(self.cache)} annunci caricati, salvataggio ogni {save_interval}s")
+    
+    def _load_cache(self):
+        """Carica cache dal disco all'avvio"""
+        try:
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file, 'r') as f:
+                    data = json.load(f)
+                    
+                    # Filtra annunci vecchi
+                    now = time.time()
+                    self.cache = [
+                        item for item in data 
+                        if now - item.get('timestamp', 0) < self.max_age.total_seconds()
+                    ]
+                    
+                    # Ordina per timestamp (più recenti prima)
+                    self.cache.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+                    
+                self.stats['load_count'] += 1
+                print(f"[Cache] Caricati {len(self.cache)} annunci storici (rimossi {len(data) - len(self.cache)} vecchi)")
+            else:
+                print(f"[Cache] Nessun file cache esistente, partenza vuota")
+        except Exception as e:
+            print(f"[Cache] Errore caricamento: {e}")
+            self.cache = []
+    
+    def add_announce(self, announce):
+        """Aggiunge annuncio alla cache"""
+        with self.lock:
+            # Aggiungi timestamp se mancante
+            if 'timestamp' not in announce:
+                announce['timestamp'] = time.time()
+            
+            # Evita duplicati (controlla packet_hash)
+            packet_hash = announce.get('packet_hash', '')
+            if packet_hash:
+                # Rimuovi eventuale duplicato esistente
+                self.cache = [a for a in self.cache if a.get('packet_hash') != packet_hash]
+            
+            # Inserisci in testa (più recente)
+            self.cache.insert(0, announce)
+            
+            # Limita dimensione
+            if len(self.cache) > self.max_size:
+                self.cache = self.cache[:self.max_size]
+            
+            self.stats['total_saved'] += 1
+    
+    def add_multiple(self, announces):
+        """Aggiunge multipli annunci alla cache"""
+        with self.lock:
+            for announce in announces:
+                if 'timestamp' not in announce:
+                    announce['timestamp'] = time.time()
+            
+            # Filtra duplicati
+            existing_packets = {a.get('packet_hash') for a in self.cache if a.get('packet_hash')}
+            new_announces = [a for a in announces if a.get('packet_hash') not in existing_packets]
+            
+            self.cache = new_announces + self.cache
+            self.cache = self.cache[:self.max_size]
+            self.stats['total_saved'] += len(new_announces)
+    
+    def _auto_save(self):
+        """Salva automaticamente ogni X secondi"""
+        while self.running:
+            time.sleep(self.save_interval)
+            self.save()
+    
+    def save(self):
+        """Salva cache su disco"""
+        try:
+            with self.lock:
+                # Crea copia per salvare
+                cache_copy = self.cache.copy()
+            
+            # Scrivi su file temporaneo poi rinomina (per evitare corruzione)
+            temp_file = f"{self.cache_file}.tmp"
+            with open(temp_file, 'w') as f:
+                json.dump(cache_copy, f, indent=2)
+            
+            # Rinomina file temporaneo
+            os.replace(temp_file, self.cache_file)
+            
+            self.stats['last_save'] = time.time()
+            self.stats['save_count'] += 1
+            
+            print(f"[Cache] Salvati {len(cache_copy)} annunci")
+            
+        except Exception as e:
+            print(f"[Cache] Errore salvataggio: {e}")
+    
+    def get_all(self, filter_func=None, limit=None, offset=0):
+        """Recupera annunci con filtro opzionale"""
+        with self.lock:
+            if filter_func:
+                filtered = [a for a in self.cache if filter_func(a)]
+            else:
+                filtered = self.cache.copy()
+        
+        if offset > 0 or limit is not None:
+            end = offset + limit if limit else None
+            return filtered[offset:end]
+        return filtered
+    
+    def get_stats(self):
+        """Restituisce statistiche cache"""
+        with self.lock:
+            # Calcola statistiche aggiuntive
+            if self.cache:
+                oldest = min((a.get('timestamp', 0) for a in self.cache), default=0)
+                newest = max((a.get('timestamp', 0) for a in self.cache), default=0)
+                aspects = {}
+                for a in self.cache:
+                    asp = a.get('aspect', 'unknown')
+                    aspects[asp] = aspects.get(asp, 0) + 1
+            else:
+                oldest = newest = 0
+                aspects = {}
+            
+            return {
+                'size': len(self.cache),
+                'max_size': self.max_size,
+                'oldest': oldest,
+                'newest': newest,
+                'age_days': (time.time() - oldest) / 86400 if oldest else 0,
+                'aspects': aspects,
+                'stats': self.stats,
+                'cache_file': self.cache_file
+            }
+    
+    def cleanup_old(self):
+        """Rimuove annunci vecchi"""
+        with self.lock:
+            now = time.time()
+            old_count = len(self.cache)
+            self.cache = [
+                a for a in self.cache 
+                if now - a.get('timestamp', 0) < self.max_age.total_seconds()
+            ]
+            removed = old_count - len(self.cache)
+            if removed:
+                print(f"[Cache] Rimossi {removed} annunci vecchi")
+                self.save()
+            return removed
+    
+    def clear(self):
+        """Pulisce tutta la cache"""
+        with self.lock:
+            self.cache = []
+            self.save()
+        print(f"[Cache] Cache pulita")
+    
+    def stop(self):
+        """Ferma thread e salva"""
+        self.running = False
+        self.save_thread.join(timeout=5)
+        self.save()
+        print(f"[Cache] Cache fermata")
+
+# ============================================
+# === ASPECTS DEFINITI UNA SOLA VOLTA ===
+# ============================================
+RNS_ASPECTS = [
+    "lxmf.delivery","nomadnetwork.node","lxst.telephony","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
+    "rnstransport.probe","rnstransport.info.blackhole",
+    "rnstransport.discovery.interface",
+    "rnstransport.tunnel.synthesize",
+    "rnstransport.path.request",
+    "rnstransport.remote.management",    
+    "rnstransport.network.instance",
+    "rnstransport.network",
+    "example_utilities.minimalsample",
+    "example_utilities.echo.request",
+    "example_utilities.broadcast",
+    "example_utilities.bufferexample",
+    "example_utilities.channelexample",
+    "example_utilities.filetransfer.server",
+    "example_utilities.identifyexample",
+    "example_utilities.linkexample",
+    "example_utilities.ratchet.echo.request",
+    "example_utilities.requestexample",
+    "example_utilities.resourceexample",
+    "example_utilities.speedtest","discovery.interface",    
+]
+
+# ============================================
+# === MONITOR ANNUNCI RNS ===
 # ============================================
 
 SOCKET_PATH = "/tmp/rns_monitor.sock"
@@ -63,8 +285,16 @@ history_lock = threading.Lock()
 monitor_process = None
 announce_queue = queue.Queue(maxsize=1000)
 
+# Inizializza cache persistente
+announce_cache = PersistentAnnounceCache(
+    cache_file='announce_cache.json',
+    save_interval=60,      # Salva ogni minuto
+    max_age_days=7,         # Mantieni 7 giorni
+    max_size=10000          # Massimo 10000 annunci
+)
+
 def run_rns_monitor():
-    """Processo separato con IL TUO MONITOR FUNZIONANTE"""
+    """Processo separato con il monitor RNS"""
     import RNS
     import socket
     import json
@@ -73,47 +303,17 @@ def run_rns_monitor():
     import traceback
     from datetime import datetime
     
-    # === IL TUO MONITOR - IDENTICO ===
     class AnnounceMonitor:
         aspect_filter = None
         receive_path_responses = False
-        
-        ASPECTS = [
-            "call.audio",
-            "lxmf.delivery",
-            "lxmf.propagation",
-            "rnstransport.probe",
-            "rnstransport.discovery.interface",
-            "rnstransport.tunnel.synthesize",
-            "rnstransport.path.request",
-            "rnstransport.remote.management",
-            "rnstransport.info.blackhole",
-            "rnstransport.network.instance",
-            "rnstransport.network",
-            "example_utilities.minimalsample",
-            "example_utilities.echo.request",
-            "example_utilities.broadcast",
-            "example_utilities.bufferexample",
-            "example_utilities.channelexample",
-            "example_utilities.filetransfer.server",
-            "example_utilities.identifyexample",
-            "example_utilities.linkexample",
-            "example_utilities.ratchet.echo.request",
-            "example_utilities.requestexample",
-            "example_utilities.resourceexample",
-            "example_utilities.speedtest",
-            "retibbs.bbs",
-            "rrc.hub",
-            "lxst.telephony",
-            "discovery.interface",
-            "nomadnetwork.node",
-        ]
         
         def __init__(self, sock):
             self.count = 0
             self.cache = {}  # identity_hash -> {dest_hash: aspect}
             self.seen_packets = set()
             self.socket = sock
+            # Usa gli ASPECT dalla variabile globale
+            self.ASPECTS = RNS_ASPECTS
         
         def send_announce(self, data):
             """Invia annuncio via socket"""
@@ -141,7 +341,7 @@ def run_rns_monitor():
                     except:
                         app_text = f"[{len(app_data)}b]"
                 
-                # Calcola aspect - STESSA LOGICA DI RNID
+                # Calcola aspect
                 aspect = "unknown"
                 identity_hash = ""
                 
@@ -164,7 +364,7 @@ def run_rns_monitor():
                             else:
                                 interface = iface_str[:20]
                 
-                # Output esattamente come il tuo monitor
+                # Output
                 print(f"[{ts}] #{self.count:04d} id: {identity_hash[:32] if identity_hash else '?'*32} dest: {dest_hex[:32]}... hops: {hops} aspect: {aspect} iface: {interface} data: '{app_text[:50]}'")
                 
                 # Prepara dati per Flask
@@ -194,7 +394,7 @@ def run_rns_monitor():
                 print(f"[MONITOR] Errore: {e}")
         
         def _calculate_aspect_rnid(self, identity, target_dest_hex):
-            """IMPLEMENTAZIONE IDENTICA A RNID"""
+            """Calcola l'aspect per un dato identity e destination hash"""
             identity_hash = identity.hash.hex()
             
             # Controlla cache
@@ -206,7 +406,7 @@ def run_rns_monitor():
             if identity_hash not in self.cache:
                 self.cache[identity_hash] = {}
             
-            # Prova ogni aspect - ESATTAMENTE COME FA RNID
+            # Prova ogni aspect
             for aspect in self.ASPECTS:
                 try:
                     parts = aspect.split(".")
@@ -340,6 +540,10 @@ def socket_listener():
                             announce_counter += 1
                             announce['id'] = announce_counter
                             announce_history.insert(0, announce)
+                            
+                            # Aggiungi alla cache persistente
+                            announce_cache.add_announce(announce)
+                            
                             if len(announce_history) > MAX_HISTORY:
                                 announce_history.pop()
                         
@@ -380,12 +584,15 @@ def monitor_page():
 @app.route('/api/monitor/stats')
 def monitor_stats_api():
     with history_lock:
+        cache_stats = announce_cache.get_stats()
+        
         return jsonify({
             'success': True,
             'total_announces': announce_counter,
             'history_size': len(announce_history),
             'monitor_alive': monitor_process.is_alive() if monitor_process else False,
-            'unique_sources': len({a.get('identity_hash', '') for a in announce_history if a.get('identity_hash')}) if announce_history else 0
+            'unique_sources': len({a.get('identity_hash', '') for a in announce_history if a.get('identity_hash')}) if announce_history else 0,
+            'cache': cache_stats
         })
 
 @app.route('/api/monitor/history')
@@ -395,49 +602,115 @@ def monitor_history_api():
     offset = int(request.args.get('offset', 0))
     search = request.args.get('search', '').lower()
     sort = request.args.get('sort', 'time_desc')
+    source = request.args.get('source', 'memory')  # 'memory' o 'cache'
     
-    with history_lock:
-        filtered = announce_history.copy()
-    
-    # Filtra per aspect
-    if aspect_filter != 'all':
-        if aspect_filter == 'unknown':
-            filtered = [a for a in filtered if a.get('aspect') in ['unknown', None]]
-        elif aspect_filter == 'known':
-            filtered = [a for a in filtered if a.get('aspect') not in ['unknown', None] and a.get('aspect') != 'identity_hash']
-        else:
-            filtered = [a for a in filtered if a.get('aspect') == aspect_filter]
-    
-    # Filtra per search
-    if search:
-        filtered = [a for a in filtered if 
-                   search in a.get('dest_hash', '').lower() or
-                   search in a.get('identity_hash', '').lower() or
-                   search in a.get('aspect', '').lower() or
-                   search in a.get('data', '').lower()]
-    
-    # ORDINAMENTO - Dizionario delle funzioni
-    sort_functions = {
-        'time_asc': (lambda x: x.get('timestamp', 0), False),
-        'time_desc': (lambda x: x.get('timestamp', 0), True),
-        'hops_asc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 999, False),
-        'hops_desc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 0, True),
-        'aspect_asc': (lambda x: x.get('aspect', ''), False),
-        'aspect_desc': (lambda x: x.get('aspect', ''), True),
-        'identity_asc': (lambda x: x.get('identity_hash', ''), False),
-        'identity_desc': (lambda x: x.get('identity_hash', ''), True),
-    }
-    
-    key_func, reverse = sort_functions.get(sort, (lambda x: x.get('timestamp', 0), True))
-    filtered.sort(key=key_func, reverse=reverse)
-    
-    total = len(filtered)
-    paginated = filtered[offset:offset + limit]
+    if source == 'cache':
+        # Usa cache persistente
+        def filter_func(a):
+            if aspect_filter != 'all':
+                if aspect_filter == 'unknown' and a.get('aspect') not in ['unknown', None]:
+                    return False
+                elif aspect_filter == 'known' and a.get('aspect') in ['unknown', None, 'identity_hash']:
+                    return False
+                elif aspect_filter not in ['all', 'unknown', 'known'] and a.get('aspect') != aspect_filter:
+                    return False
+            
+            if search:
+                return (search in a.get('dest_hash', '').lower() or
+                       search in a.get('identity_hash', '').lower() or
+                       search in a.get('aspect', '').lower() or
+                       search in a.get('data', '').lower())
+            return True
+        
+        filtered = announce_cache.get_all(filter_func)
+        total = len(filtered)
+        
+        # Ordina
+        sort_functions = {
+            'time_desc': (lambda x: x.get('timestamp', 0), True),
+            'time_asc': (lambda x: x.get('timestamp', 0), False),
+            'hops_desc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 0, True),
+            'hops_asc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 999, False),
+        }
+        key_func, reverse = sort_functions.get(sort, (lambda x: x.get('timestamp', 0), True))
+        filtered.sort(key=key_func, reverse=reverse)
+        
+        paginated = filtered[offset:offset + limit]
+        
+    else:
+        # Usa memoria (comportamento originale)
+        with history_lock:
+            filtered = announce_history.copy()
+        
+        # Filtra per aspect
+        if aspect_filter != 'all':
+            if aspect_filter == 'unknown':
+                filtered = [a for a in filtered if a.get('aspect') in ['unknown', None]]
+            elif aspect_filter == 'known':
+                filtered = [a for a in filtered if a.get('aspect') not in ['unknown', None] and a.get('aspect') != 'identity_hash']
+            else:
+                filtered = [a for a in filtered if a.get('aspect') == aspect_filter]
+        
+        # Filtra per search
+        if search:
+            filtered = [a for a in filtered if 
+                       search in a.get('dest_hash', '').lower() or
+                       search in a.get('identity_hash', '').lower() or
+                       search in a.get('aspect', '').lower() or
+                       search in a.get('data', '').lower()]
+        
+        # ORDINAMENTO
+        sort_functions = {
+            'time_asc': (lambda x: x.get('timestamp', 0), False),
+            'time_desc': (lambda x: x.get('timestamp', 0), True),
+            'hops_asc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 999, False),
+            'hops_desc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 0, True),
+            'aspect_asc': (lambda x: x.get('aspect', ''), False),
+            'aspect_desc': (lambda x: x.get('aspect', ''), True),
+            'identity_asc': (lambda x: x.get('identity_hash', ''), False),
+            'identity_desc': (lambda x: x.get('identity_hash', ''), True),
+        }
+        
+        key_func, reverse = sort_functions.get(sort, (lambda x: x.get('timestamp', 0), True))
+        filtered.sort(key=key_func, reverse=reverse)
+        
+        total = len(filtered)
+        paginated = filtered[offset:offset + limit]
     
     return jsonify({
         'success': True,
         'announces': paginated,
-        'total': total
+        'total': total,
+        'source': source
+    })
+
+@app.route('/api/monitor/history/persistent')
+def persistent_history_api():
+    """Endpoint specifico per storico persistente"""
+    days = int(request.args.get('days', 7))
+    aspect = request.args.get('aspect', 'all')
+    limit = int(request.args.get('limit', 500))
+    offset = int(request.args.get('offset', 0))
+    
+    # Filtra per data
+    cutoff = time.time() - (days * 86400)
+    
+    def filter_func(a):
+        if a.get('timestamp', 0) < cutoff:
+            return False
+        if aspect != 'all' and a.get('aspect') != aspect:
+            return False
+        return True
+    
+    announces = announce_cache.get_all(filter_func, limit=limit, offset=offset)
+    total = len(announce_cache.get_all(filter_func))
+    
+    return jsonify({
+        'success': True,
+        'announces': announces,
+        'total': total,
+        'days': days,
+        'aspect': aspect
     })
 
 @app.route('/api/monitor/stream')
@@ -494,29 +767,46 @@ def monitor_clear_api():
                 break
     return jsonify({'success': True})
 
+@app.route('/api/monitor/cache/clear', methods=['POST'])
+def monitor_cache_clear_api():
+    """Pulisce la cache persistente"""
+    announce_cache.clear()
+    return jsonify({'success': True, 'message': 'Cache persistente pulita'})
+
+@app.route('/api/monitor/cache/cleanup', methods=['POST'])
+def monitor_cache_cleanup_api():
+    """Rimuove annunci vecchi dalla cache"""
+    removed = announce_cache.cleanup_old()
+    return jsonify({
+        'success': True, 
+        'removed': removed,
+        'message': f'Rimossi {removed} annunci vecchi'
+    })
+
+@app.route('/api/monitor/cache/save', methods=['POST'])
+def monitor_cache_save_api():
+    """Salva forzatamente la cache"""
+    announce_cache.save()
+    return jsonify({'success': True, 'message': 'Cache salvata'})
+
+@app.route('/api/monitor/cache/stats')
+def monitor_cache_stats_api():
+    """Statistiche dettagliate cache"""
+    stats = announce_cache.get_stats()
+    return jsonify({
+        'success': True,
+        'stats': stats
+    })
+
 @app.route('/api/monitor/aspects')
 def monitor_aspects_api():
     return jsonify({
         'success': True,
-        'aspects': [
-            "call.audio", "lxmf.delivery", "lxmf.propagation", "rnstransport.probe",
-            "rnstransport.discovery.interface", "rnstransport.tunnel.synthesize",
-            "rnstransport.path.request", "rnstransport.remote.management",
-            "rnstransport.info.blackhole", "rnstransport.network.instance",
-            "rnstransport.network", "example_utilities.minimalsample",
-            "example_utilities.echo.request", "example_utilities.broadcast",
-            "example_utilities.bufferexample", "example_utilities.channelexample",
-            "example_utilities.filetransfer.server", "example_utilities.identifyexample",
-            "example_utilities.linkexample", "example_utilities.ratchet.echo.request",
-            "example_utilities.requestexample", "example_utilities.resourceexample",
-            "example_utilities.speedtest", "retibbs.bbs", "lxst.telephony",
-            "discovery.interface", "nomadnetwork.node", "rrc.hub"
-        ]
+        'aspects': RNS_ASPECTS
     })
 
 # ============================================
-# === TUTTE LE TUE ROUTE IDENTITY MANAGER ===
-# === (IL TUO CODICE ORIGINALE) ===
+# === TUTTE LE ROUTE IDENTITY MANAGER ===
 # ============================================
 
 @app.route('/')
@@ -555,7 +845,8 @@ def execute_rnid():
                 '/tmp/web_decrypted.txt',
                 '/tmp/rnid_web/',
                 '/tmp/rnid_web_signed/',
-                DOWNLOADS_DIR
+                DOWNLOADS_DIR,
+                CACHE_DIR
             ]
             
             result = subprocess.run(
@@ -594,15 +885,6 @@ def list_identities():
 
     if MESHCHAT_STORAGE and os.path.exists(MESHCHAT_STORAGE):
         storage_dirs.append((MESHCHAT_STORAGE, 'meshchat'))
-    
-    RNS_ASPECTS = [
-        'rnstransport.probe',
-        'lxmf.delivery',
-        'nomadnetwork.node',
-        'lxmf.propagation',
-        'call.audio',
-        'lxst.telephony'
-    ]
     
     for storage_path, app_name in storage_dirs:
         if storage_path and os.path.exists(storage_path):
@@ -942,7 +1224,7 @@ def get_identity_info():
         
         aspect_hashes = {}
         
-        if aspect:
+        if aspect and aspect in RNS_ASPECTS:
             hash_result = subprocess.run(
                 ['rnid', '-i', identity_path, '-H', aspect],
                 capture_output=True,
@@ -1138,6 +1420,9 @@ def rns_probe_aspect():
         if not identity_path or not os.path.exists(identity_path):
             return jsonify({'success': False, 'error': 'Identità non trovata'})
         
+        if aspect not in RNS_ASPECTS:
+            return jsonify({'success': False, 'error': f'Aspect non valido: {aspect}'})
+        
         # Prima ottieni l'hash dell'aspect
         hash_result = subprocess.run(
             ['rnid', '-i', identity_path, '-H', aspect],
@@ -1280,15 +1565,18 @@ if __name__ == '__main__':
         print(f"  {key}: {expanded}")
     
     print(f"\n📁 Downloads: {DOWNLOADS_DIR}")
+    print(f"📁 Cache: {CACHE_DIR}")
     print("\n🌐 Accesso:")
     print(f"  http://localhost:5000/ - Identity Manager")
     print(f"  http://localhost:5000/monitor - Aspect Monitor")
     print("\n🚀 Avvio server...\n")
     
     try:
-        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=True)
+        app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
         print("\n🛑 Arresto server...")
+        # Ferma cache
+        announce_cache.stop()
         if monitor_process and monitor_process.is_alive():
             monitor_process.terminate()
             monitor_process.join(timeout=5)
