@@ -74,7 +74,7 @@ Poi apri il browser su:
 ```ini
 rns-identity-manager/
 ├── manager.py                 # Server Flask principale
-├── Readme.md                  @ This file
+├── Readme.md                  # This file
 ├── static/
 │   └── rns_monitor.css        # Stili CSS
 ├── templates/
@@ -145,7 +145,7 @@ Aspect Monitor
 <h3>🔧 Configurazione
 Cache identità
 
-Le identità vengono cachate per 5 minuti per prestazioni ottimali. Per forzare una scansione completa, premi "Ricerca profonda".
+Le identità vengono cachate per 6 ore per prestazioni ottimali. Per forzare una scansione completa, premi "Ricerca profonda".
 Cache annunci
 
 Gli annunci vengono salvati automaticamente ogni 60 secondi e mantenuti per 7 giorni in ~/.rns_manager/Cache/announce_cache.json.

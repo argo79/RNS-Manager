@@ -268,10 +268,10 @@ Cache Duration
 You can modify cache duration in manager.py:
 python
 
-# Identity cache (default: 5 minutes)
-identity_cache = IdentityCache(cache_duration=300)
+<h4> Identity cache (default: 6 hours)</h4>
+identity_cache = IdentityCache(cache_duration=3600)
 
-# Announce cache (default: 7 days)
+<h4> Announce cache (default: 7 days)</h4>
 announce_cache = PersistentAnnounceCache(
     max_age_days=7,
     save_interval=60
