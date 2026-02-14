@@ -83,6 +83,8 @@ rns-identity-manager/
 │   └── monitor.html            # Aspect Monitor
 └── README.md
 ```
+
+
 <h3>🗂️ Directory Structure</h3>
 
 The program searches for identities in:
@@ -104,6 +106,7 @@ Cache and downloads:
     ~/.rns_manager/Cache/ - Announce and identity cache
 
     ~/.rns_manager/Downloads/ - Processed files
+
 
 <h3>🎮 Usage</h3>
 
