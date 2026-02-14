@@ -26,6 +26,8 @@ Questo progetto fornisce un'interfaccia web intuitiva per:
 - ✅ Cifratura/decifratura file e testo
 - ✅ Firma digitale e verifica firme (.rsg)
 
+![RNID_GUI](img/rnsMonitor.jpg)
+
 ### Aspect Monitor
 - 📡 Monitoraggio in tempo reale annunci RNS via SSE (Server-Sent Events)
 - 🔍 Filtri per aspect, ricerca testuale, ordinamento
@@ -33,6 +35,8 @@ Questo progetto fornisce un'interfaccia web intuitiva per:
 - 🏷️ Riconoscimento automatico aspect con cache
 - 💾 Cache persistente su disco (7 giorni di storico)
 - 🖱️ Interfaccia interattiva con modal per comandi rnpath/rnprobe
+
+![RNID_GUI](img/rnsMonitor1.jpg)
 
 ## 🚀 Installazione
 
@@ -68,8 +72,10 @@ Poi apri il browser su:
 
     Aspect Monitor: http://localhost:5000/monitor
 ```
+
 <h3>📁 Struttura del progetto</h3>
 
+```ini
 rns-identity-manager/
 ├── manager.py                 # Server Flask principale
 ├── static/
@@ -78,10 +84,11 @@ rns-identity-manager/
 │   ├── index.html              # Identity Manager
 │   └── monitor.html            # Aspect Monitor
 └── README.md
-
+```
 <h3>🗂️ Directory utilizzate</h3>
 
 Il programma cerca identità in:
+
 ```ini
     ~/.reticulum/storage/
 
