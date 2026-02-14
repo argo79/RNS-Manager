@@ -1,4 +1,6 @@
-# RNS Identity Manager & Monitor
+<h1 align="center">
+ 🔑  RNS Identity Manager & Monitor 🌐
+</h1>
 
 A comprehensive web interface for managing Reticulum (RNS) identities and real-time monitoring of network announces.
 
