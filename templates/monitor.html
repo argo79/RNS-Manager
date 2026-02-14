@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RNS • monitor</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="/static/rns_monitor.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <h1>rns/monitor</h1>
+                <a href="/" style="color: var(--dim); text-decoration: none; font-size: 11px;">← identities</a>
+            </div>
+            <div class="stats">
+                <span id="status" class="status offline"></span>
+                <span id="total-announces">0</span> · <span id="unique-sources">0</span> id
+            </div>
+        </header>
+
+        <div class="tabs-main">
+            <div class="tab-main active" data-view="live">📡 live</div>
+            <div class="tab-main" data-view="identities">🆔 identità</div>
+            <div class="tab-main" data-view="stats">📊 statistiche</div>
+        </div>
+
+        <div id="view-live" class="view active">
+            <div class="tabs-aspect-container" id="aspect-tabs-container">
+                <div class="tabs-aspect-row" id="aspect-row-1"></div>
+                <div class="tabs-aspect-row" id="aspect-row-2"></div>
+                <div class="tabs-aspect-row" id="aspect-row-3"></div>
+            </div>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <label>ordina</label>
+                    <select id="sort-select">
+                        <option value="time_desc">⏱ più recente</option>
+                        <option value="time_asc">⏱ meno recente</option>
+                        <option value="hops_asc">📶 hops ↑</option>
+                        <option value="hops_desc">📶 hops ↓</option>
+                        <option value="aspect_asc">🏷 aspect a→z</option>
+                        <option value="aspect_desc">🏷 aspect z→a</option>
+                        <option value="identity_asc">🆔 identità a→z</option>
+                        <option value="identity_desc">🆔 identità z→a</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>mostra</label>
+                    <select id="limit-select">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>cerca</label>
+                    <input type="text" id="search-input" placeholder="hash/aspect/dati" style="width: 180px;">
+                    <button class="clear-search-btn" onclick="clearSearch()" title="Pulisci ricerca">✕</button>
+                </div>
+                <div style="flex:1; text-align:right;">
+                    <button class="btn" id="clear-btn" style="background:#330000; color:#ff6666;">pulisci storico</button>
+                </div>
+            </div>
+
+            <table class="table" id="announce-table">
+                <thead>
+                    <tr>
+                        <th style="width:8%" data-sort="time">⏱ tempo</th>
+                        <th style="width:15%" data-sort="identity">🆔 identità</th>
+                        <th style="width:20%" data-sort="dest">🎯 destinazione</th>
+                        <th style="width:15%" data-sort="aspect">🏷 aspect</th>
+                        <th style="width:5%" data-sort="hops">📶 hops</th>
+                        <th style="width:12%" data-sort="iface">🌐 iface</th>
+                        <th style="width:25%" data-sort="data">💬 dati</th>
+                    </tr>
+                </thead>
+                <tbody id="announce-body">
+                    <tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">⏳ in attesa di annunci...</td></tr>
+                </tbody>
+            </table>
+
+            <div class="pagination">
+                <div><span id="showing-start">0</span>-<span id="showing-end">0</span> di <span id="total-items">0</span></div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn" id="prev-page">←</button>
+                    <span id="page-info" style="padding:4px 0;">pagina 1</span>
+                    <button class="btn" id="next-page">→</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-identities" class="view">
+            <div class="identity-sort-bar">
+                <div class="sort-controls">
+                    <span style="color:var(--dim);">ordina per:</span>
+                    <select id="identity-sort-select" class="sort-select">
+                        <option value="count_desc">📊 annunci (↓)</option>
+                        <option value="count_asc">📊 annunci (↑)</option>
+                        <option value="rate_desc">⚡ frequenza (↓)</option>
+                        <option value="rate_asc">⚡ frequenza (↑)</option>
+                        <option value="period_asc">⏱️ periodo (↑)</option>
+                        <option value="period_desc">⏱️ periodo (↓)</option>
+                        <option value="aspects_desc">🏷 aspect (↓)</option>
+                        <option value="aspects_asc">🏷 aspect (↑)</option>
+                        <option value="last_desc">⏱ ultimo (↓)</option>
+                        <option value="last_asc">⏱ ultimo (↑)</option>
+                        <option value="hash_asc">🔑 hash (A→Z)</option>
+                        <option value="hash_desc">🔑 hash (Z→A)</option>
+                    </select>
+                </div>
+                <div class="search-identity" style="display: flex; gap: 5px;">
+                    <input type="text" id="identity-search-input" class="identity-search-input" placeholder="🔍 cerca identità...">
+                    <button class="clear-search-btn" onclick="clearIdentitySearch()" title="Pulisci ricerca">✕</button>
+                </div>
+                <span style="flex:1; text-align:right; color:var(--dim);" id="identity-count">0 identità</span>
+            </div>
+            <div id="identity-container"></div>
+        </div>
+
+        <div id="view-stats" class="view">
+            <div class="grid-2">
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-total">0</div>
+                    <div class="stat-label">annunci totali</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-identities">0</div>
+                    <div class="stat-label">identità</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-rate">0</div>
+                    <div class="stat-label">frequenza media</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-period">0</div>
+                    <div class="stat-label">periodo medio</div>
+                </div>
+            </div>
+            
+            <h3 style="font-size:12px; margin:20px 0 10px; font-weight:normal; color:var(--dim);">top aspect</h3>
+            <div id="stats-aspects" class="grid-2" style="grid-template-columns:repeat(auto-fill, minmax(180px,1fr));"></div>
+            
+            <h3 style="font-size:12px; margin:20px 0 10px; font-weight:normal; color:var(--dim);">top identità</h3>
+            <div id="stats-identities" class="grid-2" style="grid-template-columns:repeat(auto-fill, minmax(300px,1fr));"></div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // === CONFIGURAZIONE ===
+        // ============================================
+        
+        const STORAGE_KEY = 'rns_monitor_identities';
+        const INACTIVE_TIMEOUT = 3600;
+        
+        const ASPECTS = [
+            "call.audio", "lxmf.delivery", "lxmf.propagation", "rnstransport.probe",
+            "rnstransport.discovery.interface", "rnstransport.tunnel.synthesize",
+            "rnstransport.path.request", "rnstransport.remote.management",
+            "rnstransport.info.blackhole", "rnstransport.network.instance",
+            "rnstransport.network", "example_utilities.minimalsample",
+            "example_utilities.echo.request", "example_utilities.broadcast",
+            "example_utilities.bufferexample", "example_utilities.channelexample",
+            "example_utilities.filetransfer.server", "example_utilities.identifyexample",
+            "example_utilities.linkexample", "example_utilities.ratchet.echo.request",
+            "example_utilities.requestexample", "example_utilities.resourceexample",
+            "example_utilities.speedtest", "retibbs.bbs", "lxst.telephony",
+            "discovery.interface", "nomadnetwork.node", "rrc.hub"
+        ];
+
+        const state = {
+            view: 'live',
+            aspect: 'all',
+            page: 1,
+            limit: 100,
+            sort: 'time_desc',
+            search: '',
+            identitySearch: '',
+            lastId: 0,
+            identities: new Map(),
+            expandedIdentities: new Set(),
+            identitySort: 'count_desc'
+        };
+
+        // ============================================
+        // === MODAL STATE ===
+        // ============================================
+        
+        const modalState = {
+            visible: false,
+            identityHash: '',
+            aspectHash: '',
+            aspect: '',
+            identityPath: null
+        };
+
+        // ============================================
+        // === FUNZIONI DI UTILITÀ ===
+        // ============================================
+
+        function clearSearch() {
+            document.getElementById('search-input').value = '';
+            state.search = '';
+            state.page = 1;
+            loadHistory();
+        }
+
+        function clearIdentitySearch() {
+            document.getElementById('identity-search-input').value = '';
+            state.identitySearch = '';
+            renderIdentities();
+        }
+
+        function showIdentityInTab(identityHash) {
+            document.querySelectorAll('.tab-main').forEach(t => t.classList.remove('active'));
+            document.querySelector('[data-view="identities"]').classList.add('active');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('view-identities').classList.add('active');
+            state.view = 'identities';
+            
+            document.getElementById('identity-search-input').value = identityHash;
+            state.identitySearch = identityHash;
+            
+            renderIdentities();
+            
+            setTimeout(() => {
+                const identityGroups = document.querySelectorAll('.identity-group');
+                identityGroups.forEach(group => {
+                    const header = group.querySelector('.identity-header');
+                    const hashSpan = group.querySelector('.identity-hash');
+                    if (hashSpan && hashSpan.textContent.includes(identityHash.slice(0, 32))) {
+                        if (!header.classList.contains('expanded')) {
+                            header.click();
+                        }
+                        group.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+            }, 500);
+        }
+
+        function hideAspectModal() {
+            const modal = document.getElementById('aspect-modal');
+            if (modal) {
+                modal.classList.remove('visible');
+                modalState.visible = false;
+            }
+        }
+
+        function executeRnsCommand(command, destination, aspect = null) {
+            const outputDiv = document.getElementById('modal-output');
+            if (!outputDiv) {
+                console.error('outputDiv non trovato');
+                return;
+            }
+            
+            outputDiv.innerHTML = '⏳ Esecuzione in corso...';
+            outputDiv.style.color = '#88ff88';
+            
+            console.log(`[DEBUG] Eseguo ${command} per:`, destination);
+            
+            if (command === 'path') {
+                const url = `/api/rns/paths?dest=${encodeURIComponent(destination)}`;
+                console.log('[DEBUG] Fetch URL:', url);
+                
+                fetch(url)
+                    .then(response => {
+                        console.log('[DEBUG] Response status:', response.status);
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('[DEBUG] Response data:', data);
+                        
+                        if (data.success) {
+                            let output = data.output || '';
+                            
+                            // Cerca la linea che contiene "Path found"
+                            const lines = output.split('\n');
+                            let cleanOutput = '';
+                            
+                            for (let i = lines.length - 1; i >= 0; i--) {
+                                const line = lines[i];
+                                if (line.includes('Path found')) {
+                                    cleanOutput = line;
+                                    break;
+                                }
+                            }
+                            
+                            if (cleanOutput) {
+                                // Pulisci dai caratteri di controllo
+                                cleanOutput = cleanOutput
+                                    .replace(/.\u0008/g, '')  // Rimuovi backspace + carattere
+                                    .replace(/[\u2800-\u28FF]/g, '')  // Rimuovi caratteri Braille
+                                    .replace(/\s+/g, ' ')  // Normalizza spazi
+                                    .trim();
+                                
+                                // ESCAPE DEI CARATTERI HTML PER VISUALIZZARE CORRETTAMENTE <>
+                                cleanOutput = cleanOutput
+                                    .replace(/&/g, '&amp;')
+                                    .replace(/</g, '&lt;')
+                                    .replace(/>/g, '&gt;')
+                                    .replace(/"/g, '&quot;')
+                                    .replace(/'/g, '&#039;');
+                                
+                                outputDiv.innerHTML = cleanOutput;
+                            } else {
+                                // Se non trovi "Path found", mostra tutto l'output
+                                output = output
+                                    .replace(/.\u0008/g, '')
+                                    .replace(/[\u2800-\u28FF]/g, '')
+                                    .replace(/\s+/g, ' ')
+                                    .trim()
+                                    .replace(/&/g, '&amp;')
+                                    .replace(/</g, '&lt;')
+                                    .replace(/>/g, '&gt;')
+                                    .replace(/"/g, '&quot;')
+                                    .replace(/'/g, '&#039;');
+                                
+                                outputDiv.innerHTML = output || '✅ Comando eseguito (nessun output)';
+                            }
+                        } else {
+                            outputDiv.innerHTML = `❌ Errore: ${data.error || 'Comando fallito'}`;
+                            outputDiv.style.color = '#ff6666';
+                        }
+                    })
+                    .catch(err => {
+                        console.error('[DEBUG] Fetch error:', err);
+                        outputDiv.innerHTML = `❌ Errore di connessione: ${err.message}`;
+                        outputDiv.style.color = '#ff6666';
+                    });
+                    
+            } else if (command === 'probe') {
+                fetch('/api/rns/probe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        destination: destination, 
+                        aspect: aspect || 'rnstransport.probe'
+                    })
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('[DEBUG] Probe response:', data);
+                        
+                        if (data.success) {
+                            let output = data.output || '';
+                            
+                            // Pulisci l'output
+                            output = output
+                                .replace(/.\u0008/g, '')  // backspace
+                                .replace(/[\u2800-\u28FF]/g, '')  // caratteri braille
+                                .split('\n')
+                                .filter(line => line.trim() && !line.includes('Sent probe'))
+                                .join('\n')
+                                .trim();
+                            
+                            // Escape HTML
+                            output = output
+                                .replace(/&/g, '&amp;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;')
+                                .replace(/"/g, '&quot;')
+                                .replace(/'/g, '&#039;');
+                            
+                            outputDiv.innerHTML = output || '✅ Probe inviato (nessuna risposta)';
+                        } else {
+                            outputDiv.innerHTML = `❌ Errore probe: ${data.error || 'Fallito'}`;
+                            outputDiv.style.color = '#ff6666';
+                        }
+                    })
+                    .catch(err => {
+                        console.error('[DEBUG] Probe error:', err);
+                        outputDiv.innerHTML = `❌ Errore: ${err.message}`;
+                        outputDiv.style.color = '#ff6666';
+                    });
+            } else if (command === 'blackhole') {
+                // destination qui è l'identityHash, non l'aspect hash
+                fetch('/api/rns/paths/blackhole', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ destination: destination })  // destination = identityHash
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            let output = data.output || '';
+                            output = output
+                                .replace(/.\u0008/g, '')
+                                .replace(/[\u2800-\u28FF]/g, '')
+                                .split('\n')
+                                .filter(line => line.trim())
+                                .join('\n')
+                                .trim()
+                                .replace(/&/g, '&amp;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;');
+                            
+                            outputDiv.innerHTML = output || '✅ Nessun blackhole trovato per questa identità';
+                        } else {
+                            outputDiv.innerHTML = `❌ Errore: ${data.error}`;
+                        }
+                    })
+                    .catch(err => {
+                        outputDiv.innerHTML = `❌ Errore: ${err.message}`;
+                    });
+            }
+        }
+
+        function showAspectModal(identityHash, aspect, destHash) {
+            modalState.identityHash = identityHash;
+            modalState.aspect = aspect;
+            modalState.aspectHash = destHash;
+            
+            fetch(`/api/identities/find/by-hash?hash=${identityHash}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        modalState.identityPath = data.identity_path;
+                    }
+                })
+                .catch(err => console.error('Errore ricerca identità:', err));
+            
+            let modal = document.getElementById('aspect-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'aspect-modal';
+                modal.innerHTML = `
+                    <div class="modal-overlay" onclick="hideAspectModal()"></div>
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>🏷 Dettagli Aspect</h3>
+                            <button class="modal-close" onclick="hideAspectModal()">✕</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="modal-info">
+                                <div class="info-row">
+                                    <span class="info-label">Identità:</span>
+                                    <span class="info-value identity-hash" id="modal-identity-hash"></span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Aspect:</span>
+                                    <span class="info-value" id="modal-aspect"></span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Hash Aspect:</span>
+                                    <span class="info-value monospace" id="modal-aspect-hash"></span>
+                                </div>
+                            </div>
+                            <div class="modal-actions" id="modal-actions"></div>
+                            <div class="modal-output" id="modal-output"></div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            document.getElementById('modal-identity-hash').textContent = identityHash;
+            document.getElementById('modal-identity-hash').onclick = () => {
+                hideAspectModal();
+                showIdentityInTab(identityHash);
+            };
+            document.getElementById('modal-aspect').textContent = aspect;
+            document.getElementById('modal-aspect-hash').textContent = destHash;
+            
+            const actionsDiv = document.getElementById('modal-actions');
+            actionsDiv.innerHTML = '';
+            
+            const pathBtn = document.createElement('button');
+            pathBtn.className = 'modal-btn';
+            pathBtn.innerHTML = '🛣️ rnpath';
+            pathBtn.onclick = () => executeRnsCommand('path', destHash);
+            actionsDiv.appendChild(pathBtn);
+            
+            if (aspect === 'rnstransport.probe') {
+                const probeBtn = document.createElement('button');
+                probeBtn.className = 'modal-btn probe';
+                probeBtn.innerHTML = '📡 rnprobe';
+                probeBtn.onclick = () => executeRnsCommand('probe', destHash, aspect);
+                actionsDiv.appendChild(probeBtn);
+            }
+            
+            // Per rnstransport.info.blackhole - comando speciale rnpath -p
+            if (aspect === 'rnstransport.info.blackhole') {
+                const blackholeBtn = document.createElement('button');
+                blackholeBtn.className = 'modal-btn blackhole';
+                blackholeBtn.innerHTML = '🕳️ rnpath -p (blackhole)';
+                // Usa identityHash invece di destHash!
+                blackholeBtn.onclick = () => executeRnsCommand('blackhole', modalState.identityHash);
+                actionsDiv.appendChild(blackholeBtn);
+            }
+
+            modal.classList.add('visible');
+            modalState.visible = true;
+        }
+
+        function saveIdentitiesToStorage() {
+            try {
+                const identitiesArray = [];
+                state.identities.forEach((value, key) => {
+                    identitiesArray.push({
+                        hash: key,
+                        first: value.first,
+                        last: value.last,
+                        count: value.count,
+                        lastData: value.lastData,
+                        aspects: Array.from(value.aspects.entries()).map(([asp, data]) => ({
+                            aspect: asp,
+                            dest: data.dest,
+                            count: data.count,
+                            last: data.last,
+                            data: data.data
+                        }))
+                    });
+                });
+                
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    timestamp: Date.now(),
+                    identities: identitiesArray
+                }));
+            } catch(e) {
+                console.warn('Errore salvataggio:', e);
+            }
+        }
+
+        function loadIdentitiesFromStorage() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (!stored) return false;
+                
+                const data = JSON.parse(stored);
+                const age = (Date.now() - data.timestamp) / 1000;
+                
+                if (age > 3600) {
+                    localStorage.removeItem(STORAGE_KEY);
+                    return false;
+                }
+                
+                state.identities.clear();
+                data.identities.forEach(item => {
+                    const aspects = new Map();
+                    item.aspects.forEach(asp => {
+                        aspects.set(asp.aspect, {
+                            dest: asp.dest,
+                            count: asp.count,
+                            last: asp.last,
+                            data: asp.data
+                        });
+                    });
+                    
+                    state.identities.set(item.hash, {
+                        hash: item.hash,
+                        first: item.first,
+                        last: item.last,
+                        count: item.count,
+                        lastData: item.lastData,
+                        aspects: aspects
+                    });
+                });
+                
+                return true;
+            } catch(e) {
+                console.warn('Errore caricamento:', e);
+                return false;
+            }
+        }
+
+        function decodeUTF8(str) {
+            if (!str) return '';
+            try {
+                return decodeURIComponent(escape(str));
+            } catch(e) {
+                return str;
+            }
+        }
+
+        function formatRate(rateHz) {
+            if (rateHz >= 1) {
+                return rateHz.toFixed(2) + ' Hz';
+            } else if (rateHz >= 0.001) {
+                return (rateHz * 1000).toFixed(1) + ' mHz';
+            } else if (rateHz > 0) {
+                return (rateHz * 1000000).toFixed(0) + ' µHz';
+            } else {
+                return '—';
+            }
+        }
+
+        function formatPeriod(periodSeconds) {
+            if (periodSeconds >= 3600) {
+                return (periodSeconds / 3600).toFixed(1) + ' h';
+            } else if (periodSeconds >= 60) {
+                return (periodSeconds / 60).toFixed(1) + ' min';
+            } else if (periodSeconds >= 1) {
+                return periodSeconds.toFixed(1) + ' s';
+            } else if (periodSeconds > 0) {
+                return (periodSeconds * 1000).toFixed(0) + ' ms';
+            } else {
+                return '—';
+            }
+        }
+
+        function isActive(timestamp) {
+            const now = Date.now() / 1000;
+            return (now - timestamp) < INACTIVE_TIMEOUT;
+        }
+
+        function getAspectCounts() {
+            const counts = new Map();
+            counts.set('all', 0);
+            counts.set('known', 0);
+            counts.set('unknown', 0);
+            
+            ASPECTS.forEach(a => counts.set(a, 0));
+            
+            state.identities.forEach(id => {
+                id.aspects.forEach((data, asp) => {
+                    if (ASPECTS.includes(asp)) {
+                        counts.set(asp, (counts.get(asp) || 0) + data.count);
+                        counts.set('known', counts.get('known') + data.count);
+                        counts.set('all', counts.get('all') + data.count);
+                    }
+                });
+            });
+            
+            let unknownCount = 0;
+            state.identities.forEach(id => {
+                id.aspects.forEach((data, asp) => {
+                    if (!ASPECTS.includes(asp) && asp !== 'identity_hash') {
+                        unknownCount += data.count;
+                        counts.set('all', counts.get('all') + data.count);
+                    }
+                });
+            });
+            counts.set('unknown', unknownCount);
+            
+            return counts;
+        }
+
+        function initAspectTabs() {
+            const row1 = document.getElementById('aspect-row-1');
+            const row2 = document.getElementById('aspect-row-2');
+            const row3 = document.getElementById('aspect-row-3');
+            
+            function renderAspectTabs() {
+                const counts = getAspectCounts();
+                
+                let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (${counts.get('all') || 0})</div>`;
+                ASPECTS.slice(0, 10).forEach(a => {
+                    const short = a.split('.').pop();
+                    const count = counts.get(a) || 0;
+                    html1 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+                });
+                row1.innerHTML = html1;
+                
+                let html2 = ``;
+                ASPECTS.slice(10, 20).forEach(a => {
+                    const short = a.split('.').pop();
+                    const count = counts.get(a) || 0;
+                    html2 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+                });
+                row2.innerHTML = html2;
+                
+                let html3 = ``;
+                ASPECTS.slice(20).forEach(a => {
+                    const short = a.split('.').pop();
+                    const count = counts.get(a) || 0;
+                    html3 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+                });
+                html3 += `<div class="tab-aspect ${state.aspect === 'known' ? 'active' : ''}" data-aspect="known">✓ conosciuti (${counts.get('known') || 0})</div>`;
+                html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (${counts.get('unknown') || 0})</div>`;
+                row3.innerHTML = html3;
+                
+                document.querySelectorAll('.tab-aspect').forEach(tab => {
+                    tab.addEventListener('click', function(e) {
+                        document.querySelectorAll('.tab-aspect').forEach(t => t.classList.remove('active'));
+                        this.classList.add('active');
+                        state.aspect = this.dataset.aspect;
+                        state.page = 1;
+                        loadHistory();
+                    });
+                });
+            }
+            
+            renderAspectTabs();
+            window.updateAspectTabs = renderAspectTabs;
+        }
+
+        function initMainTabs() {
+            document.querySelectorAll('.tab-main').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.tab-main').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                    document.getElementById(`view-${this.dataset.view}`).classList.add('active');
+                    state.view = this.dataset.view;
+                    if (state.view === 'identities') {
+                        renderIdentities();
+                    }
+                    if (state.view === 'stats') {
+                        renderStats();
+                    }
+                });
+            });
+        }
+
+        function createAnnounceRow(a) {
+            const idShort = a.identity_hash?.slice(0, 32) || '?';
+            const destShort = a.dest_hash?.slice(0, 32) || '-';
+            const decodedData = decodeUTF8(a.data || '');
+            
+            let row = '<tr>';
+            row += `<td style="white-space:nowrap; color:var(--dim);">${a.time || ''}</td>`;
+            
+            row += `<td class="identity" title="${a.identity_hash || ''}">`;
+            row += `<span class="clickable-hash" onclick="showIdentityInTab('${a.identity_hash}')">${idShort}</span>`;
+            row += `</td>`;
+            
+            row += `<td class="dest" title="${a.dest_hash || ''}">`;
+            row += `<span class="clickable-hash" onclick="showAspectModal('${a.identity_hash}', '${a.aspect || 'unknown'}', '${a.dest_hash}')">${destShort}</span>`;
+            row += `</td>`;
+            
+            if (a.aspect && a.aspect !== 'unknown' && a.aspect !== 'identity_hash') {
+                row += `<td><span class="badge">${a.aspect}</span></td>`;
+            } else {
+                row += `<td><span class="unknown">sconosciuto</span></td>`;
+            }
+            
+            row += `<td style="text-align:center;"><span class="badge-hops">${a.hops || '?'}</span></td>`;
+            row += `<td class="iface">${a.interface?.split('[')[0] || '?'}</td>`;
+            row += `<td class="data" style="font-family: monospace;">${decodedData || ''}</td>`;
+            row += '</tr>';
+            
+            return row;
+        }
+
+        function renderTable(announces) {
+            const tbody = document.getElementById('announce-body');
+            if (!announces?.length) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
+                return;
+            }
+
+            let html = '';
+            announces.forEach(a => {
+                html += createAnnounceRow(a);
+            });
+            tbody.innerHTML = html;
+        }
+
+        function sortTableRows(rows, sortType) {
+            const rowsArray = Array.from(rows);
+            
+            return rowsArray.sort((a, b) => {
+                const cellsA = a.querySelectorAll('td');
+                const cellsB = b.querySelectorAll('td');
+                
+                try {
+                    switch(sortType) {
+                        case 'time_desc': {
+                            const timeA = cellsA[0]?.textContent || '';
+                            const timeB = cellsB[0]?.textContent || '';
+                            return timeB.localeCompare(timeA);
+                        }
+                        case 'time_asc': {
+                            const timeA = cellsA[0]?.textContent || '';
+                            const timeB = cellsB[0]?.textContent || '';
+                            return timeA.localeCompare(timeB);
+                        }
+                        case 'hops_asc': {
+                            const hopsA = parseInt(cellsA[4]?.textContent) || 999;
+                            const hopsB = parseInt(cellsB[4]?.textContent) || 999;
+                            return hopsA - hopsB;
+                        }
+                        case 'hops_desc': {
+                            const hopsA = parseInt(cellsA[4]?.textContent) || 0;
+                            const hopsB = parseInt(cellsB[4]?.textContent) || 0;
+                            return hopsB - hopsA;
+                        }
+                        case 'aspect_asc': {
+                            const aspectA = cellsA[3]?.textContent?.replace(/[⚡📶🏷🔑📋]/g, '').trim() || '';
+                            const aspectB = cellsB[3]?.textContent?.replace(/[⚡📶🏷🔑📋]/g, '').trim() || '';
+                            return aspectA.localeCompare(aspectB);
+                        }
+                        case 'aspect_desc': {
+                            const aspectA = cellsA[3]?.textContent?.replace(/[⚡📶🏷🔑📋]/g, '').trim() || '';
+                            const aspectB = cellsB[3]?.textContent?.replace(/[⚡📶🏷🔑📋]/g, '').trim() || '';
+                            return aspectB.localeCompare(aspectA);
+                        }
+                        case 'identity_asc': {
+                            const idA = cellsA[1]?.textContent || '';
+                            const idB = cellsB[1]?.textContent || '';
+                            return idA.localeCompare(idB);
+                        }
+                        case 'identity_desc': {
+                            const idA = cellsA[1]?.textContent || '';
+                            const idB = cellsB[1]?.textContent || '';
+                            return idB.localeCompare(idA);
+                        }
+                        default:
+                            return 0;
+                    }
+                } catch(e) {
+                    console.error('Errore ordinamento:', e);
+                    return 0;
+                }
+            });
+        }
+
+        function resortLiveTable() {
+            if (state.view !== 'live') return;
+            
+            const tbody = document.getElementById('announce-body');
+            const rows = tbody.querySelectorAll('tr');
+            
+            if (rows.length && !rows[0].innerHTML.includes('nessun annuncio')) {
+                const sortedRows = sortTableRows(rows, state.sort);
+                tbody.innerHTML = '';
+                sortedRows.forEach(r => tbody.appendChild(r));
+            }
+        }
+
+        function updateIdentityStats(ann) {
+            if (!ann.identity_hash) return;
+            const id = ann.identity_hash.slice(0, 32);
+            
+            if (!state.identities.has(id)) {
+                state.identities.set(id, {
+                    hash: id,
+                    first: ann.timestamp,
+                    last: ann.timestamp,
+                    count: 0,
+                    aspects: new Map(),
+                    lastData: ann.data
+                });
+            }
+            
+            const ident = state.identities.get(id);
+            ident.last = Math.max(ident.last, ann.timestamp);
+            ident.first = Math.min(ident.first, ann.timestamp);
+            ident.count++;
+            if (ann.data) ident.lastData = ann.data;
+            
+            const aspect = ann.aspect || 'unknown';
+            if (!ident.aspects.has(aspect)) {
+                ident.aspects.set(aspect, {
+                    dest: ann.dest_hash,
+                    count: 0,
+                    last: ann.timestamp,
+                    data: ann.data
+                });
+            }
+            const asp = ident.aspects.get(aspect);
+            asp.count++;
+            asp.last = ann.timestamp;
+            if (ann.data) asp.data = ann.data;
+            
+            saveIdentitiesToStorage();
+            if (window.updateAspectTabs) window.updateAspectTabs();
+        }
+
+        function identityPassesSearch(identity, searchTerm) {
+            if (!searchTerm) return true;
+            
+            const term = searchTerm.toLowerCase();
+            
+            if (identity.hash.toLowerCase().includes(term)) return true;
+            
+            if (identity.lastData && identity.lastData.toLowerCase().includes(term)) return true;
+            
+            for (let [asp, data] of identity.aspects) {
+                if (asp.toLowerCase().includes(term)) return true;
+                if (data.dest && data.dest.toLowerCase().includes(term)) return true;
+                if (data.data && data.data.toLowerCase().includes(term)) return true;
+            }
+            
+            return false;
+        }
+
+        function getIdentitySortFunction() {
+            const sortValue = document.getElementById('identity-sort-select')?.value || 'count_desc';
+            
+            let [field, direction] = sortValue.split('_');
+            const dir = direction === 'desc' ? -1 : 1;
+            
+            return (a, b) => {
+                try {
+                    switch(field) {
+                        case 'count':
+                            return dir * (b.count - a.count);
+                        case 'rate': {
+                            const aActive = isActive(a.last);
+                            const bActive = isActive(b.last);
+                            if (!aActive && !bActive) return 0;
+                            if (!aActive) return 1;
+                            if (!bActive) return -1;
+                            const rateA = a.count / ((a.last - a.first) || 1);
+                            const rateB = b.count / ((b.last - b.first) || 1);
+                            return dir * (rateB - rateA);
+                        }
+                        case 'period': {
+                            const aActive = isActive(a.last);
+                            const bActive = isActive(b.last);
+                            if (!aActive && !bActive) return 0;
+                            if (!aActive) return 1;
+                            if (!bActive) return -1;
+                            const rateA = a.count / ((a.last - a.first) || 1);
+                            const rateB = b.count / ((b.last - b.first) || 1);
+                            const periodA = rateA > 0 ? 1 / rateA : Infinity;
+                            const periodB = rateB > 0 ? 1 / rateB : Infinity;
+                            return dir * (periodA - periodB);
+                        }
+                        case 'aspects':
+                            return dir * (b.aspects.size - a.aspects.size);
+                        case 'last':
+                            return dir * (b.last - a.last);
+                        case 'hash':
+                            return dir * a.hash.localeCompare(b.hash);
+                        default:
+                            return dir * (b.count - a.count);
+                    }
+                } catch(e) {
+                    console.error('Errore ordinamento identità:', e);
+                    return 0;
+                }
+            };
+        }
+
+        function toggleIdentity(identityHash, element) {
+            if (state.expandedIdentities.has(identityHash)) {
+                state.expandedIdentities.delete(identityHash);
+                element.classList.remove('expanded');
+                element.nextElementSibling.classList.remove('expanded');
+            } else {
+                state.expandedIdentities.add(identityHash);
+                element.classList.add('expanded');
+                element.nextElementSibling.classList.add('expanded');
+            }
+        }
+
+        function renderIdentities() {
+            const container = document.getElementById('identity-container');
+            let html = '';
+            
+            const searchTerm = document.getElementById('identity-search-input')?.value || '';
+            state.identitySearch = searchTerm;
+            
+            let filteredIdentities = [...state.identities.values()];
+            if (searchTerm) {
+                filteredIdentities = filteredIdentities.filter(id => identityPassesSearch(id, searchTerm));
+            }
+            
+            const sorted = filteredIdentities.sort(getIdentitySortFunction());
+            document.getElementById('identity-count').textContent = `${sorted.length} identità${searchTerm ? ` (filtrate)` : ''}`;
+            
+            sorted.slice(0, 100).forEach(id => {
+                const now = Date.now() / 1000;
+                const active = isActive(id.last);
+                const elapsedSeconds = id.last - id.first;
+                
+                let rateHz = 0;
+                let rateFormatted = '—';
+                let periodFormatted = '—';
+                let periodSeconds = 0;
+                
+                if (elapsedSeconds > 0 && id.count > 1 && active) {
+                    rateHz = id.count / elapsedSeconds;
+                    rateFormatted = formatRate(rateHz);
+                    periodSeconds = 1 / rateHz;
+                    periodFormatted = formatPeriod(periodSeconds);
+                } else if (!active && id.count > 0) {
+                    rateFormatted = '💤 inattivo';
+                    periodFormatted = '—';
+                }
+                
+                const isExpanded = state.expandedIdentities.has(id.hash);
+                const lastData = decodeUTF8(id.lastData);
+                const lastActiveAgo = Math.round((now - id.last) / 60);
+                
+                html += `<div class="identity-group" data-identity-hash="${id.hash}">`;
+                html += `<div class="identity-header ${isExpanded ? 'expanded' : ''}" onclick="toggleIdentity('${id.hash}', this)">`;
+                html += `<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">`;
+                html += `<span class="identity-hash" title="${id.hash}"> ${id.hash.slice(0,32)} </span>`;
+                html += `<span style="color:var(--fg);"> ${id.count} annunci</span>`;
+                
+                if (active) {
+                    html += `<span style="color:#ffff88; font-size:10px;" title="frequenza: ${rateFormatted}">⚡ ${rateFormatted}</span>`;
+                    html += `<span style="color:#88ffff; font-size:10px;" title="periodo: ogni ${periodFormatted}">⏱️ ${periodFormatted}</span>`;
+                } else {
+                    html += `<span class="inactive" style="font-size:10px;">💤 ${lastActiveAgo} min fa</span>`;
+                }
+                
+                if (lastData) {
+                    const cleanData = lastData.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+                    html += `<span class="app-data-preview" title="${cleanData}">📋 ${cleanData.slice(0,40)}${cleanData.length > 64 ? '…' : ''}</span>`;
+                }
+                html += `</div>`;
+                html += `<span style="color:var(--dim);">${id.aspects.size} aspect</span>`;
+                html += `</div>`;
+                html += `<div class="aspect-list ${isExpanded ? 'expanded' : ''}">`;
+                
+                const aspects = [...id.aspects.entries()].sort((a,b) => b[1].count - a[1].count);
+                aspects.forEach(([asp, data]) => {
+                    const aspActive = isActive(data.last);
+                    let aspRateHz = 0;
+                    let aspRateFormatted = '—';
+                    let aspPeriodFormatted = '—';
+                    
+                    if (elapsedSeconds > 0 && data.count > 1 && aspActive) {
+                        aspRateHz = data.count / elapsedSeconds;
+                        aspRateFormatted = formatRate(aspRateHz);
+                        const aspPeriodSeconds = 1 / aspRateHz;
+                        aspPeriodFormatted = formatPeriod(aspPeriodSeconds);
+                    }
+                    
+                    const destShort = data.dest ? `${data.dest.slice(0,32)} ` : '-';
+                    const aspData = decodeUTF8(data.data);
+                    
+                    html += `<div class="aspect-item">`;
+                    html += `<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">`;
+                    html += `<span class="badge" style="background:#0a1a0a;">${asp}</span>`;
+                    html += `<span class="aspect-dest" title="${data.dest}">`;
+                    html += `<span class="clickable-hash" onclick="showAspectModal('${id.hash}', '${asp}', '${data.dest}')">${destShort}</span>`;
+                    html += `</span>`;
+                    if (aspData) {
+                        const cleanAspData = aspData.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+                        html += `<span style="color:#88ff88; font-size:10px;">📋 ${cleanAspData.slice(0,25)}${cleanAspData.length > 64 ? '…' : ''}</span>`;
+                    }
+                    html += `</div>`;
+                    html += `<div style="display: flex; gap: 10px;">`;
+                    html += `<span style="color:var(--fg);">${data.count} ann.</span>`;
+                    html += `<span class="rate" title="frequenza">${aspRateFormatted}</span>`;
+                    html += `<span class="period" title="periodo">${aspPeriodFormatted}</span>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                });
+                
+                html += `</div></div>`;
+            });
+            
+            container.innerHTML = html || '<div style="color:var(--dim); text-align:center; padding:40px;">nessuna identità</div>';
+        }
+
+        function renderStats() {
+            const now = Date.now() / 1000;
+            let totalAnnounces = 0;
+            let firstSeen = now;
+            let lastSeen = 0;
+            let activeIdentities = 0;
+            
+            state.identities.forEach(id => {
+                totalAnnounces += id.count;
+                firstSeen = Math.min(firstSeen, id.first);
+                lastSeen = Math.max(lastSeen, id.last);
+                if (isActive(id.last)) activeIdentities++;
+            });
+            
+            const elapsedTotal = lastSeen - firstSeen;
+            const globalRateHz = elapsedTotal > 0 ? totalAnnounces / elapsedTotal : 0;
+            const globalPeriod = globalRateHz > 0 ? 1 / globalRateHz : 0;
+            
+            document.getElementById('stat-total').textContent = totalAnnounces;
+            document.getElementById('stat-identities').textContent = `${state.identities.size} (${activeIdentities} attive)`;
+            document.getElementById('stat-rate').textContent = formatRate(globalRateHz);
+            document.getElementById('stat-period').textContent = formatPeriod(globalPeriod);
+            
+            const aspectCount = new Map();
+            state.identities.forEach(id => {
+                id.aspects.forEach((data, asp) => {
+                    if (ASPECTS.includes(asp)) {
+                        aspectCount.set(asp, (aspectCount.get(asp) || 0) + data.count);
+                    }
+                });
+            });
+            
+            let aspHtml = '';
+            [...aspectCount.entries()].sort((a,b) => b[1] - a[1]).slice(0, 8).forEach(([asp, cnt]) => {
+                aspHtml += `<div class="stat-card"><div style="display:flex; justify-content:space-between;">`;
+                aspHtml += `<span style="color:var(--fg);">${asp.slice(0,12)} </span>`;
+                aspHtml += `<span style="color:var(--dim);"> ${cnt} ann.</span>`;
+                aspHtml += `</div></div>`;
+            });
+            document.getElementById('stats-aspects').innerHTML = aspHtml || '<div style="color:var(--dim);">nessun dato</div>';
+            
+            let idHtml = '';
+            [...state.identities.values()]
+                .sort((a,b) => b.count - a.count)
+                .slice(0, 10)
+                .forEach(id => {
+                    const active = isActive(id.last);
+                    const elapsed = id.last - id.first;
+                    const idRateHz = elapsed > 0 && id.count > 1 ? id.count / elapsed : 0;
+                    const idPeriod = idRateHz > 0 ? 1 / idRateHz : 0;
+                    const lastData = decodeUTF8(id.lastData);
+                    const cleanData = lastData ? lastData.replace(/[\x00-\x1F\x7F-\x9F]/g, '') : '';
+                    const lastActiveAgo = Math.round((now - id.last) / 60);
+                    
+                    idHtml += `<div class="stat-card">`;
+                    idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
+                    idHtml += `<span style="font-family:monospace; color:#8888ff;" title="${id.hash}">${id.hash.slice(0,16)}…</span>`;
+                    if (cleanData) idHtml += `<span style="color:#88ff88; font-size:9px;">${cleanData.slice(0,16)}</span>`;
+                    idHtml += `</div>`;
+                    idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">`;
+                    idHtml += `<span style="color:var(--dim);">${id.count} ann.</span>`;
+                    if (active) {
+                        idHtml += `<span style="color:#ffff88;" title="frequenza: ${formatRate(idRateHz)}">⚡ ${formatRate(idRateHz)}</span>`;
+                        idHtml += `<span style="color:#88ffff;" title="periodo: ogni ${formatPeriod(idPeriod)}">⏱️ ${formatPeriod(idPeriod)}</span>`;
+                    } else {
+                        idHtml += `<span class="inactive">💤 ${lastActiveAgo} min</span>`;
+                    }
+                    idHtml += `</div>`;
+                    idHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:9px; color:var(--dim);">`;
+                    idHtml += `<span>${id.aspects.size} aspect</span>`;
+                    idHtml += `<span>${Math.round(elapsed)}s di vita</span>`;
+                    idHtml += `</div>`;
+                    idHtml += `</div>`;
+                });
+            document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
+        }
+
+        function updatePagination(total) {
+            const pages = Math.ceil(total / state.limit) || 1;
+            const start = (state.page - 1) * state.limit + 1;
+            const end = Math.min(state.page * state.limit, total);
+            
+            document.getElementById('total-items').textContent = total;
+            document.getElementById('showing-start').textContent = total ? start : 0;
+            document.getElementById('showing-end').textContent = total ? end : 0;
+            document.getElementById('page-info').textContent = `pagina ${state.page}/${pages}`;
+            
+            document.getElementById('prev-page').disabled = state.page <= 1;
+            document.getElementById('next-page').disabled = state.page >= pages;
+        }
+
+        function loadHistory() {
+            const params = new URLSearchParams({
+                aspect: state.aspect,
+                search: state.search,
+                limit: state.limit,
+                offset: (state.page - 1) * state.limit,
+                sort: state.sort
+            });
+
+            fetch(`/api/monitor/history?${params}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        let html = '';
+                        data.announces.forEach(a => {
+                            html += createAnnounceRow(a);
+                            updateIdentityStats(a);
+                        });
+                        document.getElementById('announce-body').innerHTML = html || '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
+                        updatePagination(data.total);
+                        if (window.updateAspectTabs) window.updateAspectTabs();
+                    }
+                })
+                .catch(err => console.error('History error:', err));
+        }
+
+        function connectSSE() {
+            const es = new EventSource('/api/monitor/stream');
+            
+            es.onopen = () => {
+                document.getElementById('status').className = 'status online';
+            };
+            
+            es.onmessage = (e) => {
+                if (e.data) {
+                    try {
+                        const ann = JSON.parse(e.data);
+                        if (ann.id > state.lastId) {
+                            state.lastId = ann.id;
+                            
+                            fetch('/api/monitor/stats')
+                                .then(r => r.json())
+                                .then(s => {
+                                    if (s.success) {
+                                        document.getElementById('total-announces').textContent = s.total_announces || 0;
+                                        document.getElementById('unique-sources').textContent = s.unique_sources || 0;
+                                    }
+                                });
+                            
+                            updateIdentityStats(ann);
+                            if (window.updateAspectTabs) window.updateAspectTabs();
+                            
+                            if (state.view === 'live') {
+                                let shouldShow = true;
+                                
+                                if (state.aspect !== 'all') {
+                                    if (state.aspect === 'unknown') {
+                                        shouldShow = ann.aspect === 'unknown' || !ann.aspect;
+                                    } else if (state.aspect === 'known') {
+                                        shouldShow = ann.aspect && ann.aspect !== 'unknown' && ann.aspect !== 'identity_hash' && ASPECTS.includes(ann.aspect);
+                                    } else {
+                                        shouldShow = ann.aspect === state.aspect;
+                                    }
+                                }
+                                
+                                if (shouldShow && state.search) {
+                                    const searchLower = state.search.toLowerCase();
+                                    shouldShow = 
+                                        (ann.dest_hash && ann.dest_hash.toLowerCase().includes(searchLower)) ||
+                                        (ann.identity_hash && ann.identity_hash.toLowerCase().includes(searchLower)) ||
+                                        (ann.aspect && ann.aspect.toLowerCase().includes(searchLower)) ||
+                                        (ann.data && ann.data.toLowerCase().includes(searchLower));
+                                }
+                                
+                                if (shouldShow) {
+                                    const tbody = document.getElementById('announce-body');
+                                    const firstRow = tbody.querySelector('tr');
+                                    
+                                    if (firstRow && firstRow.innerHTML.includes('nessun annuncio')) {
+                                        tbody.innerHTML = '';
+                                    }
+                                    
+                                    const row = createAnnounceRow(ann);
+                                    tbody.insertAdjacentHTML('afterbegin', row);
+                                    
+                                    resortLiveTable();
+                                    
+                                    const rows = tbody.querySelectorAll('tr');
+                                    if (rows.length > state.limit) {
+                                        rows[rows.length-1].remove();
+                                    }
+                                    
+                                    const totalSpan = document.getElementById('total-items');
+                                    if (totalSpan) {
+                                        totalSpan.textContent = parseInt(totalSpan.textContent || '0') + 1;
+                                    }
+                                }
+                            } else if (state.view === 'identities') {
+                                renderIdentities();
+                            } else if (state.view === 'stats') {
+                                renderStats();
+                            }
+                        }
+                    } catch(e) {
+                        console.error('SSE parse error:', e);
+                    }
+                }
+            };
+            
+            es.onerror = () => {
+                document.getElementById('status').className = 'status offline';
+                setTimeout(connectSSE, 3000);
+            };
+        }
+
+        function initEventListeners() {
+            document.getElementById('sort-select').addEventListener('change', function() {
+                state.sort = this.value;
+                state.page = 1;
+                loadHistory();
+                setTimeout(resortLiveTable, 100);
+            });
+
+            document.getElementById('limit-select').addEventListener('change', function() {
+                state.limit = parseInt(this.value);
+                state.page = 1;
+                loadHistory();
+            });
+
+            document.getElementById('search-input').addEventListener('input', function() {
+                state.search = this.value.toLowerCase();
+                state.page = 1;
+                loadHistory();
+            });
+
+            document.getElementById('identity-search-input').addEventListener('input', function() {
+                renderIdentities();
+            });
+
+            document.getElementById('clear-btn').addEventListener('click', function() {
+                if (confirm('Pulisci tutto lo storico?')) {
+                    fetch('/api/monitor/clear', { method: 'POST' })
+                        .then(() => {
+                            state.identities.clear();
+                            state.expandedIdentities.clear();
+                            state.lastId = 0;
+                            state.page = 1;
+                            localStorage.removeItem(STORAGE_KEY);
+                            loadHistory();
+                            document.getElementById('total-announces').textContent = '0';
+                            document.getElementById('unique-sources').textContent = '0';
+                            renderIdentities();
+                            renderStats();
+                            if (window.updateAspectTabs) window.updateAspectTabs();
+                        });
+                }
+            });
+
+            document.getElementById('prev-page').addEventListener('click', function() {
+                if (state.page > 1) { state.page--; loadHistory(); }
+            });
+
+            document.getElementById('next-page').addEventListener('click', function() {
+                state.page++; loadHistory();
+            });
+
+            document.getElementById('identity-sort-select').addEventListener('change', function() {
+                renderIdentities();
+            });
+
+            document.querySelectorAll('.table th[data-sort]').forEach(th => {
+                th.addEventListener('click', function() {
+                    const sort = this.dataset.sort;
+                    const currentSort = state.sort;
+                    if (currentSort === sort + '_desc') {
+                        state.sort = sort + '_asc';
+                    } else if (currentSort === sort + '_asc') {
+                        state.sort = sort + '_desc';
+                    } else {
+                        state.sort = sort + '_desc';
+                    }
+                    state.page = 1;
+                    loadHistory();
+                    document.getElementById('sort-select').value = state.sort;
+                });
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && modalState.visible) {
+                    hideAspectModal();
+                }
+            });
+        }
+
+        loadIdentitiesFromStorage();
+        initAspectTabs();
+        initMainTabs();
+        initEventListeners();
+        connectSSE();
+        loadHistory();
+        
+        setInterval(saveIdentitiesToStorage, 30000);
+        setInterval(() => {
+            if (state.view === 'identities') {
+                renderIdentities();
+            }
+            if (state.view === 'stats') {
+                renderStats();
+            }
+            if (state.view === 'live') {
+                resortLiveTable();
+            }
+        }, 2000);
+        
+        window.addEventListener('beforeunload', saveIdentitiesToStorage);
+    </script>
+</body>
+</html>
