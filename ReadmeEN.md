@@ -284,26 +284,20 @@ Edit RNS_ASPECTS list in rns_manager.py and rns_monitor.html to add custom aspec
 
 
 <h3>🖥️ System Requirements</h3>
-
+<p>
     RAM: Minimum 256MB, recommended 512MB
-
     Storage: 100MB for logs and cache
-
     CPU: Any modern processor
-
     Network: Reticulum-compatible interface
-
+</p>
 
 <h3>📈 Performance Tips</h3>
-
+<p>
     First scan will be slow; subsequent loads use cache
-
     Limit aspects in RNS_ASPECTS for faster identity scanning
-
     Use "Load from cache" for instant results
-
     Clear cache periodically to free disk space
-
+</p>
 
 <h3>🆘 Troubleshooting</h3>
 

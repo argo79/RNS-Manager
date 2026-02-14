@@ -201,17 +201,13 @@ Comandi RNS
 
 
 <h3>🤝 Contribuire</h3>
-
+<p>
     Fai un fork del progetto
-
     Crea un branch per la tua feature (git checkout -b feature/AmazingFeature)
-
     Commit le tue modifiche (git commit -m 'Add AmazingFeature')
-
     Push al branch (git push origin feature/AmazingFeature)
-
     Apri una Pull Request
-
+</p>
 
 <h3>📝 Licenza</h3>
 
@@ -239,24 +235,17 @@ Link progetto: https://github.com/argo79/RNS-Manager
 <h3>🐛 Problemi noti</h3>
 <p>
     La scansione iniziale delle identità può richiedere 10-30 secondi con molte identità
-
     Alcuni aspect potrebbero non essere riconosciuti correttamente
-
     Su dispositivi mobili, alcune tabelle potrebbero richiedere scorrimento orizzontale
 </p>
 
 <h3>🔜 Roadmap</h3>
-
+<p>
     Supporto per multiple lingue
-
     Esportazione statistiche in CSV/JSON
-
     Gestione gruppi di identità
-
     Integrazione con Nomad Network per messaggistica
-
     Autenticazione e multi-utente
-
     Dark/light mode toggle
-
+</p>
 
