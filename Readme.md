@@ -228,7 +228,7 @@ Distribuito sotto licenza MIT.
 
 <h3>📧 Contatto</h3>
 
-Arg0net - arg0netds.gmail.com
+Arg0net - arg0netds@gmail.com
 
 Link progetto: https://github.com/argo79/RNS-Manager
 
