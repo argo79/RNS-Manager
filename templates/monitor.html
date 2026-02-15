@@ -244,7 +244,8 @@
             expandedIdentities: new Set(),
             identitySort: 'count_desc',
             cacheSource: 'memory',
-            resetting: false
+            resetting: false,
+            eventSource: null  // Per tracciare la connessione SSE
         };
 
         // ============================================
@@ -1270,11 +1271,24 @@
                 .catch(err => console.error('History error:', err));
         }
 
+        // ============================================
+        // === CONNESSIONE SSE MIGLIORATA ===
+        // ============================================
         function connectSSE() {
+            // Chiudi connessione esistente se presente
+            if (state.eventSource) {
+                console.log('Chiusura vecchia connessione SSE');
+                state.eventSource.close();
+                state.eventSource = null;
+            }
+            
+            console.log('Apertura nuova connessione SSE');
             const es = new EventSource('/api/monitor/stream');
+            state.eventSource = es;
             
             es.onopen = () => {
                 document.getElementById('status').className = 'status online';
+                console.log('SSE connesso');
             };
             
             es.onmessage = (e) => {
@@ -1284,6 +1298,7 @@
                         if (ann.id > state.lastId) {
                             state.lastId = ann.id;
                             
+                            // Aggiorna stats dal backend
                             fetch('/api/monitor/stats')
                                 .then(r => r.json())
                                 .then(s => {
@@ -1341,7 +1356,10 @@
                                         totalSpan.textContent = parseInt(totalSpan.textContent || '0') + 1;
                                     }
                                 }
-                            } else if (state.view === 'identities') {
+                            }
+                            
+                            // Aggiorna le viste se necessario
+                            if (state.view === 'identities') {
                                 renderIdentities();
                             } else if (state.view === 'stats') {
                                 renderStats();
@@ -1355,12 +1373,13 @@
             
             es.onerror = () => {
                 document.getElementById('status').className = 'status offline';
+                console.log('Errore SSE, tentativo riconnessione tra 3s');
                 setTimeout(connectSSE, 3000);
             };
         }
 
         // ============================================
-        // === FUNZIONE RESET TOTALE - VERSIONE MASSIMA ===
+        // === FUNZIONE RESET TOTALE - VERSIONE ULTRA ===
         // ============================================
         function resetAllCounters() {
             if (confirm('💥 RESET TOTALE: cancellare TUTTI i dati (statistiche, identità, cache e storico)?')) {
@@ -1372,67 +1391,60 @@
                 const originalBody = document.getElementById('announce-body').innerHTML;
                 document.getElementById('announce-body').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:#ffff88;">🔄 RESET IN CORSO... ATTENDERE</td></tr>';
                 
-                // 1. Chiama API per pulire backend (memoria)
-                fetch('/api/monitor/clear', { 
+                // 1. RESET COMPLETO BACKEND
+                fetch('/api/monitor/reset-all', { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 })
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Clear response:', data);
+                    console.log('Reset response:', data);
                     
-                    // 2. Pulisci cache persistente su disco
-                    return fetch('/api/monitor/cache/clear', { 
-                        method: 'POST' 
-                    });
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Cache clear response:', data);
+                    // 2. RESET COMPLETO FRONTEND
+                    state.identities = new Map();
+                    state.expandedIdentities.clear();
+                    state.lastId = 0;
                     
-                    // 3. RESET COMPLETO DELLO STATO FRONTEND
-                    state.identities = new Map();           // Svuota mappa identità
-                    state.expandedIdentities.clear();       // Svuota set espansioni
-                    state.lastId = 0;                        // Reset ultimo ID
+                    // 3. Pulisci localStorage
+                    localStorage.clear();
                     
-                    // 4. Pulisci localStorage COMPLETAMENTE
-                    localStorage.removeItem(STORAGE_KEY);   // Rimuovi la chiave specifica
-                    
-                    // 5. AZZERA TUTTI I CONTATORI VISIBILI
+                    // 4. AZZERA TUTTI I CONTATORI VISIBILI
                     document.getElementById('total-announces').textContent = '0';
                     document.getElementById('unique-sources').textContent = '0';
                     
-                    // Statistiche generali
                     document.getElementById('stat-total').textContent = '0';
                     document.getElementById('stat-identities').textContent = '0 (0 attive)';
                     document.getElementById('stat-rate').textContent = '—';
                     document.getElementById('stat-period').textContent = '—';
                     
-                    // 6. SVUOTA TABELLE
+                    document.getElementById('cache-size').textContent = '0';
+                    document.getElementById('cache-age').textContent = '0';
+                    document.getElementById('cache-saves').textContent = '0';
+                    
+                    // 5. SVUOTA TABELLE
                     document.getElementById('announce-body').innerHTML = 
                         '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
                     
                     document.getElementById('identity-container').innerHTML = 
                         '<div style="color:var(--dim); text-align:center; padding:40px;">nessuna identità</div>';
                     
-                    // 7. AZZERA I TAB DEGLI ASPECT
+                    document.getElementById('stats-aspects').innerHTML = '';
+                    document.getElementById('stats-identities').innerHTML = '';
+                    document.getElementById('cache-aspects').innerHTML = '';
+                    
+                    // 6. AZZERA I TAB DEGLI ASPECT
                     updateTabsWithZero();
                     
-                    // 8. Forza refresh statistiche cache se visibili
-                    if (state.view === 'cache') {
-                        loadCacheStats();
-                    }
-                    
-                    // 9. Ricarica la history (sarà vuota)
+                    // 7. RICARICA I DATI
                     state.page = 1;
                     loadHistory();
-                    
-                    // 10. Aggiorna i tab delle statistiche
                     renderStats();
                     renderIdentities();
                     
-                    // 11. Messaggio di conferma
-                    alert('✅ RESET COMPLETO EFFETTUATO - Tutti i contatori azzerati');
+                    // 8. RIAPRI LA CONNESSIONE SSE
+                    connectSSE();
+                    
+                    alert('✅ RESET COMPLETO EFFETTUATO');
                     
                 })
                 .catch(error => {
@@ -1489,10 +1501,6 @@
             });
         }
 
-        function forceZeroTabs() {
-            updateTabsWithZero();
-        }
-
         function initEventListeners() {
             document.getElementById('sort-select').addEventListener('change', function() {
                 state.sort = this.value;
@@ -1523,7 +1531,7 @@
                 loadHistory();
             });
 
-            // IMPORTANTE: Collega i pulsanti di reset alla funzione
+            // IMPORTANTE: Collega i pulsanti di reset
             document.getElementById('clear-btn').addEventListener('click', resetAllCounters);
             document.getElementById('clear-all-btn').addEventListener('click', resetAllCounters);
 
@@ -1597,21 +1605,12 @@
             });
         }
 
-        function showOutput(message, type) {
-            const output = document.getElementById('output');
-            if (output) {
-                output.innerHTML = `<span class="${type}">${message}</span>`;
-            } else {
-                console.log(message);
-            }
-        }
-
         // Inizializzazione
         loadIdentitiesFromStorage();
         initAspectTabs();
         initMainTabs();
         initEventListeners();
-        connectSSE();
+        connectSSE(); // Questa chiude automaticamente le vecchie connessioni
         loadHistory();
         
         setInterval(saveIdentitiesToStorage, 30000);

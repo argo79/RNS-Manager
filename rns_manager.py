@@ -886,6 +886,76 @@ def monitor_aspects_api():
     })
 
 # ============================================
+# === NUOVA ROUTE RESET TOTALE ===
+# ============================================
+
+@app.route('/api/monitor/reset-all', methods=['POST'])
+def monitor_reset_all():
+    """Reset TOTALE di tutti i contatori e dati"""
+    global announce_history, announce_counter
+    
+    try:
+        print("\n" + "="*60)
+        print("🔄 RESET TOTALE IN CORSO...")
+        print("="*60)
+        
+        # 1. Resetta contatori in memoria
+        with history_lock:
+            announce_history = []
+            announce_counter = 0
+            
+            # Svuota la coda
+            while not announce_queue.empty():
+                try:
+                    announce_queue.get_nowait()
+                except:
+                    break
+        
+        print("[✓] Memoria azzerata")
+        
+        # 2. Pulisci cache persistente
+        announce_cache.clear()
+        print("[✓] Cache in memoria pulita")
+        
+        # 3. Elimina fisicamente il file di cache
+        cache_file = os.path.join(CACHE_DIR, 'announce_cache.json')
+        if os.path.exists(cache_file):
+            os.remove(cache_file)
+            print(f"[✓] File cache eliminato: {cache_file}")
+        
+        # 4. Crea un file cache vuoto
+        with open(cache_file, 'w') as f:
+            json.dump([], f)
+        print(f"[✓] Nuovo file cache vuoto creato")
+        
+        # 5. Opzionale: resetta anche il monitor process (riavvia)
+        # Non necessario ma utile per sicurezza
+        # global monitor_process
+        # if monitor_process and monitor_process.is_alive():
+        #     monitor_process.terminate()
+        #     monitor_process.join(timeout=5)
+        # start_monitor_process()
+        
+        print("="*60)
+        print("✅ RESET TOTALE COMPLETATO!")
+        print("="*60 + "\n")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Reset totale completato',
+            'announces': 0,
+            'identities': 0,
+            'timestamp': time.time()
+        })
+        
+    except Exception as e:
+        print(f"[!] Errore durante reset: {e}")
+        return jsonify({
+            'success': False, 
+            'error': str(e)
+        })
+
+# ============================================
 # === TUTTE LE ROUTE IDENTITY MANAGER ===
 # ============================================
 

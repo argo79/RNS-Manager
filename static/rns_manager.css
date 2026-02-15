@@ -840,7 +840,7 @@ select, input {
 .id-mgr .tabs {
     display: flex;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     overflow-x: auto;
 }
 

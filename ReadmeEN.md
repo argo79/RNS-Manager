@@ -36,7 +36,7 @@ This project provides an intuitive web interface for:
 - 💾 Persistent disk cache (7 days history)
 - 🖱️ Interactive modal for rnpath/rnprobe commands
 
-![RNID_GUI](img/rnsMonitor2.jpg)
+![RNID_GUI](img/rnsMonitor3.jpg)
 
 <h3> 🚀 Installation</h3>
 
@@ -125,6 +125,9 @@ Identity Manager
         Import/Export - Manage identities in various formats
 
         Generate - Create new identities
+
+![RNID_GUI](img/rnsMonitor2.jpg)
+
 
 Aspect Monitor
 
