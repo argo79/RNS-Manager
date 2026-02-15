@@ -77,8 +77,9 @@
                     <input type="text" id="search-input" placeholder="hash/aspect/dati" style="width: 180px;">
                     <button class="clear-search-btn" onclick="clearSearch()" title="Pulisci ricerca">✕</button>
                 </div>
-                <div style="flex:1; text-align:right;">
+                <div style="flex:1; text-align:right; display: flex; gap: 10px; justify-content: flex-end;">
                     <button class="btn" id="clear-btn" style="background:#330000; color:#ff6666;">pulisci storico</button>
+                    <button class="btn" id="clear-all-btn" style="background:#550000; color:#ffaa00;">🔄 reset completo</button>
                 </div>
             </div>
 
@@ -242,7 +243,8 @@
             identities: new Map(),
             expandedIdentities: new Set(),
             identitySort: 'count_desc',
-            cacheSource: 'memory'  // 'memory' o 'cache'
+            cacheSource: 'memory',
+            resetting: false
         };
 
         // ============================================
@@ -894,6 +896,9 @@
         }
 
         function updateIdentityStats(ann) {
+            // IGNORA DURANTE IL RESET
+            if (state.resetting) return;
+            
             if (!ann.identity_hash) return;
             const id = ann.identity_hash.slice(0, 32);
             
@@ -1354,6 +1359,140 @@
             };
         }
 
+        // ============================================
+        // === FUNZIONE RESET TOTALE - VERSIONE MASSIMA ===
+        // ============================================
+        function resetAllCounters() {
+            if (confirm('💥 RESET TOTALE: cancellare TUTTI i dati (statistiche, identità, cache e storico)?')) {
+                
+                // Blocca gli aggiornamenti durante il reset
+                state.resetting = true;
+                
+                // Mostra messaggio di caricamento
+                const originalBody = document.getElementById('announce-body').innerHTML;
+                document.getElementById('announce-body').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:#ffff88;">🔄 RESET IN CORSO... ATTENDERE</td></tr>';
+                
+                // 1. Chiama API per pulire backend (memoria)
+                fetch('/api/monitor/clear', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Clear response:', data);
+                    
+                    // 2. Pulisci cache persistente su disco
+                    return fetch('/api/monitor/cache/clear', { 
+                        method: 'POST' 
+                    });
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Cache clear response:', data);
+                    
+                    // 3. RESET COMPLETO DELLO STATO FRONTEND
+                    state.identities = new Map();           // Svuota mappa identità
+                    state.expandedIdentities.clear();       // Svuota set espansioni
+                    state.lastId = 0;                        // Reset ultimo ID
+                    
+                    // 4. Pulisci localStorage COMPLETAMENTE
+                    localStorage.removeItem(STORAGE_KEY);   // Rimuovi la chiave specifica
+                    
+                    // 5. AZZERA TUTTI I CONTATORI VISIBILI
+                    document.getElementById('total-announces').textContent = '0';
+                    document.getElementById('unique-sources').textContent = '0';
+                    
+                    // Statistiche generali
+                    document.getElementById('stat-total').textContent = '0';
+                    document.getElementById('stat-identities').textContent = '0 (0 attive)';
+                    document.getElementById('stat-rate').textContent = '—';
+                    document.getElementById('stat-period').textContent = '—';
+                    
+                    // 6. SVUOTA TABELLE
+                    document.getElementById('announce-body').innerHTML = 
+                        '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
+                    
+                    document.getElementById('identity-container').innerHTML = 
+                        '<div style="color:var(--dim); text-align:center; padding:40px;">nessuna identità</div>';
+                    
+                    // 7. AZZERA I TAB DEGLI ASPECT
+                    updateTabsWithZero();
+                    
+                    // 8. Forza refresh statistiche cache se visibili
+                    if (state.view === 'cache') {
+                        loadCacheStats();
+                    }
+                    
+                    // 9. Ricarica la history (sarà vuota)
+                    state.page = 1;
+                    loadHistory();
+                    
+                    // 10. Aggiorna i tab delle statistiche
+                    renderStats();
+                    renderIdentities();
+                    
+                    // 11. Messaggio di conferma
+                    alert('✅ RESET COMPLETO EFFETTUATO - Tutti i contatori azzerati');
+                    
+                })
+                .catch(error => {
+                    console.error('Errore durante il reset:', error);
+                    alert('❌ Errore durante il reset: ' + error.message);
+                    document.getElementById('announce-body').innerHTML = originalBody;
+                })
+                .finally(() => {
+                    state.resetting = false;
+                });
+            }
+        }
+
+        // Funzione per azzerare i tab degli aspect
+        function updateTabsWithZero() {
+            const row1 = document.getElementById('aspect-row-1');
+            const row2 = document.getElementById('aspect-row-2');
+            const row3 = document.getElementById('aspect-row-3');
+            
+            if (!row1 || !row2 || !row3) return;
+            
+            let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (0)</div>`;
+            ASPECTS.slice(0, 10).forEach(a => {
+                const short = a.split('.').pop();
+                html1 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (0)</div>`;
+            });
+            row1.innerHTML = html1;
+            
+            let html2 = ``;
+            ASPECTS.slice(10, 20).forEach(a => {
+                const short = a.split('.').pop();
+                html2 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (0)</div>`;
+            });
+            row2.innerHTML = html2;
+            
+            let html3 = ``;
+            ASPECTS.slice(20).forEach(a => {
+                const short = a.split('.').pop();
+                html3 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (0)</div>`;
+            });
+            html3 += `<div class="tab-aspect ${state.aspect === 'known' ? 'active' : ''}" data-aspect="known">✓ conosciuti (0)</div>`;
+            html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (0)</div>`;
+            row3.innerHTML = html3;
+            
+            // Ricollega gli event listener
+            document.querySelectorAll('.tab-aspect').forEach(tab => {
+                tab.addEventListener('click', function(e) {
+                    document.querySelectorAll('.tab-aspect').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    state.aspect = this.dataset.aspect;
+                    state.page = 1;
+                    loadHistory();
+                });
+            });
+        }
+
+        function forceZeroTabs() {
+            updateTabsWithZero();
+        }
+
         function initEventListeners() {
             document.getElementById('sort-select').addEventListener('change', function() {
                 state.sort = this.value;
@@ -1384,24 +1523,9 @@
                 loadHistory();
             });
 
-            document.getElementById('clear-btn').addEventListener('click', function() {
-                if (confirm('Pulisci tutto lo storico in memoria?')) {
-                    fetch('/api/monitor/clear', { method: 'POST' })
-                        .then(() => {
-                            state.identities.clear();
-                            state.expandedIdentities.clear();
-                            state.lastId = 0;
-                            state.page = 1;
-                            localStorage.removeItem(STORAGE_KEY);
-                            loadHistory();
-                            document.getElementById('total-announces').textContent = '0';
-                            document.getElementById('unique-sources').textContent = '0';
-                            renderIdentities();
-                            renderStats();
-                            if (window.updateAspectTabs) window.updateAspectTabs();
-                        });
-                }
-            });
+            // IMPORTANTE: Collega i pulsanti di reset alla funzione
+            document.getElementById('clear-btn').addEventListener('click', resetAllCounters);
+            document.getElementById('clear-all-btn').addEventListener('click', resetAllCounters);
 
             document.getElementById('cache-clear-btn').addEventListener('click', function() {
                 if (confirm('PULIRE TUTTA LA CACHE PERSISTENTE SU DISCO?')) {
@@ -1473,6 +1597,16 @@
             });
         }
 
+        function showOutput(message, type) {
+            const output = document.getElementById('output');
+            if (output) {
+                output.innerHTML = `<span class="${type}">${message}</span>`;
+            } else {
+                console.log(message);
+            }
+        }
+
+        // Inizializzazione
         loadIdentitiesFromStorage();
         initAspectTabs();
         initMainTabs();

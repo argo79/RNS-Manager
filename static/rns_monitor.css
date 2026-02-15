@@ -147,7 +147,7 @@ header > div:first-child {
     background: var(--panel);
     color: var(--fg);
     border-bottom: 1px solid var(--panel);
-    margin-bottom: -1px;
+    margin-bottom: 1px;
 }
 
 /* ============================================
@@ -189,7 +189,7 @@ header > div:first-child {
     background: var(--panel);
     color: var(--fg);
     border-bottom: 1px solid var(--panel);
-    margin-bottom: -1px;
+    margin-bottom: 1px;
 }
 
 /* ============================================
@@ -922,7 +922,7 @@ select, input, textarea {
     cursor: pointer;
     border: 1px solid transparent;
     margin-right: 2px;
-    margin-bottom: -1px;
+    margin-bottom: 1px;
     white-space: nowrap;
     font-size: 10px;
     text-transform: uppercase;

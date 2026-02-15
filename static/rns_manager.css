@@ -89,7 +89,7 @@ h1 {
     background: var(--panel);
     color: var(--fg);
     border-bottom: 1px solid var(--panel);
-    margin-bottom: -1px;
+    margin-bottom: 1px;
 }
 
 .tabs-aspect-container {
@@ -128,7 +128,7 @@ h1 {
     background: var(--panel);
     color: var(--fg);
     border-bottom: 1px solid var(--panel);
-    margin-bottom: -1px;
+    margin-bottom: 1px;
 }
 
 .view { 
@@ -840,7 +840,7 @@ select, input {
 .id-mgr .tabs {
     display: flex;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     overflow-x: auto;
 }
 
@@ -849,7 +849,7 @@ select, input {
     cursor: pointer;
     border: 1px solid transparent;
     margin-right: 2px;
-    margin-bottom: -1px;
+    margin-bottom: 1px;
     white-space: nowrap;
     font-size: 10px;
     text-transform: uppercase;
@@ -1284,7 +1284,7 @@ select, input {
     cursor: pointer;
     border: 1px solid transparent;
     margin-right: 2px;
-    margin-bottom: -1px;
+    margin-bottom: 1px;
     white-space: nowrap;
     font-size: 10px;
     text-transform: uppercase;

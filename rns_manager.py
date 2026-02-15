@@ -820,12 +820,32 @@ def monitor_clear_api():
     with history_lock:
         announce_history = []
         announce_counter = 0
+        # SVUOTA LA CODA
         while not announce_queue.empty():
             try:
                 announce_queue.get_nowait()
             except:
                 break
-    return jsonify({'success': True})
+    
+    # PULISCI CACHE
+    announce_cache.clear()
+    
+    # ELIMINA IL FILE DI CACHE
+    try:
+        cache_file = os.path.join(CACHE_DIR, 'announce_cache.json')
+        if os.path.exists(cache_file):
+            os.remove(cache_file)
+            print(f"[✓] File cache eliminato: {cache_file}")
+    except Exception as e:
+        print(f"[!] Errore eliminazione file: {e}")
+    
+    # RESETTA COMPLETAMENTE TUTTO
+    return jsonify({
+        'success': True,
+        'total_announces': 0,
+        'unique_sources': 0,
+        'message': 'TUTTO PULITO!'
+    })
 
 @app.route('/api/monitor/cache/clear', methods=['POST'])
 def monitor_cache_clear_api():
