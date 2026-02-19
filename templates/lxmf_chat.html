@@ -1658,7 +1658,7 @@
         }
 
         // ============================================
-        // RENDERING MESSAGGI
+        // RENDERING MESSAGGI - CON SUPPORTO RAW ON-DEMAND
         // ============================================
         function renderMessages() {
             if (!currentPeer) {
@@ -1828,14 +1828,18 @@
                     });
                 }
                 
+                // ⚠️ RAW VIEW MODIFICATA - Carica on-demand
                 let rawHtml = '';
-                if (rawViewActive && msg.raw_hex) {
+                if (rawViewActive && msg.lxmf_file) {
+                    // ID unico per questo raw block
+                    const rawId = `raw-${msg.timestamp}-${Date.now()}`;
                     rawHtml = `
-                        <div class="lxmf-message-raw">
-                            <div class="lxmf-message-raw-hex">📦 HEX (${msg.raw_size || '?'} bytes):<br>${msg.raw_hex.substring(0, 200)}${msg.raw_hex.length > 200 ? '...' : ''}</div>
-                            <div class="lxmf-message-raw-ascii">📝 ASCII:<br>${escapeHtml(msg.raw_ascii ? msg.raw_ascii.substring(0, 200) : '')}${msg.raw_ascii && msg.raw_ascii.length > 200 ? '...' : ''}</div>
+                        <div class="lxmf-message-raw" id="${rawId}">
+                            <div class="lxmf-message-raw-hex">📦 Caricamento dati raw...</div>
                         </div>
                     `;
+                    // Carica asincrono dopo il rendering
+                    setTimeout(() => loadRawData(msg, peerHash, rawId), 50);
                 }
                 
                 // Usa il formatter per il contenuto
@@ -1861,6 +1865,32 @@
             
             document.getElementById('messageList').innerHTML = html;
             document.getElementById('messageList').scrollTop = document.getElementById('messageList').scrollHeight;
+        }
+
+        // ⚠️ Funzione per caricare i dati raw dal file .lxb
+        async function loadRawData(msg, peerHash, rawId) {
+            if (!msg.lxmf_file) return;
+            
+            try {
+                const response = await fetch(`/api/chat/raw/${peerHash}/${msg.lxmf_file}`);
+                const data = await response.json();
+                
+                if (data.raw_hex) {
+                    const rawElement = document.getElementById(rawId);
+                    if (rawElement) {
+                        rawElement.innerHTML = `
+                            <div class="lxmf-message-raw-hex">📦 HEX (${data.raw_size || '?'} bytes):<br>${escapeHtml(data.raw_hex.substring(0, 200))}${data.raw_hex.length > 200 ? '...' : ''}</div>
+                            <div class="lxmf-message-raw-ascii">📝 ASCII:<br>${escapeHtml(data.raw_ascii ? data.raw_ascii.substring(0, 200) : '')}${data.raw_ascii && data.raw_ascii.length > 200 ? '...' : ''}</div>
+                        `;
+                    }
+                }
+            } catch (e) {
+                console.error("Errore caricamento raw:", e);
+                const rawElement = document.getElementById(rawId);
+                if (rawElement) {
+                    rawElement.innerHTML = '<div class="lxmf-message-raw-hex">❌ Errore caricamento raw</div>';
+                }
+            }
         }
 
         // ============================================

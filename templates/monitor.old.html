@@ -264,11 +264,6 @@
         };
 
         // ============================================
-        // === VARIABILE GLOBALE PER TUTTI GLI ANNUNCI ===
-        // ============================================
-        window._allAnnounces = [];
-
-        // ============================================
         // === FUNZIONI ORDINAMENTO COLONNE ===
         // ============================================
 
@@ -288,13 +283,7 @@
             state.page = 1;
             
             updateSortIndicators();
-            
-            // Usa l'array globale se disponibile, altrimenti ricarica
-            if (window._allAnnounces && window._allAnnounces.length > 0) {
-                applyCurrentSortAndRender();
-            } else {
-                loadHistory();
-            }
+            loadHistory();
         }
 
         function updateSortIndicators() {
@@ -386,126 +375,79 @@
             return isNaN(num) ? 999 : num;
         }
 
-        // ============================================
-        // === APPLICA ORDINAMENTO E RENDERIZZA ===
-        // ============================================
-
-        function applyCurrentSortAndRender() {
-            if (!window._allAnnounces || window._allAnnounces.length === 0) {
-                document.getElementById('announce-body').innerHTML = '<tr><td colspan="10" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
-                updatePagination(0);
-                return;
-            }
+        function sortTableByState() {
+            const tbody = document.getElementById('announce-body');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
             
-            // Clona l'array per non modificare l'originale
-            const sorted = [...window._allAnnounces];
+            if (rows.length === 0 || rows[0].innerHTML.includes('nessun annuncio')) return;
             
-            // Applica l'ordinamento corrente
-            switch(state.sort) {
-                case 'time_desc':
-                    sorted.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-                    break;
-                case 'time_asc':
-                    sorted.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-                    break;
-                case 'rssi_desc':
-                    sorted.sort((a, b) => (b.rssi || -999) - (a.rssi || -999));
-                    break;
-                case 'rssi_asc':
-                    sorted.sort((a, b) => (a.rssi || 999) - (b.rssi || 999));
-                    break;
-                case 'snr_desc':
-                    sorted.sort((a, b) => (b.snr || -999) - (a.snr || -999));
-                    break;
-                case 'snr_asc':
-                    sorted.sort((a, b) => (a.snr || 999) - (b.snr || 999));
-                    break;
-                case 'q_desc':
-                    sorted.sort((a, b) => (b.q || 0) - (a.q || 0));
-                    break;
-                case 'q_asc':
-                    sorted.sort((a, b) => (a.q || 0) - (b.q || 0));
-                    break;
-                case 'hops_desc':
-                    sorted.sort((a, b) => (parseInt(b.hops) || 0) - (parseInt(a.hops) || 0));
-                    break;
-                case 'hops_asc':
-                    sorted.sort((a, b) => (parseInt(a.hops) || 999) - (parseInt(b.hops) || 999));
-                    break;
-                case 'aspect_desc':
-                    sorted.sort((a, b) => (b.aspect || '').localeCompare(a.aspect || ''));
-                    break;
-                case 'aspect_asc':
-                    sorted.sort((a, b) => (a.aspect || '').localeCompare(b.aspect || ''));
-                    break;
-                case 'identity_desc':
-                    sorted.sort((a, b) => (b.identity_hash || '').localeCompare(a.identity_hash || ''));
-                    break;
-                case 'identity_asc':
-                    sorted.sort((a, b) => (a.identity_hash || '').localeCompare(b.identity_hash || ''));
-                    break;
-                case 'dest_desc':
-                    sorted.sort((a, b) => (b.dest_hash || '').localeCompare(a.dest_hash || ''));
-                    break;
-                case 'dest_asc':
-                    sorted.sort((a, b) => (a.dest_hash || '').localeCompare(b.dest_hash || ''));
-                    break;
-                case 'iface_desc':
-                    sorted.sort((a, b) => (b.interface || '').localeCompare(a.interface || ''));
-                    break;
-                case 'iface_asc':
-                    sorted.sort((a, b) => (a.interface || '').localeCompare(b.interface || ''));
-                    break;
-                case 'data_desc':
-                    sorted.sort((a, b) => (b.data || '').localeCompare(a.data || ''));
-                    break;
-                case 'data_asc':
-                    sorted.sort((a, b) => (a.data || '').localeCompare(b.data || ''));
-                    break;
-                default:
-                    sorted.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-            }
+            const [field, direction] = state.sort.split('_');
+            const dir = direction === 'desc' ? -1 : 1;
             
-            // Applica filtro search se presente
-            let filtered = sorted;
-            if (state.search) {
-                const searchLower = state.search.toLowerCase();
-                filtered = sorted.filter(a => 
-                    (a.dest_hash && a.dest_hash.toLowerCase().includes(searchLower)) ||
-                    (a.identity_hash && a.identity_hash.toLowerCase().includes(searchLower)) ||
-                    (a.aspect && a.aspect.toLowerCase().includes(searchLower)) ||
-                    (a.data && a.data.toLowerCase().includes(searchLower)) ||
-                    (a.interface && a.interface.toLowerCase().includes(searchLower))
-                );
-            }
-            
-            // Applica filtro aspect se presente
-            if (state.aspect !== 'all') {
-                if (state.aspect === 'unknown') {
-                    filtered = filtered.filter(a => a.aspect === 'unknown' || !a.aspect);
-                } else if (state.aspect === 'known') {
-                    filtered = filtered.filter(a => a.aspect && a.aspect !== 'unknown' && a.aspect !== 'identity_hash' && ASPECTS.includes(a.aspect));
-                } else {
-                    filtered = filtered.filter(a => a.aspect === state.aspect);
+            rows.sort((a, b) => {
+                const cellsA = a.querySelectorAll('td');
+                const cellsB = b.querySelectorAll('td');
+                
+                if (cellsA.length < 10 || cellsB.length < 10) return 0;
+                
+                switch(field) {
+                    case 'time': {
+                        const timeA = cellsA[0]?.textContent || '';
+                        const timeB = cellsB[0]?.textContent || '';
+                        return dir * timeB.localeCompare(timeA);
+                    }
+                    case 'identity': {
+                        const idA = cellsA[1]?.textContent || '';
+                        const idB = cellsB[1]?.textContent || '';
+                        return dir * idA.localeCompare(idB);
+                    }
+                    case 'dest': {
+                        const destA = cellsA[2]?.textContent || '';
+                        const destB = cellsB[2]?.textContent || '';
+                        return dir * destA.localeCompare(destB);
+                    }
+                    case 'aspect': {
+                        const aspectA = cellsA[3]?.textContent || '';
+                        const aspectB = cellsB[3]?.textContent || '';
+                        return dir * aspectA.localeCompare(aspectB);
+                    }
+                    case 'hops': {
+                        const hopsA = getNumericHops(cellsA[4]?.textContent);
+                        const hopsB = getNumericHops(cellsB[4]?.textContent);
+                        return dir * (hopsA - hopsB);
+                    }
+                    case 'rssi': {
+                        const rssiA = parseFloat(cellsA[5]?.textContent) || -999;
+                        const rssiB = parseFloat(cellsB[5]?.textContent) || -999;
+                        return dir * (rssiA - rssiB);
+                    }
+                    case 'snr': {
+                        const snrA = parseFloat(cellsA[6]?.textContent) || -999;
+                        const snrB = parseFloat(cellsB[6]?.textContent) || -999;
+                        return dir * (snrA - snrB);
+                    }
+                    case 'q': {
+                        const qA = parseFloat(cellsA[7]?.textContent) || 0;
+                        const qB = parseFloat(cellsB[7]?.textContent) || 0;
+                        return dir * (qA - qB);
+                    }
+                    case 'iface': {
+                        const ifaceA = cellsA[8]?.textContent || '';
+                        const ifaceB = cellsB[8]?.textContent || '';
+                        return dir * ifaceA.localeCompare(ifaceB);
+                    }
+                    case 'data': {
+                        const dataA = cellsA[9]?.textContent || '';
+                        const dataB = cellsB[9]?.textContent || '';
+                        return dir * dataA.localeCompare(dataB);
+                    }
+                    default:
+                        return 0;
                 }
-            }
-            
-            // Paginazione
-            const start = (state.page - 1) * state.limit;
-            const paginated = filtered.slice(start, start + state.limit);
-            
-            // Renderizza
-            let html = '';
-            paginated.forEach(a => {
-                html += createAnnounceRow(a);
             });
             
-            document.getElementById('announce-body').innerHTML = html || '<tr><td colspan="10" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
-            
-            // Aggiorna paginazione con il totale filtrato
-            updatePagination(filtered.length);
-            
-            console.log(`📊 Renderizzati ${paginated.length} annunci (filtrati: ${filtered.length}, totali: ${window._allAnnounces.length})`);
+            tbody.innerHTML = '';
+            rows.forEach(row => tbody.appendChild(row));
         }
 
         // ============================================
@@ -758,107 +700,216 @@
         }
 
         // ============================================
-        // === ASPECT TABS ===
-        // ============================================
+// === ASPECT TABS - VERSIONE FINALE CON CACHE ===
+// ============================================
 
-        function getAspectCounts() {
-            const counts = new Map();
+function getAspectCounts() {
+    const counts = new Map();
+    
+    // Inizializza tutti i contatori a ZERO
+    counts.set('all', 0);
+    counts.set('known', 0);
+    counts.set('unknown', 0);
+    ASPECTS.forEach(a => counts.set(a, 0));
+    
+    // Se siamo in modalità cache, dobbiamo contare gli annunci dalla cache!
+    if (state.cacheSource === 'cache') {
+        console.log('📁 Calcolo conteggi dalla cache...');
+        
+        // Dobbiamo fare una chiamata API per ottenere i conteggi dalla cache
+        fetch('/api/monitor/cache/stats')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.stats && data.stats.aspects) {
+                    console.log('📊 Conteggi cache:', data.stats.aspects);
+                    
+                    // Aggiorna i contatori con i dati della cache
+                    Object.entries(data.stats.aspects).forEach(([asp, cnt]) => {
+                        if (ASPECTS.includes(asp)) {
+                            counts.set(asp, cnt);
+                            counts.set('known', (counts.get('known') || 0) + cnt);
+                            counts.set('all', (counts.get('all') || 0) + cnt);
+                        } else {
+                            counts.set('unknown', (counts.get('unknown') || 0) + cnt);
+                            counts.set('all', (counts.get('all') || 0) + cnt);
+                        }
+                    });
+                    
+                    // Forza l'aggiornamento dei tab
+                    if (window.updateAspectTabs) {
+                        window.updateAspectTabs();
+                    }
+                }
+            })
+            .catch(err => console.error('Errore caricamento stats cache:', err));
             
+        return counts;
+    }
+    
+    // Calcola i conteggi dalle identità (per modalità memory)
+    state.identities.forEach(id => {
+        id.aspects.forEach((data, asp) => {
+            const count = data.count || 1;
+            
+            if (ASPECTS.includes(asp)) {
+                // Aspect conosciuto
+                counts.set(asp, (counts.get(asp) || 0) + count);
+                counts.set('known', (counts.get('known') || 0) + count);
+                counts.set('all', (counts.get('all') || 0) + count);
+            } else if (asp !== 'identity_hash') {
+                // Aspect sconosciuto
+                counts.set('unknown', (counts.get('unknown') || 0) + count);
+                counts.set('all', (counts.get('all') || 0) + count);
+            }
+        });
+    });
+    
+    return counts;
+}
+
+// ============================================
+// === FUNZIONE PER AGGIORNARE TAB DALLA CACHE ===
+// ============================================
+
+function updateTabsFromCache() {
+    console.log('🔄 Aggiornamento tab dalla cache...');
+    
+    // Chiamata API per ottenere le statistiche della cache
+    fetch('/api/monitor/cache/stats')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.stats) {
+                console.log('📊 Stats cache:', data.stats);
+                
+                // Salva i conteggi in una variabile globale per usarli nei tab
+                window._cacheAspectCounts = data.stats.aspects || {};
+                
+                // Forza l'aggiornamento dei tab
+                if (window.updateAspectTabs) {
+                    window.updateAspectTabs();
+                }
+            }
+        })
+        .catch(err => console.error('Errore caricamento stats cache:', err));
+    
+    // Ricarica la history dalla cache
+    loadHistory();
+}
+
+// ============================================
+// === MODIFICA renderAspectTabs PER USARE I DATI CACHE ===
+// ============================================
+
+function initAspectTabs() {
+    const row1 = document.getElementById('aspect-row-1');
+    const row2 = document.getElementById('aspect-row-2');
+    const row3 = document.getElementById('aspect-row-3');
+    
+    function renderAspectTabs() {
+        let counts;
+        
+        if (state.cacheSource === 'cache') {
+            // Usa i conteggi dalla cache se disponibili
+            counts = new Map();
             counts.set('all', 0);
             counts.set('known', 0);
             counts.set('unknown', 0);
             ASPECTS.forEach(a => counts.set(a, 0));
             
-            // Se siamo in modalità cache, usa l'array globale
-            if (state.cacheSource === 'cache' && window._allAnnounces && window._allAnnounces.length > 0) {
-                window._allAnnounces.forEach(ann => {
-                    const asp = ann.aspect || 'unknown';
+            // Se abbiamo i dati della cache, usali
+            if (window._cacheAspectCounts) {
+                Object.entries(window._cacheAspectCounts).forEach(([asp, cnt]) => {
                     if (ASPECTS.includes(asp)) {
-                        counts.set(asp, (counts.get(asp) || 0) + 1);
-                        counts.set('known', (counts.get('known') || 0) + 1);
-                        counts.set('all', (counts.get('all') || 0) + 1);
+                        counts.set(asp, cnt);
+                        counts.set('known', (counts.get('known') || 0) + cnt);
+                        counts.set('all', (counts.get('all') || 0) + cnt);
                     } else {
-                        counts.set('unknown', (counts.get('unknown') || 0) + 1);
-                        counts.set('all', (counts.get('all') || 0) + 1);
+                        counts.set('unknown', (counts.get('unknown') || 0) + cnt);
+                        counts.set('all', (counts.get('all') || 0) + cnt);
                     }
                 });
-                return counts;
             }
+        } else {
+            // Usa i conteggi dalle identità live
+            counts = getAspectCounts();
+        }
+        
+        // Pulisci completamente i container
+        row1.innerHTML = '';
+        row2.innerHTML = '';
+        row3.innerHTML = '';
+        
+        // Riga 1: "tutti" + primi 10 aspect
+        let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (${counts.get('all') || 0})</div>`;
+        ASPECTS.slice(0, 10).forEach(a => {
+            const short = a.split('.').pop();
+            const count = counts.get(a) || 0;
+            html1 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+        });
+        row1.innerHTML = html1;
+        
+        // Riga 2: aspect 10-20
+        let html2 = ``;
+        ASPECTS.slice(10, 20).forEach(a => {
+            const short = a.split('.').pop();
+            const count = counts.get(a) || 0;
+            html2 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+        });
+        row2.innerHTML = html2;
+        
+        // Riga 3: aspect rimanenti + known + unknown
+        let html3 = ``;
+        ASPECTS.slice(20).forEach(a => {
+            const short = a.split('.').pop();
+            const count = counts.get(a) || 0;
+            html3 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+        });
+        html3 += `<div class="tab-aspect ${state.aspect === 'known' ? 'active' : ''}" data-aspect="known">✓ conosciuti (${counts.get('known') || 0})</div>`;
+        html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (${counts.get('unknown') || 0})</div>`;
+        row3.innerHTML = html3;
+        
+        // Riapplica gli event listener a TUTTI i nuovi tab
+        document.querySelectorAll('.tab-aspect').forEach(tab => {
+            const newTab = tab.cloneNode(true);
+            tab.parentNode.replaceChild(newTab, tab);
             
-            // Calcola i conteggi dalle identità (per modalità memory)
-            state.identities.forEach(id => {
-                id.aspects.forEach((data, asp) => {
-                    const count = data.count || 1;
-                    
-                    if (ASPECTS.includes(asp)) {
-                        counts.set(asp, (counts.get(asp) || 0) + count);
-                        counts.set('known', (counts.get('known') || 0) + count);
-                        counts.set('all', (counts.get('all') || 0) + count);
-                    } else if (asp !== 'identity_hash') {
-                        counts.set('unknown', (counts.get('unknown') || 0) + count);
-                        counts.set('all', (counts.get('all') || 0) + count);
-                    }
-                });
+            newTab.addEventListener('click', function(e) {
+                document.querySelectorAll('.tab-aspect').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                state.aspect = this.dataset.aspect;
+                state.page = 1;
+                loadHistory();
             });
-            
-            return counts;
-        }
+        });
+    }
+    
+    renderAspectTabs();
+    window.updateAspectTabs = renderAspectTabs;
+}
 
-        function initAspectTabs() {
-            const row1 = document.getElementById('aspect-row-1');
-            const row2 = document.getElementById('aspect-row-2');
-            const row3 = document.getElementById('aspect-row-3');
-            
-            function renderAspectTabs() {
-                const counts = getAspectCounts();
-                
-                row1.innerHTML = '';
-                row2.innerHTML = '';
-                row3.innerHTML = '';
-                
-                let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (${counts.get('all') || 0})</div>`;
-                ASPECTS.slice(0, 10).forEach(a => {
-                    const short = a.split('.').pop();
-                    const count = counts.get(a) || 0;
-                    html1 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
-                });
-                row1.innerHTML = html1;
-                
-                let html2 = ``;
-                ASPECTS.slice(10, 20).forEach(a => {
-                    const short = a.split('.').pop();
-                    const count = counts.get(a) || 0;
-                    html2 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
-                });
-                row2.innerHTML = html2;
-                
-                let html3 = ``;
-                ASPECTS.slice(20).forEach(a => {
-                    const short = a.split('.').pop();
-                    const count = counts.get(a) || 0;
-                    html3 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
-                });
-                html3 += `<div class="tab-aspect ${state.aspect === 'known' ? 'active' : ''}" data-aspect="known">✓ conosciuti (${counts.get('known') || 0})</div>`;
-                html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (${counts.get('unknown') || 0})</div>`;
-                row3.innerHTML = html3;
-                
-                document.querySelectorAll('.tab-aspect').forEach(tab => {
-                    const newTab = tab.cloneNode(true);
-                    tab.parentNode.replaceChild(newTab, tab);
-                    
-                    newTab.addEventListener('click', function(e) {
-                        document.querySelectorAll('.tab-aspect').forEach(t => t.classList.remove('active'));
-                        this.classList.add('active');
-                        state.aspect = this.dataset.aspect;
-                        state.page = 1;
-                        applyCurrentSortAndRender();
-                    });
-                });
-            }
-            
-            renderAspectTabs();
-            window.updateAspectTabs = renderAspectTabs;
+// ============================================
+// === MODIFICA IL LISTENER PER cache-source-select ===
+// ============================================
+
+document.getElementById('cache-source-select').addEventListener('change', function() {
+    const newSource = this.value;
+    console.log(`🔄 Cambio sorgente: ${state.cacheSource} -> ${newSource}`);
+    
+    state.cacheSource = newSource;
+    state.page = 1;
+    
+    if (newSource === 'cache') {
+        // Quando passi a cache, carica i conteggi dalla cache
+        updateTabsFromCache();
+    } else {
+        // Quando torni a memory, ricarica normalmente
+        loadHistory();
+        // Aggiorna i tab con le identità esistenti
+        if (window.updateAspectTabs) {
+            window.updateAspectTabs();
         }
+    }
+});
 
         function initMainTabs() {
             document.querySelectorAll('.tab-main').forEach(tab => {
@@ -998,25 +1049,30 @@
         }
 
         // ============================================
-        // === UPDATE IDENTITY STATS ===
+        // === UPDATE IDENTITY STATS - CON CONTROLLO DUPLICATI ===
         // ============================================
 
         function updateIdentityStats(ann) {
             if (state.resetting || !ann.identity_hash) return;
             
+            // Usa un Set per tracciare gli annunci già processati
             if (!window._processedAnnounces) {
                 window._processedAnnounces = new Set();
             }
             
+            // Crea un ID univoco per l'annuncio (packet_hash o combinazione)
             const announceId = ann.packet_hash || `${ann.identity_hash}_${ann.timestamp}`;
             
+            // Se l'annuncio è già stato processato, salta
             if (window._processedAnnounces.has(announceId)) {
                 console.log('⏭️ Annuncio già processato:', announceId.slice(0,16));
                 return;
             }
             
+            // Aggiungi al Set dei processati
             window._processedAnnounces.add(announceId);
             
+            // Limita la dimensione del Set
             if (window._processedAnnounces.size > 10000) {
                 const iterator = window._processedAnnounces.values();
                 for (let i = 0; i < 1000; i++) {
@@ -1333,17 +1389,18 @@
             document.getElementById('next-page').disabled = state.page >= pages;
         }
 
+        
         // ============================================
-        // === LOAD HISTORY - CARICA TUTTI GLI ANNUNCI ===
+        // === LOAD HISTORY - VERSIONE CORRETTA ===
         // ============================================
 
         function loadHistory() {
             const params = new URLSearchParams({
-                aspect: 'all',  // Prende tutti gli aspect
-                search: '',
-                limit: 1000,    // Prende fino a 1000 annunci
-                offset: 0,
-                sort: 'time_desc',
+                aspect: state.aspect,
+                search: state.search,
+                limit: 1000,  // AUMENTATO per prendere più dati
+                offset: 0,     // PARTE DA 0 per prendere tutto
+                sort: state.sort,
                 source: state.cacheSource
             });
 
@@ -1351,39 +1408,105 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
-                        // Salva TUTTI gli annunci nell'array globale
-                        window._allAnnounces = data.announces || [];
+                        // Prendi TUTTI gli annunci (fino a 1000)
+                        const allAnnounces = data.announces;
                         
-                        console.log(`📊 Caricati ${window._allAnnounces.length} annunci da ${state.cacheSource}`);
+                        // ORDINA GLOBALMENTE prima di paginare
+                        const sortedAnnounces = [...allAnnounces].sort((a, b) => {
+                            switch(state.sort) {
+                                case 'time_desc':
+                                    return (b.timestamp || 0) - (a.timestamp || 0);
+                                case 'time_asc':
+                                    return (a.timestamp || 0) - (b.timestamp || 0);
+                                case 'rssi_desc':
+                                    return (b.rssi || -999) - (a.rssi || -999);
+                                case 'rssi_asc':
+                                    return (a.rssi || 999) - (b.rssi || 999);
+                                case 'snr_desc':
+                                    return (b.snr || -999) - (a.snr || -999);
+                                case 'snr_asc':
+                                    return (a.snr || 999) - (b.snr || 999);
+                                case 'q_desc':
+                                    return (b.q || 0) - (a.q || 0);
+                                case 'q_asc':
+                                    return (a.q || 0) - (b.q || 0);
+                                case 'hops_desc':
+                                    return (parseInt(b.hops) || 0) - (parseInt(a.hops) || 0);
+                                case 'hops_asc':
+                                    return (parseInt(a.hops) || 999) - (parseInt(b.hops) || 999);
+                                case 'aspect_desc':
+                                    return (b.aspect || '').localeCompare(a.aspect || '');
+                                case 'aspect_asc':
+                                    return (a.aspect || '').localeCompare(b.aspect || '');
+                                case 'identity_desc':
+                                    return (b.identity_hash || '').localeCompare(a.identity_hash || '');
+                                case 'identity_asc':
+                                    return (a.identity_hash || '').localeCompare(b.identity_hash || '');
+                                case 'dest_desc':
+                                    return (b.dest_hash || '').localeCompare(a.dest_hash || '');
+                                case 'dest_asc':
+                                    return (a.dest_hash || '').localeCompare(b.dest_hash || '');
+                                case 'iface_desc':
+                                    return (b.interface || '').localeCompare(a.interface || '');
+                                case 'iface_asc':
+                                    return (a.interface || '').localeCompare(b.interface || '');
+                                case 'data_desc':
+                                    return (b.data || '').localeCompare(a.data || '');
+                                case 'data_asc':
+                                    return (a.data || '').localeCompare(b.data || '');
+                                default:
+                                    return (b.timestamp || 0) - (a.timestamp || 0);
+                            }
+                        });
                         
-                        // Applica l'ordinamento corrente e renderizza
-                        applyCurrentSortAndRender();
+                        // PAGINA dopo l'ordinamento globale
+                        const start = (state.page - 1) * state.limit;
+                        const paginatedAnnounces = sortedAnnounces.slice(start, start + state.limit);
+                        
+                        // Renderizza
+                        let html = '';
+                        paginatedAnnounces.forEach(a => {
+                            html += createAnnounceRow(a);
+                        });
+                        
+                        document.getElementById('announce-body').innerHTML = html || '<tr><td colspan="10" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
+                        
+                        // Il totale è la lunghezza di TUTTI gli annunci
+                        updatePagination(sortedAnnounces.length);
                         
                         // Aggiorna i tab
                         if (window.updateAspectTabs) {
                             window.updateAspectTabs();
                         }
+                        
+                        // Non serve più sortTableByState perché abbiamo già ordinato
+                        // sortTableByState();
+                        
+                        console.log(`📊 Caricati ${paginatedAnnounces.length} annunci (totale: ${sortedAnnounces.length})`);
                     }
                 })
                 .catch(err => console.error('History error:', err));
         }
 
         // ============================================
-        // === CONNESSIONE SSE ===
+        // === CONNESSIONE SSE - MIGLIORATA ===
         // ============================================
 
         function connectSSE() {
+            // Se c'è già una connessione attiva e funzionante, non crearne un'altra
             if (state.eventSource && state.eventSource.readyState === EventSource.OPEN) {
                 console.log('SSE già connesso, salto...');
                 return;
             }
             
+            // Chiudi connessione esistente se in stato di errore
             if (state.eventSource) {
                 console.log('Chiusura vecchia connessione SSE...');
                 state.eventSource.close();
                 state.eventSource = null;
             }
             
+            // Usa un flag per evitare connessioni multiple simultanee
             if (state.connecting) {
                 console.log('Connessione già in corso...');
                 return;
@@ -1391,11 +1514,13 @@
             
             state.connecting = true;
             
+            // Timeout per evitare connessioni multiple
             setTimeout(() => {
                 try {
                     console.log('Tentativo connessione SSE...');
                     const es = new EventSource('/api/monitor/stream');
                     
+                    // Timeout per la connessione
                     const connectionTimeout = setTimeout(() => {
                         if (es.readyState !== EventSource.OPEN) {
                             console.log('Timeout connessione SSE');
@@ -1418,6 +1543,10 @@
                         refreshBackendStats();
                     };
                     
+                    // ============================================
+                    // === CONNESSIONE SSE - MODIFICATA ===
+                    // ============================================
+
                     es.onmessage = (e) => {
                         if (e.data && e.data !== ':') {
                             try {
@@ -1426,31 +1555,45 @@
                                     state.lastId = ann.id;
                                     refreshBackendStats();
                                     
-                                    // AGGIUNGI IL NUOVO ANNUNCIO ALL'ARRAY GLOBALE
-                                    if (!window._allAnnounces) {
-                                        window._allAnnounces = [];
-                                    }
-                                    
-                                    // Aggiungi in testa (più recente)
-                                    window._allAnnounces.unshift(ann);
-                                    
-                                    // Limita la dimensione
-                                    if (window._allAnnounces.length > 2000) {
-                                        window._allAnnounces.pop();
-                                    }
-                                    
-                                    // AGGIORNA LE STATISTICHE
+                                    // AGGIORNA LE STATISTICHE SOLO PER I NUOVI ANNUNCI
                                     if (!state.resetting) {
                                         updateIdentityStats(ann);
                                     }
                                     
                                     if (window.updateAspectTabs) window.updateAspectTabs();
                                     
-                                    // APPLICA L'ORDINAMENTO CORRENTE E RENDERIZZA
                                     if (state.view === 'live' && state.cacheSource === 'memory') {
-                                        applyCurrentSortAndRender();
+                                        let shouldShow = true;
+                                        if (state.aspect !== 'all') {
+                                            if (state.aspect === 'unknown') {
+                                                shouldShow = ann.aspect === 'unknown' || !ann.aspect;
+                                            } else if (state.aspect === 'known') {
+                                                shouldShow = ann.aspect && ann.aspect !== 'unknown' && ann.aspect !== 'identity_hash' && ASPECTS.includes(ann.aspect);
+                                            } else {
+                                                shouldShow = ann.aspect === state.aspect;
+                                            }
+                                        }
+                                        if (shouldShow && state.search) {
+                                            const searchLower = state.search.toLowerCase();
+                                            shouldShow = (ann.dest_hash && ann.dest_hash.toLowerCase().includes(searchLower)) ||
+                                                        (ann.identity_hash && ann.identity_hash.toLowerCase().includes(searchLower)) ||
+                                                        (ann.aspect && ann.aspect.toLowerCase().includes(searchLower)) ||
+                                                        (ann.data && ann.data.toLowerCase().includes(searchLower));
+                                        }
+                                        if (shouldShow) {
+                                            const tbody = document.getElementById('announce-body');
+                                            const firstRow = tbody.querySelector('tr');
+                                            if (firstRow && firstRow.innerHTML.includes('nessun annuncio')) {
+                                                tbody.innerHTML = '';
+                                            }
+                                            tbody.insertAdjacentHTML('afterbegin', createAnnounceRow(ann));
+                                            sortTableByState();
+                                            const rows = tbody.querySelectorAll('tr');
+                                            if (rows.length > state.limit) {
+                                                rows[rows.length-1].remove();
+                                            }
+                                        }
                                     }
-                                    
                                     if (state.view === 'identities') renderIdentities();
                                     if (state.view === 'stats') renderStats();
                                 }
@@ -1471,6 +1614,7 @@
                         
                         state.connecting = false;
                         
+                        // Riconnetti con backoff esponenziale
                         const delay = Math.min(3000 * (state.reconnectAttempt || 1), 30000);
                         state.reconnectAttempt = (state.reconnectAttempt || 1) + 1;
                         
@@ -1489,6 +1633,7 @@
             }, 100);
         }
 
+
         // ============================================
         // === FUNZIONE CHE FORZA I TAB A ZERO ===
         // ============================================
@@ -1505,6 +1650,7 @@
                 return;
             }
             
+            // Resetta TUTTI i tab a ZERO
             let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (0)</div>`;
             ASPECTS.slice(0, 10).forEach(a => {
                 const short = a.split('.').pop();
@@ -1528,6 +1674,7 @@
             html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (0)</div>`;
             row3.innerHTML = html3;
             
+            // Riapplica gli event listener
             document.querySelectorAll('.tab-aspect').forEach(tab => {
                 const newTab = tab.cloneNode(true);
                 tab.parentNode.replaceChild(newTab, tab);
@@ -1545,7 +1692,7 @@
         }
 
         // ============================================
-        // === RESET TOTALE ===
+        // === RESET TOTALE CHE FUNZIONE DAVVERO ===
         // ============================================
 
         function resetAll() {
@@ -1564,24 +1711,38 @@
                 resetBtn.disabled = true;
                 resetBtn.style.opacity = '0.5';
                 
+                // PRIMA: Pulisci TUTTO il frontend
                 console.log('🧹 Pulizia frontend...');
                 
+                // 1. Pulisci la mappa delle identità
                 state.identities.clear();
+                
+                // 2. Pulisci expandedIdentities
                 state.expandedIdentities.clear();
+                
+                // 3. Resetta lastId
                 state.lastId = 0;
+                
+                // 4. Resetta backendStats
                 state.backendStats = { total: 0, unique: 0, cacheSize: 0 };
+                
+                // 5. Resetta aspect a 'all'
                 state.aspect = 'all';
+                
+                // 6. Resetta page a 1
                 state.page = 1;
+                
+                // 7. Resetta search
                 state.search = '';
                 
-                // Pulisci array globale
-                window._allAnnounces = [];
-                
+                // 8. Pulisci localStorage COMPLETAMENTE
                 console.log('🗑️ Pulizia localStorage...');
-                localStorage.clear();
-                localStorage.removeItem(STORAGE_KEY);
+                localStorage.clear();  // Pulisce TUTTO
+                localStorage.removeItem(STORAGE_KEY);  // Pulisce specifico
                 
+                // 9. Forza la rimozione di qualsiasi dato residuo
                 try {
+                    // Sovrascrivi con array vuoto
                     localStorage.setItem(STORAGE_KEY, JSON.stringify({
                         timestamp: Date.now(),
                         identities: []
@@ -1592,6 +1753,7 @@
 
                 resetProcessedAnnounces();
 
+                // 10. Aggiorna UI
                 document.getElementById('total-announces').textContent = '0';
                 document.getElementById('unique-sources').textContent = '0';
                 document.getElementById('cache-size-indicator').textContent = '0';
@@ -1610,9 +1772,11 @@
                 document.getElementById('stats-aspects').innerHTML = '';
                 document.getElementById('stats-identities').innerHTML = '';
                 
+                // 11. Forza refresh dei tab con conteggi ZERO
                 console.log('🔄 Forzatura tab a zero...');
                 forceTabsToZero();
                 
+                // POI: Chiama il backend
                 console.log('📡 Chiamata backend reset-all...');
                 fetch('/api/monitor/reset-all', { 
                     method: 'POST',
@@ -1628,6 +1792,7 @@
                     console.log('Reset completato:', data);
                     
                     if (data.success) {
+                        // Ricarica history vuota
                         loadHistory();
                         
                         setTimeout(() => {
@@ -1664,6 +1829,7 @@
             console.log('🧹 Set annunci processati resettato');
         }
 
+
         // ============================================
         // === EVENT LISTENERS ===
         // ============================================
@@ -1672,13 +1838,13 @@
             document.getElementById('limit-select').addEventListener('change', function() {
                 state.limit = parseInt(this.value);
                 state.page = 1;
-                applyCurrentSortAndRender();
+                loadHistory();
             });
 
             document.getElementById('search-input').addEventListener('input', function() {
                 state.search = this.value.toLowerCase();
                 state.page = 1;
-                applyCurrentSortAndRender();
+                loadHistory();
             });
 
             document.getElementById('identity-search-input').addEventListener('input', function() {
@@ -1688,29 +1854,17 @@
             document.getElementById('cache-source-select').addEventListener('change', function() {
                 state.cacheSource = this.value;
                 state.page = 1;
-                
-                if (state.cacheSource === 'cache') {
-                    loadHistory();
-                } else {
-                    if (window.updateAspectTabs) {
-                        window.updateAspectTabs();
-                    }
-                    applyCurrentSortAndRender();
-                }
+                loadHistory();
             });
 
             document.getElementById('reset-all-btn').addEventListener('click', resetAll);
 
             document.getElementById('prev-page').addEventListener('click', function() {
-                if (state.page > 1) { 
-                    state.page--; 
-                    applyCurrentSortAndRender();
-                }
+                if (state.page > 1) { state.page--; loadHistory(); }
             });
 
             document.getElementById('next-page').addEventListener('click', function() {
-                state.page++; 
-                applyCurrentSortAndRender();
+                state.page++; loadHistory();
             });
 
             document.getElementById('identity-sort-select').addEventListener('change', function() {
@@ -1725,9 +1879,10 @@
         }
 
         // ============================================
-        // === INIZIALIZZAZIONE ===
+        // === INIZIALIZZAZIONE - CON DEDUPLICAZIONE ===
         // ============================================
 
+        // Usa una variabile globale per tracciare se l'inizializzazione è già stata fatta
         if (!window._rnsMonitorInitialized) {
             window._rnsMonitorInitialized = true;
             
@@ -1752,9 +1907,7 @@
             setInterval(() => {
                 if (state.view === 'identities') renderIdentities();
                 if (state.view === 'stats') renderStats();
-                if (state.view === 'live') {
-                    // Non serve più sortTableByState perché usiamo applyCurrentSortAndRender
-                }
+                if (state.view === 'live') sortTableByState();
                 refreshBackendStats();
             }, 2000);
         } else {

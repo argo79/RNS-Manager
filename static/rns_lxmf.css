@@ -11,6 +11,8 @@
     --error: #ff6666;
     --warning: #ffff88;
     --identity: #8888ff;
+    --telemetry-blue: #7ec8e0;
+    --telemetry-label: #6b7f8f;
 }
 
 * {
@@ -1001,7 +1003,7 @@ body {
 }
 
 /* ============================================
-   TELEMETRIA MIGLIORATA - SOLO PEER SELEZIONATO
+   TELEMETRIA DASHBOARD MIGLIORATA - STILE MINIMAL
    ============================================ */
 .telemetry-fixed-area {
     flex: 0 0 55%;
@@ -1019,149 +1021,155 @@ body {
     border-radius: 4px;
 }
 
-.telemetry-title {
-    color: #88ff88;
-    font-size: 12px;
-    font-weight: bold;
-    margin: 12px 0 8px 0;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    border-bottom: 1px solid #333;
-    padding-bottom: 4px;
-}
-
-.telemetry-title:first-of-type {
-    margin-top: 0;
-}
-
-.telemetry-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    margin-bottom: 8px;
-}
-
-.telemetry-card {
-    background: #0a0a0a;
-    border: 1px solid #333;
-    padding: 10px;
+/* TELEMETRIA DASHBOARD - STILE MINIMAL */
+.telemetry-dashboard {
+    background: #0f0f0f;
+    border: 1px solid #2a2a2a;
     border-radius: 4px;
-}
-
-.telemetry-card.full-width {
-    grid-column: span 2;
-}
-
-.telemetry-label {
-    color: #aaaaaa;
-    font-size: 10px;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-    letter-spacing: 0.5px;
-}
-
-.telemetry-value {
-    color: #88ff88;
-    font-size: 15px;
-    font-weight: bold;
-    font-family: monospace;
-}
-
-.telemetry-value.location {
-    color: #88ff88;
-    font-size: 13px;
+    padding: 12px;
+    margin-bottom: 12px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 .telemetry-row {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 5px;
-    font-size: 12px;
-    padding: 3px 0;
-    border-bottom: 1px dotted #222;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    margin-bottom: 8px;
 }
 
-.telemetry-row:last-child {
-    border-bottom: none;
-}
-
-.telemetry-badge {
-    display: inline-block;
-    padding: 4px 8px;
-    background: #1a3300;
-    border: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: bold;
-    border-radius: 4px;
-}
-
-.telemetry-empty {
-    color: #888;
-    text-align: center;
-    padding: 20px;
-    font-style: italic;
-    background: #0a0a0a;
-    border: 1px solid #333;
-    margin: 10px;
-    border-radius: 4px;
+.telemetry-item {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     font-size: 12px;
 }
 
-/* Batteria */
-.battery-level {
-    font-size: 20px;
-    font-weight: bold;
-    color: #88ff88;
-    font-family: monospace;
-}
-
-.battery-status {
-    font-size: 12px;
-    color: #ffaa00;
-    margin-left: 5px;
-}
-
-/* Posizione */
-.coordinates {
-    font-family: monospace;
-    font-size: 12px;
-    color: #88ff88;
-    background: #0a0a0a;
-    padding: 6px;
-    border-radius: 4px;
-    margin: 5px 0;
-    word-break: break-all;
-}
-
-/* Timestamp */
-.telemetry-timestamp {
-    margin-top: 12px;
-    padding-top: 8px;
-    border-top: 1px solid #333;
+.telemetry-label {
+    color: var(--telemetry-label);
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
     font-size: 10px;
-    color: #888;
-    text-align: right;
-    font-family: monospace;
 }
 
-.telemetry-timestamp-value {
-    color: #88ff88;
-    font-weight: bold;
-    margin-left: 5px;
+.telemetry-value {
+    color: var(--telemetry-blue);
+    font-weight: 500;
+    font-size: 13px;
 }
 
-/* ============================================
-   MAPPA INTEGRATA - RIQUADRO MIGLIORATO
-   ============================================ */
+.telemetry-value.highlight {
+    color: #a0e0ff;
+    text-shadow: 0 0 5px rgba(126, 200, 224, 0.3);
+}
+
+.telemetry-unit {
+    color: #4a5a68;
+    font-size: 9px;
+    margin-left: 2px;
+}
+
+/* Separatore sottile */
+.telemetry-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #2a3a44, #4a6a7a, #2a3a44, transparent);
+    margin: 12px 0;
+}
+
+/* Griglia posizione */
+.position-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    background: #0a0a0a;
+    border-radius: 3px;
+    padding: 8px;
+    margin-top: 4px;
+}
+
+.position-box {
+    text-align: center;
+}
+
+.position-box .label {
+    color: var(--telemetry-label);
+    font-size: 8px;
+    text-transform: uppercase;
+}
+
+.position-box .value {
+    color: var(--telemetry-blue);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* MOVEMENT (velocità/direzione) */
+.movement-indicator {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #0c0c0c;
+    border-radius: 3px;
+    padding: 6px 12px;
+    margin-top: 6px;
+}
+
+.speed-value {
+    color: #a0e0ff;
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.bearing-compass {
+    display: inline-block;
+    transform-origin: center;
+    font-size: 18px;
+    filter: drop-shadow(0 0 3px var(--telemetry-blue));
+}
+
+/* MAPPA - VERSIONE MIGLIORATA */
+.map-controls {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.map-style-btn {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #aaa;
+    padding: 4px 12px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.map-style-btn:hover {
+    background: #2a2a2a;
+    border-color: var(--telemetry-blue);
+    color: var(--telemetry-blue);
+}
+
+.map-style-btn.active {
+    background: #1e3a47;
+    border-color: var(--telemetry-blue);
+    color: var(--telemetry-blue);
+}
+
+/* MAPPA INTEGRATA - RIQUADRO MIGLIORATO */
 .telemetry-map {
     margin: 10px;
-    border: 2px solid #88ff88;
+    border: 2px solid var(--telemetry-blue);
     border-radius: 8px;
     overflow: hidden;
     height: 300px;
     background: #0a0a0a;
     position: relative;
-    box-shadow: 0 0 20px rgba(0,255,0,0.3);
+    box-shadow: 0 0 20px rgba(126, 200, 224, 0.3);
 }
 
 .map-container {
@@ -1183,25 +1191,25 @@ body {
     background: #0f0f0f;
     font-family: monospace;
     gap: 15px;
-    border: 2px dashed #88ff88;
+    border: 2px dashed var(--telemetry-blue);
     box-sizing: border-box;
 }
 
 .map-placeholder span {
     background: #1a1a1a;
     padding: 15px 25px;
-    border: 1px solid #88ff88;
+    border: 1px solid var(--telemetry-blue);
     border-radius: 6px;
-    color: #88ff88;
+    color: var(--telemetry-blue);
     font-size: 14px;
 }
 
 .map-link {
-    color: #88ff88;
+    color: var(--telemetry-blue);
     text-decoration: none;
     margin-top: 8px;
     padding: 6px 12px;
-    border: 1px solid #88ff88;
+    border: 1px solid var(--telemetry-blue);
     border-radius: 4px;
     background: #1a1a1a;
     font-size: 11px;
@@ -1211,7 +1219,7 @@ body {
     background: #2a2a2a;
 }
 
-/* Stili Leaflet migliorati per migliore gestibilità */
+/* Stili Leaflet migliorati */
 .leaflet-container {
     background: #0a0a0a !important;
     font-family: 'Consolas', monospace !important;
@@ -1220,18 +1228,23 @@ body {
 }
 
 .leaflet-tile-pane {
-    filter: brightness(0.9) contrast(1.1) hue-rotate(90deg);
+    filter: brightness(0.9) contrast(1.1);
+}
+
+/* Stili specifici per i diversi temi mappa */
+.leaflet-tile-pane[data-style="light"] {
+    filter: none;
 }
 
 .leaflet-control-zoom {
-    border: 2px solid #88ff88 !important;
+    border: 2px solid var(--telemetry-blue) !important;
     background: #1a1a1a !important;
 }
 
 .leaflet-control-zoom a {
     background: #1a1a1a !important;
-    color: #88ff88 !important;
-    border: 1px solid #88ff88 !important;
+    color: var(--telemetry-blue) !important;
+    border: 1px solid var(--telemetry-blue) !important;
 }
 
 .leaflet-control-zoom a:hover {
@@ -1241,7 +1254,7 @@ body {
 
 .leaflet-control-attribution {
     background: rgba(0,0,0,0.8) !important;
-    color: #88ff88 !important;
+    color: var(--telemetry-blue) !important;
     font-size: 9px !important;
     padding: 3px 8px !important;
     border-radius: 4px !important;
@@ -1249,47 +1262,46 @@ body {
 }
 
 .leaflet-control-attribution a {
-    color: #88ff88 !important;
+    color: var(--telemetry-blue) !important;
 }
 
 .leaflet-popup-content-wrapper {
     background: #1a1a1a !important;
-    color: #88ff88 !important;
-    border: 2px solid #88ff88 !important;
+    color: var(--telemetry-blue) !important;
+    border: 2px solid var(--telemetry-blue) !important;
     border-radius: 6px !important;
     padding: 10px !important;
     font-family: 'Consolas', monospace !important;
     font-size: 11px !important;
-    box-shadow: 0 0 20px rgba(0,255,0,0.4) !important;
+    box-shadow: 0 0 20px rgba(126, 200, 224, 0.4) !important;
 }
 
 .leaflet-popup-tip {
     background: #1a1a1a !important;
-    border: 2px solid #88ff88 !important;
+    border: 2px solid var(--telemetry-blue) !important;
 }
 
 .leaflet-popup-close-button {
-    color: #88ff88 !important;
+    color: var(--telemetry-blue) !important;
     font-size: 16px !important;
     font-weight: bold !important;
 }
 
-/* Marker personalizzato con animazione */
+/* Marker personalizzato minimal */
 .custom-marker {
     background: transparent !important;
-    font-size: 28px !important;
-    text-shadow: 0 0 15px #88ff88, 0 0 30px #00ff00 !important;
-    filter: drop-shadow(0 0 8px #88ff88) !important;
+    border: none !important;
+    font-size: 24px !important;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)) !important;
+    text-shadow: 0 0 8px var(--telemetry-blue) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    animation: pulse-marker 2s infinite !important;
+    transition: transform 0.2s !important;
 }
 
-@keyframes pulse-marker {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.3); opacity: 0.9; }
-    100% { transform: scale(1); opacity: 1; }
+.custom-marker:hover {
+    transform: scale(1.2) !important;
 }
 
 /* Assicura che la mappa occupi tutto lo spazio */
@@ -1302,6 +1314,19 @@ body {
 
 #mapContainer.leaflet-container {
     border: none !important;
+}
+
+/* Telemetry empty state */
+.telemetry-empty {
+    color: #888;
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+    background: #0a0a0a;
+    border: 1px solid #333;
+    margin: 10px;
+    border-radius: 4px;
+    font-size: 12px;
 }
 
 /* ============================================
@@ -1356,6 +1381,17 @@ body {
     padding: 4px;
     word-break: break-all;
     margin-top: 4px;
+}
+
+.lxmf-raw-ascii {
+    font-family: monospace;
+    font-size: 8px;
+    color: #ffff88;
+    background: #1a1a1a;
+    padding: 4px;
+    margin-top: 4px;
+    word-break: break-all;
+    border-left: 2px solid #ffff88;
 }
 
 /* Hint */
@@ -1428,71 +1464,7 @@ body {
     background: var(--border);
 }
 
-/* Media queries */
-@media (max-width: 768px) {
-    .lxmf-container {
-        flex-direction: column;
-    }
-    
-    .lxmf-peer-column {
-        width: 100%;
-        height: 300px;
-    }
-    
-    .lxmf-raw-monitor {
-        width: 100%;
-        height: 300px;
-    }
-    
-    .lxmf-message-column {
-        flex: none;
-        height: 400px;
-    }
-    
-    .lxmf-container.monitor-active .lxmf-message-column {
-        flex: none;
-    }
-}
-
-@media (max-width: 480px) {
-    .lxmf-header {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
-        padding: 10px;
-        min-height: auto;
-    }
-    
-    .identity-info {
-        justify-content: space-between;
-    }
-    
-    .back-button {
-        width: 100%;
-        text-align: center;
-    }
-    
-    .telemetry-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .telemetry-card.full-width {
-        grid-column: span 1;
-    }
-}
-
-.lxmf-raw-ascii {
-    font-family: monospace;
-    font-size: 8px;
-    color: #ffff88;
-    background: #1a1a1a;
-    padding: 4px;
-    margin-top: 4px;
-    word-break: break-all;
-    border-left: 2px solid #ffff88;
-}
-
-/* Stili compatti per telemetria */
+/* Stili legacy per retrocompatibilità */
 .telemetry-compact {
     font-family: monospace;
     font-size: 10px;
@@ -1525,110 +1497,7 @@ body {
     font-weight: bold;
 }
 
-.map-container {
-    width: 100%;
-    height: 200px;
-    border-radius: 3px;
-    border: 1px solid #333;
-    margin-top: 4px;
-}
-
-.raw-message {
-    font-family: monospace;
-    font-size: 11px;
-    padding: 4px;
-    background: #0a0a0a;
-    border-left: 2px solid #88ff88;
-    margin: 2px 0;
-    word-break: break-word;
-}
-
-.debug-panel {
-    position: fixed;
-    bottom: 10px;
-    right: 10px;
-    background: #111;
-    border: 2px solid #ff00ff;
-    color: #0f0;
-    padding: 8px;
-    font-family: monospace;
-    font-size: 10px;
-    max-width: 500px;
-    max-height: 300px;
-    overflow: auto;
-    z-index: 10000;
-    display: none;
-    box-shadow: 0 0 20px rgba(255,0,255,0.5);
-}
-
-.debug-button {
-    position: fixed;
-    bottom: 10px;
-    right: 10px;
-    z-index: 9999;
-    background: #222;
-    color: #ff00ff;
-    border: 2px solid #ff00ff;
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: bold;
-    cursor: pointer;
-    box-shadow: 0 0 10px rgba(255,0,255,0.5);
-}
-
-.debug-button:hover {
-    background: #ff00ff;
-    color: #000;
-}
-
-.message-telemetry {
-    background: #1a2a1a;
-    border-left: 3px solid #88ff88;
-    padding: 6px;
-    margin: 4px 0;
-    font-family: monospace;
-    font-size: 10px;
-    line-height: 1.4;
-}
-
-.message-telemetry-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
-.retry-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    margin-left: 8px;
-    background: #3a1e1e;
-    border: 1px solid #ff8888;
-    color: #ff8888;
-    border-radius: 4px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.retry-button:hover {
-    background: #4a2e2e;
-    border-color: #ffaaaa;
-    color: #ffaaaa;
-    transform: scale(1.05);
-}
-
-.retry-button:active {
-    transform: scale(0.95);
-}
-
-.lxmf-message-content.formatted {
-    white-space: pre-wrap;
-    font-family: monospace;
-    font-size: 11px;
-}
-
+/* Aspect badge */
 .aspect-badge-sidebar {
     background: #5a2e00;
     color: #ffaa00;
@@ -1642,4 +1511,67 @@ body {
     text-align: center;
     box-sizing: border-box;
     font-family: monospace;
+}
+
+/* Media queries */
+@media (max-width: 768px) {
+    .lxmf-container {
+        flex-direction: column;
+    }
+    
+    .lxmf-peer-column {
+        width: 100%;
+        height: 300px;
+    }
+    
+    .lxmf-raw-monitor {
+        width: 100%;
+        height: 300px;
+    }
+    
+    .lxmf-message-column {
+        flex: none;
+        height: 400px;
+    }
+    
+    .lxmf-container.monitor-active .lxmf-message-column {
+        flex: none;
+    }
+    
+    .position-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .map-controls {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .lxmf-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 10px;
+        min-height: auto;
+    }
+    
+    .identity-info {
+        justify-content: space-between;
+    }
+    
+    .back-button {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .position-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .movement-indicator {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
 }
