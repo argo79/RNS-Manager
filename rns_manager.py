@@ -17,6 +17,9 @@ import socket
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 
+# Importa il modulo monitor
+import modules.rns_monitor as rns_monitor
+
 app = Flask(__name__)
 
 # === PERCORSI CONFIGURATI DALL'UTENTE ===
@@ -55,197 +58,33 @@ os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 # ============================================
-# === CACHE PERSISTENTE PER ANNUNCI ===
+# === INIZIALIZZA MONITOR RNS ===
 # ============================================
 
-class PersistentAnnounceCache:
-    """Cache persistente su disco per annunci RNS"""
-    
-    def __init__(self, cache_file='announce_cache.json', save_interval=60, max_age_days=7, max_size=10000):
-        self.cache_file = os.path.join(CACHE_DIR, cache_file)
-        self.save_interval = save_interval
-        self.max_age = timedelta(days=max_age_days)
-        self.max_size = max_size
-        
-        # Cache in memoria
-        self.cache = []
-        self.lock = threading.Lock()
-        self.stats = {
-            'total_saved': 0,
-            'last_save': None,
-            'save_count': 0,
-            'load_count': 0
-        }
-        
-        # Carica cache esistente
-        self._load_cache()
-        
-        # Avvia thread di salvataggio automatico
-        self.running = True
-        self.save_thread = threading.Thread(target=self._auto_save, daemon=True)
-        self.save_thread.start()
-        
-        print(f"[Cache] Inizializzata: {self.cache_file}")
-        print(f"[Cache] {len(self.cache)} annunci caricati, salvataggio ogni {save_interval}s")
-    
-    def _load_cache(self):
-        """Carica cache dal disco all'avvio"""
-        try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'r') as f:
-                    data = json.load(f)
-                    
-                    # Filtra annunci vecchi
-                    now = time.time()
-                    self.cache = [
-                        item for item in data 
-                        if now - item.get('timestamp', 0) < self.max_age.total_seconds()
-                    ]
-                    
-                    # Ordina per timestamp (più recenti prima)
-                    self.cache.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
-                    
-                self.stats['load_count'] += 1
-                print(f"[Cache] Caricati {len(self.cache)} annunci storici (rimossi {len(data) - len(self.cache)} vecchi)")
-            else:
-                print(f"[Cache] Nessun file cache esistente, partenza vuota")
-        except Exception as e:
-            print(f"[Cache] Errore caricamento: {e}")
-            self.cache = []
-    
-    def add_announce(self, announce):
-        """Aggiunge annuncio alla cache"""
-        with self.lock:
-            # Aggiungi timestamp se mancante
-            if 'timestamp' not in announce:
-                announce['timestamp'] = time.time()
-            
-            # Evita duplicati (controlla packet_hash)
-            packet_hash = announce.get('packet_hash', '')
-            if packet_hash:
-                # Rimuovi eventuale duplicato esistente
-                self.cache = [a for a in self.cache if a.get('packet_hash') != packet_hash]
-            
-            # Inserisci in testa (più recente)
-            self.cache.insert(0, announce)
-            
-            # Limita dimensione
-            if len(self.cache) > self.max_size:
-                self.cache = self.cache[:self.max_size]
-            
-            self.stats['total_saved'] += 1
-    
-    def add_multiple(self, announces):
-        """Aggiunge multipli annunci alla cache"""
-        with self.lock:
-            for announce in announces:
-                if 'timestamp' not in announce:
-                    announce['timestamp'] = time.time()
-            
-            # Filtra duplicati
-            existing_packets = {a.get('packet_hash') for a in self.cache if a.get('packet_hash')}
-            new_announces = [a for a in announces if a.get('packet_hash') not in existing_packets]
-            
-            self.cache = new_announces + self.cache
-            self.cache = self.cache[:self.max_size]
-            self.stats['total_saved'] += len(new_announces)
-    
-    def _auto_save(self):
-        """Salva automaticamente ogni X secondi"""
-        while self.running:
-            time.sleep(self.save_interval)
-            self.save()
-    
-    def save(self):
-        """Salva cache su disco"""
-        try:
-            with self.lock:
-                # Crea copia per salvare
-                cache_copy = self.cache.copy()
-            
-            # Scrivi su file temporaneo poi rinomina (per evitare corruzione)
-            temp_file = f"{self.cache_file}.tmp"
-            with open(temp_file, 'w') as f:
-                json.dump(cache_copy, f, indent=2)
-            
-            # Rinomina file temporaneo
-            os.replace(temp_file, self.cache_file)
-            
-            self.stats['last_save'] = time.time()
-            self.stats['save_count'] += 1
-            
-            print(f"[Cache] Salvati {len(cache_copy)} annunci")
-            
-        except Exception as e:
-            print(f"[Cache] Errore salvataggio: {e}")
-    
-    def get_all(self, filter_func=None, limit=None, offset=0):
-        """Recupera annunci con filtro opzionale"""
-        with self.lock:
-            if filter_func:
-                filtered = [a for a in self.cache if filter_func(a)]
-            else:
-                filtered = self.cache.copy()
-        
-        if offset > 0 or limit is not None:
-            end = offset + limit if limit else None
-            return filtered[offset:end]
-        return filtered
-    
-    def get_stats(self):
-        """Restituisce statistiche cache"""
-        with self.lock:
-            # Calcola statistiche aggiuntive
-            if self.cache:
-                oldest = min((a.get('timestamp', 0) for a in self.cache), default=0)
-                newest = max((a.get('timestamp', 0) for a in self.cache), default=0)
-                aspects = {}
-                for a in self.cache:
-                    asp = a.get('aspect', 'unknown')
-                    aspects[asp] = aspects.get(asp, 0) + 1
-            else:
-                oldest = newest = 0
-                aspects = {}
-            
-            return {
-                'size': len(self.cache),
-                'max_size': self.max_size,
-                'oldest': oldest,
-                'newest': newest,
-                'age_days': (time.time() - oldest) / 86400 if oldest else 0,
-                'aspects': aspects,
-                'stats': self.stats,
-                'cache_file': self.cache_file
-            }
-    
-    def cleanup_old(self):
-        """Rimuove annunci vecchi"""
-        with self.lock:
-            now = time.time()
-            old_count = len(self.cache)
-            self.cache = [
-                a for a in self.cache 
-                if now - a.get('timestamp', 0) < self.max_age.total_seconds()
-            ]
-            removed = old_count - len(self.cache)
-            if removed:
-                print(f"[Cache] Rimossi {removed} annunci vecchi")
-                self.save()
-            return removed
-    
-    def clear(self):
-        """Pulisce tutta la cache"""
-        with self.lock:
-            self.cache = []
-            self.save()
-        print(f"[Cache] Cache pulita")
-    
-    def stop(self):
-        """Ferma thread e salva"""
-        self.running = False
-        self.save_thread.join(timeout=5)
-        self.save()
-        print(f"[Cache] Cache fermata")
+# ============================================
+# === INIZIALIZZA MONITOR RNS ===
+# ============================================
+
+# Crea istanza del monitor manager
+monitor_manager = rns_monitor.RNSMonitorManager(
+    socket_path=rns_monitor.SOCKET_PATH,
+    aspects=rns_monitor.RNS_ASPECTS,
+    cache_dir=CACHE_DIR,
+    max_history=1000
+)
+
+# Avvia processi
+monitor_manager.start_monitor_process()
+monitor_manager.start_listener()
+
+# Registra blueprint del monitor
+app.register_blueprint(rns_monitor.create_monitor_blueprint(monitor_manager))
+
+# Route di redirect per compatibilità con /monitor
+@app.route('/monitor')
+def redirect_monitor():
+    from flask import redirect
+    return redirect('/api/monitor')
 
 # ============================================
 # === CACHE IDENTITÀ (server-side) ===
@@ -306,652 +145,52 @@ class IdentityCache:
 # Inizializza cache identità
 identity_cache = IdentityCache(cache_duration=3600)  # 6 ore
 
-# ============================================
-# === ASPECTS DEFINITI UNA SOLA VOLTA ===
-# ============================================
-RNS_ASPECTS = [
-    "lxmf.delivery","nomadnetwork.node","lxst.telephony","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
-    "rnstransport.probe","rnstransport.info.blackhole","rnsh","rncp","rncp.receive","rnsh.listen","rnsh.default",
-    "rns_unit_tests.link.establish",
-    "rnstransport.discovery.interface",
-    "rnstransport.tunnel.synthesize",
-    "rnstransport.path.request",
-    "rnstransport.remote.management",    
-    "rnstransport.network.instance",
-    "rnstransport.network",
-    "example_utilities.minimalsample",
-    "example_utilities.echo.request",
-    "example_utilities.broadcast",
-    "example_utilities.bufferexample",
-    "example_utilities.channelexample",
-    "example_utilities.filetransfer.server",
-    "example_utilities.identifyexample",
-    "example_utilities.linkexample",
-    "example_utilities.ratchet.echo.request",
-    "example_utilities.requestexample",
-    "example_utilities.resourceexample",
-    "example_utilities.speedtest","discovery.interface",    
-]
 
 # ============================================
-# === MONITOR ANNUNCI RNS ===
-# ============================================
-
-SOCKET_PATH = "/tmp/rns_monitor.sock"
-announce_history = []
-MAX_HISTORY = 1000
-announce_counter = 0
-history_lock = threading.Lock()
-monitor_process = None
-announce_queue = queue.Queue(maxsize=1000)
-
-# Inizializza cache persistente
-announce_cache = PersistentAnnounceCache(
-    cache_file='announce_cache.json',
-    save_interval=60,      # Salva ogni minuto
-    max_age_days=7,         # Mantieni 7 giorni
-    max_size=10000          # Massimo 10000 annunci
-)
-
-def run_rns_monitor():
-    """Processo separato con il monitor RNS"""
-    import RNS
-    import socket
-    import json
-    import time
-    import os
-    import traceback
-    from datetime import datetime
-    
-    class AnnounceMonitor:
-        aspect_filter = None
-        receive_path_responses = False
-        
-        def __init__(self, sock):
-            self.count = 0
-            self.cache = {}  # identity_hash -> {dest_hash: aspect}
-            self.seen_packets = set()
-            self.socket = sock
-            # Usa gli ASPECT dalla variabile globale
-            self.ASPECTS = RNS_ASPECTS
-        
-        def send_announce(self, data):
-            """Invia annuncio via socket"""
-            try:
-                message = json.dumps(data) + "\n"
-                self.socket.send(message.encode('utf-8'))
-            except Exception as e:
-                pass
-        
-        def received_announce(self, destination_hash, announced_identity, app_data, announce_packet_hash):
-            try:
-                self.count += 1
-                ts = datetime.now().strftime("%H:%M:%S")
-                
-                dest_hex = destination_hash.hex()
-                packet_hex = announce_packet_hash.hex()[:32]
-                
-                # App data
-                app_text = ""
-                if app_data:
-                    try:
-                        text = app_data.decode('utf-8', errors='ignore').strip()
-                        if text:
-                            app_text = ' '.join(text.split())[:100]
-                    except:
-                        app_text = f"[{len(app_data)}b]"
-                
-                # Calcola aspect
-                aspect = "unknown"
-                identity_hash = ""
-                
-                if announced_identity:
-                    identity_hash = announced_identity.hash.hex()
-                    aspect = self._calculate_aspect_rnid(announced_identity, dest_hex)
-                
-                # Ottieni hops e interfaccia
-                hops = "?"
-                interface = "?"
-                
-                if RNS.Transport.has_path(destination_hash):
-                    entry = RNS.Transport.path_table.get(destination_hash)
-                    if entry:
-                        hops = str(entry[2])
-                        if entry[5]:
-                            iface_str = str(entry[5])
-                            if "[" in iface_str:
-                                interface = iface_str.split("[")[0]
-                            else:
-                                interface = iface_str[:20]
-                
-                # Output
-                print(f"[{ts}] #{self.count:04d} id: {identity_hash[:32] if identity_hash else '?'*32} dest: {dest_hex[:32]}... hops: {hops} aspect: {aspect} iface: {interface} data: '{app_text[:50]}'")
-                
-                # Prepara dati per Flask
-                announce_data = {
-                    'id': self.count,
-                    'time': ts,
-                    'timestamp': time.time(),
-                    'dest_hash': dest_hex,
-                    'dest_short': dest_hex[:16] + "...",
-                    'dest_full': dest_hex,
-                    'packet_hash': packet_hex,
-                    'packet_short': packet_hex[:16],
-                    'packet_full': packet_hex,
-                    'identity_hash': identity_hash,
-                    'identity_short': identity_hash[:32] if identity_hash else "?",
-                    'aspect': aspect,
-                    'hops': hops,
-                    'interface': interface,
-                    'data': app_text,
-                    'data_length': len(app_data) if app_data else 0,
-                    'has_identity': announced_identity is not None
-                }
-                
-                self.send_announce(announce_data)
-                
-            except Exception as e:
-                print(f"[MONITOR] Errore: {e}")
-        
-        def _calculate_aspect_rnid(self, identity, target_dest_hex):
-            """Calcola l'aspect per un dato identity e destination hash"""
-            identity_hash = identity.hash.hex()
-            
-            # Controlla cache
-            if identity_hash in self.cache:
-                if target_dest_hex in self.cache[identity_hash]:
-                    return self.cache[identity_hash][target_dest_hex]
-            
-            # Inizializza cache
-            if identity_hash not in self.cache:
-                self.cache[identity_hash] = {}
-            
-            # Prova ogni aspect
-            for aspect in self.ASPECTS:
-                try:
-                    parts = aspect.split(".")
-                    if len(parts) == 0:
-                        continue
-                    
-                    app_name = parts[0]
-                    aspect_parts = parts[1:] if len(parts) > 1 else []
-                    
-                    destination = RNS.Destination(
-                        identity,
-                        RNS.Destination.OUT,
-                        RNS.Destination.SINGLE,
-                        app_name,
-                        *aspect_parts
-                    )
-                    
-                    calculated_hex = destination.hash.hex()
-                    
-                    # Salva in cache
-                    self.cache[identity_hash][calculated_hex] = aspect
-                    
-                    # Controlla corrispondenza
-                    if calculated_hex == target_dest_hex:
-                        return aspect
-                        
-                except Exception:
-                    continue
-            
-            # Controlla se è l'identity hash stesso
-            if len(target_dest_hex) == 32:
-                if identity_hash.startswith(target_dest_hex[:len(identity_hash)]):
-                    return "identity_hash"
-            
-            return "unknown"
-    
-    # === SETUP SOCKET ===
-    try:
-        os.unlink(SOCKET_PATH)
-    except OSError:
-        pass
-    
-    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    server.bind(SOCKET_PATH)
-    server.listen(1)
-    os.chmod(SOCKET_PATH, 0o666)
-    
-    print("[MONITOR] In attesa di connessione Flask...")
-    
-    try:
-        client_socket, _ = server.accept()
-        print("[MONITOR] ✅ Connesso a Flask")
-        
-        print("[MONITOR] Avvio Reticulum...")
-        
-        # Disabilita signal handling
-        try:
-            import RNS._runtime
-            RNS._runtime.RNS_SIGNAL_HANDLING = False
-        except:
-            pass
-        
-        reticulum = RNS.Reticulum()
-        monitor = AnnounceMonitor(client_socket)
-        RNS.Transport.register_announce_handler(monitor)
-        
-        print("[MONITOR] ✅ In ascolto annunci...")
-        print("[MONITOR] " + "="*80)
-        
-        while True:
-            time.sleep(1)
-            
-    except Exception as e:
-        print(f"[MONITOR] ❌ Errore: {e}")
-        traceback.print_exc()
-    finally:
-        server.close()
-
-def start_monitor_process():
-    global monitor_process
-    try:
-        os.unlink(SOCKET_PATH)
-    except OSError:
-        pass
-    
-    monitor_process = multiprocessing.Process(
-        target=run_rns_monitor,
-        daemon=True
-    )
-    monitor_process.start()
-    print(f"[Flask] Monitor avviato (PID: {monitor_process.pid})")
-    time.sleep(2)
-    return True
-
-start_monitor_process()
-
-def socket_listener():
-    """Thread che ascolta gli annunci dal socket"""
-    global announce_counter, announce_history, announce_queue
-    
-    sock = None
-    buffer = ""
-    
-    print("[Flask] Connessione al monitor...")
-    
-    while True:
-        try:
-            if sock is None:
-                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                sock.settimeout(5)
-                sock.connect(SOCKET_PATH)
-                sock.settimeout(None)
-                print("[Flask] ✅ Connesso al monitor socket")
-            
-            data = sock.recv(16384).decode('utf-8')
-            if not data:
-                sock.close()
-                sock = None
-                time.sleep(2)
-                continue
-            
-            buffer += data
-            lines = buffer.split('\n')
-            buffer = lines[-1]
-            
-            for line in lines[:-1]:
-                if line.strip():
-                    try:
-                        announce = json.loads(line)
-                        with history_lock:
-                            announce_counter += 1
-                            announce['id'] = announce_counter
-                            announce_history.insert(0, announce)
-                            
-                            # Aggiungi alla cache persistente
-                            announce_cache.add_announce(announce)
-                            
-                            if len(announce_history) > MAX_HISTORY:
-                                announce_history.pop()
-                        
-                        try:
-                            announce_queue.put_nowait(announce)
-                        except queue.Full:
-                            pass
-                        
-                        print(f"[Flask] ✅ Annuncio #{announce_counter} - Aspect: {announce.get('aspect', 'unknown')}")
-                        
-                    except json.JSONDecodeError:
-                        continue
-                        
-        except (ConnectionRefusedError, FileNotFoundError):
-            if sock:
-                sock.close()
-                sock = None
-            time.sleep(2)
-        except Exception as e:
-            print(f"[Flask] Errore socket: {e}")
-            if sock:
-                sock.close()
-                sock = None
-            time.sleep(2)
-
-socket_thread = threading.Thread(target=socket_listener, daemon=True)
-socket_thread.start()
-time.sleep(1)
-
-# ============================================
-# === ROUTE MONITOR ===
-# ============================================
-
-@app.route('/monitor')
-def monitor_page():
-    return render_template('monitor.html')
-
-@app.route('/api/monitor/stats')
-def monitor_stats_api():
-    with history_lock:
-        cache_stats = announce_cache.get_stats()
-        
-        return jsonify({
-            'success': True,
-            'total_announces': announce_counter,
-            'history_size': len(announce_history),
-            'monitor_alive': monitor_process.is_alive() if monitor_process else False,
-            'unique_sources': len({a.get('identity_hash', '') for a in announce_history if a.get('identity_hash')}) if announce_history else 0,
-            'cache': cache_stats
-        })
-
-@app.route('/api/monitor/history')
-def monitor_history_api():
-    aspect_filter = request.args.get('aspect', 'all')
-    limit = int(request.args.get('limit', 100))
-    offset = int(request.args.get('offset', 0))
-    search = request.args.get('search', '').lower()
-    sort = request.args.get('sort', 'time_desc')
-    source = request.args.get('source', 'memory')  # 'memory' o 'cache'
-    
-    if source == 'cache':
-        # Usa cache persistente
-        def filter_func(a):
-            if aspect_filter != 'all':
-                if aspect_filter == 'unknown' and a.get('aspect') not in ['unknown', None]:
-                    return False
-                elif aspect_filter == 'known' and a.get('aspect') in ['unknown', None, 'identity_hash']:
-                    return False
-                elif aspect_filter not in ['all', 'unknown', 'known'] and a.get('aspect') != aspect_filter:
-                    return False
-            
-            if search:
-                return (search in a.get('dest_hash', '').lower() or
-                       search in a.get('identity_hash', '').lower() or
-                       search in a.get('aspect', '').lower() or
-                       search in a.get('data', '').lower())
-            return True
-        
-        filtered = announce_cache.get_all(filter_func)
-        total = len(filtered)
-        
-        # Ordina
-        sort_functions = {
-            'time_desc': (lambda x: x.get('timestamp', 0), True),
-            'time_asc': (lambda x: x.get('timestamp', 0), False),
-            'hops_desc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 0, True),
-            'hops_asc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 999, False),
-        }
-        key_func, reverse = sort_functions.get(sort, (lambda x: x.get('timestamp', 0), True))
-        filtered.sort(key=key_func, reverse=reverse)
-        
-        paginated = filtered[offset:offset + limit]
-        
-    else:
-        # Usa memoria (comportamento originale)
-        with history_lock:
-            filtered = announce_history.copy()
-        
-        # Filtra per aspect
-        if aspect_filter != 'all':
-            if aspect_filter == 'unknown':
-                filtered = [a for a in filtered if a.get('aspect') in ['unknown', None]]
-            elif aspect_filter == 'known':
-                filtered = [a for a in filtered if a.get('aspect') not in ['unknown', None] and a.get('aspect') != 'identity_hash']
-            else:
-                filtered = [a for a in filtered if a.get('aspect') == aspect_filter]
-        
-        # Filtra per search
-        if search:
-            filtered = [a for a in filtered if 
-                       search in a.get('dest_hash', '').lower() or
-                       search in a.get('identity_hash', '').lower() or
-                       search in a.get('aspect', '').lower() or
-                       search in a.get('data', '').lower()]
-        
-        # ORDINAMENTO
-        sort_functions = {
-            'time_asc': (lambda x: x.get('timestamp', 0), False),
-            'time_desc': (lambda x: x.get('timestamp', 0), True),
-            'hops_asc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 999, False),
-            'hops_desc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 0, True),
-            'aspect_asc': (lambda x: x.get('aspect', ''), False),
-            'aspect_desc': (lambda x: x.get('aspect', ''), True),
-            'identity_asc': (lambda x: x.get('identity_hash', ''), False),
-            'identity_desc': (lambda x: x.get('identity_hash', ''), True),
-        }
-        
-        key_func, reverse = sort_functions.get(sort, (lambda x: x.get('timestamp', 0), True))
-        filtered.sort(key=key_func, reverse=reverse)
-        
-        total = len(filtered)
-        paginated = filtered[offset:offset + limit]
-    
-    return jsonify({
-        'success': True,
-        'announces': paginated,
-        'total': total,
-        'source': source
-    })
-
-@app.route('/api/monitor/history/persistent')
-def persistent_history_api():
-    """Endpoint specifico per storico persistente"""
-    days = int(request.args.get('days', 7))
-    aspect = request.args.get('aspect', 'all')
-    limit = int(request.args.get('limit', 500))
-    offset = int(request.args.get('offset', 0))
-    
-    # Filtra per data
-    cutoff = time.time() - (days * 86400)
-    
-    def filter_func(a):
-        if a.get('timestamp', 0) < cutoff:
-            return False
-        if aspect != 'all' and a.get('aspect') != aspect:
-            return False
-        return True
-    
-    announces = announce_cache.get_all(filter_func, limit=limit, offset=offset)
-    total = len(announce_cache.get_all(filter_func))
-    
-    return jsonify({
-        'success': True,
-        'announces': announces,
-        'total': total,
-        'days': days,
-        'aspect': aspect
-    })
-
-@app.route('/api/monitor/stream')
-def monitor_stream():
-    def generate():
-        client_id = str(uuid.uuid4())[:8]
-        print(f"[SSE] Client {client_id} connesso")
-        
-        last_id = 0
-        with history_lock:
-            if announce_history:
-                for ann in reversed(announce_history[:10]):
-                    if ann['id'] > last_id:
-                        last_id = ann['id']
-                        yield f"data: {json.dumps(ann)}\n\n"
-        
-        while True:
-            try:
-                announce = announce_queue.get(timeout=30)
-                if announce['id'] > last_id:
-                    last_id = announce['id']
-                    yield f"data: {json.dumps(announce)}\n\n"
-                    print(f"[SSE] Inviato #{announce['id']} a {client_id}")
-            except queue.Empty:
-                yield ":\n\n"
-                continue
-            except GeneratorExit:
-                print(f"[SSE] Client {client_id} disconnesso")
-                break
-            except Exception as e:
-                print(f"[SSE] Errore: {e}")
-                time.sleep(1)
-    
-    return Response(
-        stream_with_context(generate()),
-        mimetype="text/event-stream",
-        headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
-            'Connection': 'keep-alive'
-        }
-    )
-
-@app.route('/api/monitor/clear', methods=['POST'])
-def monitor_clear_api():
-    global announce_history, announce_counter
-    with history_lock:
-        announce_history = []
-        announce_counter = 0
-        # SVUOTA LA CODA
-        while not announce_queue.empty():
-            try:
-                announce_queue.get_nowait()
-            except:
-                break
-    
-    # PULISCI CACHE
-    announce_cache.clear()
-    
-    # ELIMINA IL FILE DI CACHE
-    try:
-        cache_file = os.path.join(CACHE_DIR, 'announce_cache.json')
-        if os.path.exists(cache_file):
-            os.remove(cache_file)
-            print(f"[✓] File cache eliminato: {cache_file}")
-    except Exception as e:
-        print(f"[!] Errore eliminazione file: {e}")
-    
-    # RESETTA COMPLETAMENTE TUTTO
-    return jsonify({
-        'success': True,
-        'total_announces': 0,
-        'unique_sources': 0,
-        'message': 'TUTTO PULITO!'
-    })
-
-@app.route('/api/monitor/cache/clear', methods=['POST'])
-def monitor_cache_clear_api():
-    """Pulisce la cache persistente"""
-    announce_cache.clear()
-    return jsonify({'success': True, 'message': 'Cache persistente pulita'})
-
-@app.route('/api/monitor/cache/cleanup', methods=['POST'])
-def monitor_cache_cleanup_api():
-    """Rimuove annunci vecchi dalla cache"""
-    removed = announce_cache.cleanup_old()
-    return jsonify({
-        'success': True, 
-        'removed': removed,
-        'message': f'Rimossi {removed} annunci vecchi'
-    })
-
-@app.route('/api/monitor/cache/save', methods=['POST'])
-def monitor_cache_save_api():
-    """Salva forzatamente la cache"""
-    announce_cache.save()
-    return jsonify({'success': True, 'message': 'Cache salvata'})
-
-@app.route('/api/monitor/cache/stats')
-def monitor_cache_stats_api():
-    """Statistiche dettagliate cache"""
-    stats = announce_cache.get_stats()
-    return jsonify({
-        'success': True,
-        'stats': stats
-    })
-
-@app.route('/api/monitor/aspects')
-def monitor_aspects_api():
-    return jsonify({
-        'success': True,
-        'aspects': RNS_ASPECTS
-    })
-
-# ============================================
-# === NUOVA ROUTE RESET TOTALE ===
+# === ROUTE RESET TOTALE ===
 # ============================================
 
 @app.route('/api/monitor/reset-all', methods=['POST'])
 def monitor_reset_all():
-    """Reset TOTALE di tutti i contatori e dati"""
-    global announce_history, announce_counter
-    
+    """Reset totale di storico e cache"""
     try:
         print("\n" + "="*60)
-        print("🔄 RESET TOTALE IN CORSO...")
+        print("🔄 RESET TOTALE RICHIESTO")
         print("="*60)
         
-        # 1. Resetta contatori in memoria
-        with history_lock:
-            announce_history = []
-            announce_counter = 0
+        # Usa il monitor_manager per pulire tutto
+        monitor_manager.clear_all()
+        
+        # Pulisci anche la cache esplicitamente
+        if monitor_manager.announce_cache:
+            monitor_manager.announce_cache.clear()
             
-            # Svuota la coda
-            while not announce_queue.empty():
-                try:
-                    announce_queue.get_nowait()
-                except:
-                    break
-        
-        print("[✓] Memoria azzerata")
-        
-        # 2. Pulisci cache persistente
-        announce_cache.clear()
-        print("[✓] Cache in memoria pulita")
-        
-        # 3. Elimina fisicamente il file di cache
-        cache_file = os.path.join(CACHE_DIR, 'announce_cache.json')
-        if os.path.exists(cache_file):
-            os.remove(cache_file)
-            print(f"[✓] File cache eliminato: {cache_file}")
-        
-        # 4. Crea un file cache vuoto
-        with open(cache_file, 'w') as f:
-            json.dump([], f)
-        print(f"[✓] Nuovo file cache vuoto creato")
-        
-        # 5. Opzionale: resetta anche il monitor process (riavvia)
-        # Non necessario ma utile per sicurezza
-        # global monitor_process
-        # if monitor_process and monitor_process.is_alive():
-        #     monitor_process.terminate()
-        #     monitor_process.join(timeout=5)
-        # start_monitor_process()
+            # Elimina file cache
+            cache_file = monitor_manager.announce_cache.cache_file
+            if os.path.exists(cache_file):
+                os.remove(cache_file)
+                print(f"[✓] File cache eliminato: {cache_file}")
+            
+            # Crea file cache vuoto
+            with open(cache_file, 'w') as f:
+                json.dump([], f)
+            print(f"[✓] Nuovo file cache vuoto creato")
         
         print("="*60)
-        print("✅ RESET TOTALE COMPLETATO!")
+        print("✅ RESET TOTALE COMPLETATO")
         print("="*60 + "\n")
         
         return jsonify({
             'success': True,
             'message': 'Reset totale completato',
             'announces': 0,
-            'identities': 0,
-            'timestamp': time.time()
+            'identities': 0
         })
         
     except Exception as e:
         print(f"[!] Errore durante reset: {e}")
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': str(e)
         })
 
@@ -1088,7 +327,7 @@ def list_identities():
                                             break
                             
                             # Limita a 10 aspect per performance
-                            aspects_to_check = RNS_ASPECTS[:5]
+                            aspects_to_check = rns_monitor.RNS_ASPECTS[:5]
                             for aspect in aspects_to_check:
                                 try:
                                     hash_result = subprocess.run(
@@ -1429,7 +668,7 @@ def get_identity_info():
         
         aspect_hashes = {}
         
-        if aspect and aspect in RNS_ASPECTS:
+        if aspect and aspect in rns_monitor.RNS_ASPECTS:
             hash_result = subprocess.run(
                 ['rnid', '-i', identity_path, '-H', aspect],
                 capture_output=True,
@@ -1625,7 +864,7 @@ def rns_probe_aspect():
         if not identity_path or not os.path.exists(identity_path):
             return jsonify({'success': False, 'error': 'Identità non trovata'})
         
-        if aspect not in RNS_ASPECTS:
+        if aspect not in rns_monitor.RNS_ASPECTS:
             return jsonify({'success': False, 'error': f'Aspect non valido: {aspect}'})
         
         # Prima ottieni l'hash dell'aspect
@@ -1780,13 +1019,6 @@ if __name__ == '__main__':
         app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
         print("\n🛑 Arresto server...")
-        # Ferma cache
-        announce_cache.stop()
-        if monitor_process and monitor_process.is_alive():
-            monitor_process.terminate()
-            monitor_process.join(timeout=5)
-        try:
-            os.unlink(SOCKET_PATH)
-        except:
-            pass
+        # Ferma monitor manager
+        monitor_manager.stop()
         print("✅ Server fermato")

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LXMF Debug Monitor</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { 
+            font-family: 'Consolas', monospace; 
+            background: #0a0a0a; 
+            color: #00ff00; 
+            padding: 20px;
+            margin: 0;
+        }
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #008800;
+            padding-bottom: 10px;
+        }
+        h1 { 
+            color: #00ff00; 
+            font-size: 20px;
+            margin: 0;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        button { 
+            background: #1a1a1a; 
+            color: #00ff00; 
+            border: 1px solid #008800; 
+            padding: 8px 15px; 
+            cursor: pointer; 
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+        }
+        button:hover { 
+            background: #00ff00; 
+            color: #0a0a0a; 
+        }
+        .event { 
+            border: 1px solid #333; 
+            margin-bottom: 10px; 
+            padding: 10px;
+            background: #111;
+        }
+        .timestamp { 
+            color: #8888ff; 
+            font-size: 11px; 
+            display: inline-block;
+            width: 80px;
+        }
+        .type { 
+            color: #88ff88; 
+            font-weight: bold; 
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .data { 
+            color: #ffaa00; 
+            margin-left: 90px; 
+            font-size: 11px; 
+            white-space: pre-wrap; 
+            background: #1a1a1a;
+            padding: 8px;
+            border-left: 2px solid #335533;
+            margin-top: 5px;
+        }
+        .stats {
+            color: #008800;
+            font-size: 11px;
+            margin-bottom: 10px;
+        }
+        .warning {
+            color: #ff8888;
+        }
+        .success {
+            color: #88ff88;
+        }
+        .info {
+            color: #8888ff;
+        }
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            color: #333;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 LXMF DEBUG MONITOR</h1>
+        <div class="controls">
+            <button onclick="refresh()">🔄 Aggiorna</button>
+            <button onclick="autoRefresh = !autoRefresh; this.innerHTML = autoRefresh ? '⏸️ Pausa' : '▶️ Resume'">⏸️ Pausa</button>
+            <button onclick="clearDebug()">🗑️ Pulisci</button>
+            <button onclick="window.location.href='/chat'">📨 Chat</button>
+        </div>
+    </div>
+    
+    <div class="stats" id="stats"></div>
+    <div id="events"></div>
+    <div class="footer">LXMF Debug Monitor - Real-time event tracking</div>
+
+    <script>
+        let autoRefresh = true;
+        let lastEventCount = 0;
+
+        async function loadDebug() {
+            try {
+                const r = await fetch('/api/debug');
+                const events = await r.json();
+                
+                document.getElementById('stats').innerHTML = `📊 Eventi: ${events.length} (ultimi 100)`;
+                
+                if (events.length === 0) {
+                    document.getElementById('events').innerHTML = '<div class="event">Nessun evento registrato</div>';
+                    return;
+                }
+                
+                let html = '';
+                events.slice().reverse().forEach(e => {
+                    const time = new Date(e.timestamp * 1000).toLocaleTimeString();
+                    
+                    // Determina classe CSS in base al tipo
+                    let typeClass = '';
+                    if (e.type.includes('error') || e.type.includes('failed')) {
+                        typeClass = 'warning';
+                    } else if (e.type.includes('success') || e.type.includes('delivered') || e.type.includes('sent')) {
+                        typeClass = 'success';
+                    } else {
+                        typeClass = 'info';
+                    }
+                    
+                    html += `
+                        <div class="event">
+                            <span class="timestamp">[${time}]</span>
+                            <span class="type ${typeClass}">${e.type}</span>
+                            <div class="data">${JSON.stringify(e.data, null, 2)}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('events').innerHTML = html;
+                
+                if (events.length > lastEventCount) {
+                    // Nuovo evento, scroll in basso
+                    window.scrollTo(0, document.body.scrollHeight);
+                }
+                lastEventCount = events.length;
+                
+            } catch (e) {
+                console.error('Debug error:', e);
+                document.getElementById('events').innerHTML = `<div class="event warning">❌ Errore caricamento debug: ${e.message}</div>`;
+            }
+        }
+
+        async function clearDebug() {
+            await fetch('/api/debug/clear', {method: 'POST'});
+            lastEventCount = 0;
+            loadDebug();
+        }
+
+        function refresh() {
+            loadDebug();
+        }
+
+        // Auto refresh
+        setInterval(() => {
+            if (autoRefresh) {
+                loadDebug();
+            }
+        }, 1000);
+
+        // Load initial
+        loadDebug();
+    </script>
+</body>
+</html>

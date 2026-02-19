@@ -3,9 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>RNS • monitor</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="/static/rns_monitor.css">
+    <style>
+        /* Stili aggiuntivi per i dati radio */
+        .rssi-good { color: #88ff88; }
+        .rssi-ok { color: #ffff88; }
+        .rssi-poor { color: #ff8888; }
+        .snr-good { color: #88ff88; }
+        .snr-ok { color: #ffff88; }
+        .snr-poor { color: #ff8888; }
+        .q-good { color: #88ff88; }
+        .q-ok { color: #ffff88; }
+        .q-poor { color: #ff8888; }
+        .radio-data { font-family: monospace; font-size: 11px; }
+        
+        /* Stili per hop */
+        .badge-local {
+            background: #2a2a00;
+            color: #ffffaa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .badge-hop1 {
+            background: #1a3a1a;
+            color: #aaffaa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+        }
+        
+        .sort-indicator {
+            margin-left: 4px;
+            font-size: 10px;
+        }
+
+        /* Stili per colonne cliccabili */
+        th[onclick] {
+            cursor: pointer;
+            user-select: none;
+        }
+        th[onclick]:hover {
+            background: #333;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -22,7 +70,7 @@
         <div style="margin: 20px 0; display: flex; gap: 20px; align-items: center;">
             <div class="stats">
                 <span id="status" class="status offline"></span>
-                <span id="total-announces">0</span> annunci · <span id="unique-sources">0</span> identità uniche
+                <span id="total-announces">0</span> annunci · <span id="unique-sources">0</span> identità uniche · <span id="cache-size-indicator">0</span> in cache
             </div>
             <div style="flex:1;"></div>
             <div class="cache-controls" style="display: flex; gap: 10px; align-items: center;">
@@ -31,8 +79,7 @@
                     <option value="memory">📱 memoria (ultimi 1000)</option>
                     <option value="cache">💾 disco (ultimi 7 giorni)</option>
                 </select>
-                <button class="btn" id="cache-clear-btn" style="background:#331100; color:#ffaa66; font-size:11px; padding:4px 8px;">pulisci cache</button>
-                <button class="btn" id="cache-save-btn" style="background:#113311; color:#88ff88; font-size:11px; padding:4px 8px;">salva ora</button>
+                <button class="btn" id="reset-all-btn" style="background:#550000; color:#ffaa00; font-size:11px; padding:4px 8px;">🔄 RESET TOTALE</button>
             </div>
         </div>
 
@@ -40,7 +87,6 @@
             <div class="tab-main active" data-view="live">📡 live</div>
             <div class="tab-main" data-view="identities">🆔 identità</div>
             <div class="tab-main" data-view="stats">📊 statistiche</div>
-            <div class="tab-main" data-view="cache">💾 cache storage</div>
         </div>
 
         <div id="view-live" class="view active">
@@ -52,19 +98,6 @@
             
             <div class="filters">
                 <div class="filter-group">
-                    <label>ordina</label>
-                    <select id="sort-select">
-                        <option value="time_desc">⏱ più recente</option>
-                        <option value="time_asc">⏱ meno recente</option>
-                        <option value="hops_asc">📶 hops ↑</option>
-                        <option value="hops_desc">📶 hops ↓</option>
-                        <option value="aspect_asc">🏷 aspect a→z</option>
-                        <option value="aspect_desc">🏷 aspect z→a</option>
-                        <option value="identity_asc">🆔 identità a→z</option>
-                        <option value="identity_desc">🆔 identità z→a</option>
-                    </select>
-                </div>
-                <div class="filter-group">
                     <label>mostra</label>
                     <select id="limit-select">
                         <option value="50">50</option>
@@ -75,28 +108,27 @@
                 <div class="filter-group">
                     <label>cerca</label>
                     <input type="text" id="search-input" placeholder="hash/aspect/dati" style="width: 180px;">
-                    <button class="clear-search-btn" onclick="clearSearch()" title="Pulisci ricerca">✕</button>
-                </div>
-                <div style="flex:1; text-align:right; display: flex; gap: 10px; justify-content: flex-end;">
-                    <button class="btn" id="clear-btn" style="background:#330000; color:#ff6666;">pulisci storico</button>
-                    <button class="btn" id="clear-all-btn" style="background:#550000; color:#ffaa00;">🔄 reset completo</button>
+                    <button class="clear-search-btn" onclick="document.getElementById('search-input').value=''; state.search=''; state.page=1; loadHistory();" title="Pulisci ricerca">✕</button>
                 </div>
             </div>
 
             <table class="table" id="announce-table">
                 <thead>
                     <tr>
-                        <th style="width:8%" data-sort="time">⏱ tempo</th>
-                        <th style="width:20%" data-sort="identity">🆔 identità</th>
-                        <th style="width:20%" data-sort="dest">🎯 destinazione</th>
-                        <th style="width:17%" data-sort="aspect">🏷 aspect</th>
-                        <th style="width:5%" data-sort="hops">📶 hops</th>
-                        <th style="width:10%" data-sort="iface">🌐 iface</th>
-                        <th style="width:20%" data-sort="data">💬 dati</th>
+                        <th style="width:5%" onclick="setSort('time')">⏱ tempo<span id="sort-indicator-time" class="sort-indicator"></span></th>
+                        <th style="width:13%" onclick="setSort('identity')">🆔 identità <span id="sort-indicator-identity" class="sort-indicator"></span></th>
+                        <th style="width:13%" onclick="setSort('dest')">🎯 destinazione <span id="sort-indicator-dest" class="sort-indicator"></span></th>
+                        <th style="width:15%" onclick="setSort('aspect')">🏷 aspect <span id="sort-indicator-aspect" class="sort-indicator"></span></th>
+                        <th style="width:5%" onclick="setSort('hops')">📶 hops<span id="sort-indicator-hops" class="sort-indicator"></span></th>
+                        <th style="width:5%" onclick="setSort('rssi')">📡 RSSI<span id="sort-indicator-rssi" class="sort-indicator"></span></th>
+                        <th style="width:5%" onclick="setSort('snr')">📊 SNR<span id="sort-indicator-snr" class="sort-indicator"></span></th>
+                        <th style="width:5%" onclick="setSort('q')">⚡ Q<span id="sort-indicator-q" class="sort-indicator"></span></th>
+                        <th style="width:8%" onclick="setSort('iface')">🌐 iface <span id="sort-indicator-iface" class="sort-indicator"></span></th>
+                        <th style="width:17%" onclick="setSort('data')">💬 dati <span id="sort-indicator-data" class="sort-indicator"></span></th>
                     </tr>
                 </thead>
                 <tbody id="announce-body">
-                    <tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">⏳ in attesa di annunci...</td></tr>
+                    <tr><td colspan="10" style="text-align:center; padding:40px; color:var(--dim);">⏳ in attesa di annunci...</td></tr>
                 </tbody>
             </table>
 
@@ -131,7 +163,7 @@
                 </div>
                 <div class="search-identity" style="display: flex; gap: 5px;">
                     <input type="text" id="identity-search-input" class="identity-search-input" placeholder="🔍 cerca identità...">
-                    <button class="clear-search-btn" onclick="clearIdentitySearch()" title="Pulisci ricerca">✕</button>
+                    <button class="clear-search-btn" onclick="document.getElementById('identity-search-input').value=''; state.identitySearch=''; renderIdentities();" title="Pulisci ricerca">✕</button>
                 </div>
                 <span style="flex:1; text-align:right; color:var(--dim);" id="identity-count">0 identità</span>
             </div>
@@ -163,38 +195,6 @@
             
             <h3 style="font-size:12px; margin:20px 0 10px; font-weight:normal; color:var(--dim);">top identità</h3>
             <div id="stats-identities" class="grid-2" style="grid-template-columns:repeat(auto-fill, minmax(300px,1fr));"></div>
-        </div>
-
-        <div id="view-cache" class="view">
-            <h2 style="font-size:16px; margin-bottom:20px;">💾 Cache Storage</h2>
-            
-            <div class="grid-2" style="margin-bottom:30px;">
-                <div class="stat-card" id="cache-size-card">
-                    <div class="stat-number" id="cache-size">0</div>
-                    <div class="stat-label">annunci in cache</div>
-                </div>
-                <div class="stat-card" id="cache-age-card">
-                    <div class="stat-number" id="cache-age">0</div>
-                    <div class="stat-label">giorni di storico</div>
-                </div>
-                <div class="stat-card" id="cache-saves-card">
-                    <div class="stat-number" id="cache-saves">0</div>
-                    <div class="stat-label">salvataggi</div>
-                </div>
-                <div class="stat-card" id="cache-file-card">
-                    <div class="stat-number" id="cache-file">-</div>
-                    <div class="stat-label">file cache</div>
-                </div>
-            </div>
-
-            <h3 style="font-size:12px; margin:20px 0 10px; font-weight:normal; color:var(--dim);">distribuzione aspect in cache</h3>
-            <div id="cache-aspects" class="grid-2" style="grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); margin-bottom:30px;"></div>
-
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button class="btn" id="cache-refresh-stats" style="background:#1a1a1a;">⟳ aggiorna statistiche</button>
-                <button class="btn" id="cache-cleanup-old" style="background:#331100; color:#ffaa66;">🧹 pulizia vecchi (>7gg)</button>
-                <button class="btn" id="cache-export" style="background:#113311; color:#88ff88;">📤 esporta cache</button>
-            </div>
         </div>
     </div>
 
@@ -231,6 +231,18 @@
             "example_utilities.speedtest","discovery.interface",
         ];
 
+        // ============================================
+        // === STATO MODALE PER I COMANDI ===
+        // ============================================
+        
+        const modalState = {
+            visible: false,
+            identityHash: '',
+            aspectHash: '',
+            aspect: '',
+            identityPath: null
+        };
+
         const state = {
             view: 'live',
             aspect: 'all',
@@ -245,37 +257,202 @@
             identitySort: 'count_desc',
             cacheSource: 'memory',
             resetting: false,
-            eventSource: null  // Per tracciare la connessione SSE
+            eventSource: null,
+            backendStats: { total: 0, unique: 0, cacheSize: 0 },
+            reconnectAttempt: 1,
+            connecting: false
         };
 
         // ============================================
-        // === MODAL STATE ===
+        // === FUNZIONI ORDINAMENTO COLONNE ===
         // ============================================
-        
-        const modalState = {
-            visible: false,
-            identityHash: '',
-            aspectHash: '',
-            aspect: '',
-            identityPath: null
-        };
+
+        function setSort(field) {
+            const currentSort = state.sort;
+            let direction = 'desc';
+            
+            if (currentSort.startsWith(field)) {
+                if (currentSort.endsWith('_desc')) {
+                    direction = 'asc';
+                } else if (currentSort.endsWith('_asc')) {
+                    direction = 'desc';
+                }
+            }
+            
+            state.sort = `${field}_${direction}`;
+            state.page = 1;
+            
+            updateSortIndicators();
+            loadHistory();
+        }
+
+        function updateSortIndicators() {
+            const indicators = {
+                time: document.getElementById('sort-indicator-time'),
+                identity: document.getElementById('sort-indicator-identity'),
+                dest: document.getElementById('sort-indicator-dest'),
+                aspect: document.getElementById('sort-indicator-aspect'),
+                hops: document.getElementById('sort-indicator-hops'),
+                rssi: document.getElementById('sort-indicator-rssi'),
+                snr: document.getElementById('sort-indicator-snr'),
+                q: document.getElementById('sort-indicator-q'),
+                iface: document.getElementById('sort-indicator-iface'),
+                data: document.getElementById('sort-indicator-data')
+            };
+            
+            Object.values(indicators).forEach(ind => {
+                if (ind) ind.innerHTML = '';
+            });
+            
+            const [field, dir] = state.sort.split('_');
+            if (indicators[field]) {
+                indicators[field].innerHTML = dir === 'desc' ? '▼' : '▲';
+            }
+        }
 
         // ============================================
         // === FUNZIONI DI UTILITÀ ===
         // ============================================
 
-        function clearSearch() {
-            document.getElementById('search-input').value = '';
-            state.search = '';
-            state.page = 1;
-            loadHistory();
+        function decodeUTF8(str) {
+            if (!str) return '';
+            try {
+                return decodeURIComponent(escape(str));
+            } catch(e) {
+                return str;
+            }
         }
 
-        function clearIdentitySearch() {
-            document.getElementById('identity-search-input').value = '';
-            state.identitySearch = '';
-            renderIdentities();
+        function formatRate(rateHz) {
+            if (rateHz >= 1) return rateHz.toFixed(2) + ' Hz';
+            if (rateHz >= 0.001) return (rateHz * 1000).toFixed(1) + ' mHz';
+            if (rateHz > 0) return (rateHz * 1000000).toFixed(0) + ' µHz';
+            return '—';
         }
+
+        function formatPeriod(periodSeconds) {
+            if (periodSeconds >= 3600) return (periodSeconds / 3600).toFixed(1) + ' h';
+            if (periodSeconds >= 60) return (periodSeconds / 60).toFixed(1) + ' min';
+            if (periodSeconds >= 1) return periodSeconds.toFixed(1) + ' s';
+            if (periodSeconds > 0) return (periodSeconds * 1000).toFixed(0) + ' ms';
+            return '—';
+        }
+
+        function isActive(timestamp) {
+            const now = Date.now() / 1000;
+            return (now - timestamp) < INACTIVE_TIMEOUT;
+        }
+
+        function getRSSIClass(rssi) {
+            if (rssi === null || rssi === undefined) return '';
+            if (rssi > -70) return 'rssi-good';
+            if (rssi > -85) return 'rssi-ok';
+            return 'rssi-poor';
+        }
+
+        function getSNRClass(snr) {
+            if (snr === null || snr === undefined) return '';
+            if (snr > 15) return 'snr-good';
+            if (snr > 5) return 'snr-ok';
+            return 'snr-poor';
+        }
+
+        function getQClass(q) {
+            if (q === null || q === undefined) return '';
+            if (q > 80) return 'q-good';
+            if (q > 50) return 'q-ok';
+            return 'q-poor';
+        }
+
+        // ============================================
+        // === FUNZIONI DI ORDINAMENTO TABELLA ===
+        // ============================================
+
+        function getNumericHops(hopText) {
+            if (hopText === '🏠 locale') return 0;
+            if (hopText === '?') return 999;
+            const num = parseInt(hopText);
+            return isNaN(num) ? 999 : num;
+        }
+
+        function sortTableByState() {
+            const tbody = document.getElementById('announce-body');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            if (rows.length === 0 || rows[0].innerHTML.includes('nessun annuncio')) return;
+            
+            const [field, direction] = state.sort.split('_');
+            const dir = direction === 'desc' ? -1 : 1;
+            
+            rows.sort((a, b) => {
+                const cellsA = a.querySelectorAll('td');
+                const cellsB = b.querySelectorAll('td');
+                
+                if (cellsA.length < 10 || cellsB.length < 10) return 0;
+                
+                switch(field) {
+                    case 'time': {
+                        const timeA = cellsA[0]?.textContent || '';
+                        const timeB = cellsB[0]?.textContent || '';
+                        return dir * timeB.localeCompare(timeA);
+                    }
+                    case 'identity': {
+                        const idA = cellsA[1]?.textContent || '';
+                        const idB = cellsB[1]?.textContent || '';
+                        return dir * idA.localeCompare(idB);
+                    }
+                    case 'dest': {
+                        const destA = cellsA[2]?.textContent || '';
+                        const destB = cellsB[2]?.textContent || '';
+                        return dir * destA.localeCompare(destB);
+                    }
+                    case 'aspect': {
+                        const aspectA = cellsA[3]?.textContent || '';
+                        const aspectB = cellsB[3]?.textContent || '';
+                        return dir * aspectA.localeCompare(aspectB);
+                    }
+                    case 'hops': {
+                        const hopsA = getNumericHops(cellsA[4]?.textContent);
+                        const hopsB = getNumericHops(cellsB[4]?.textContent);
+                        return dir * (hopsA - hopsB);
+                    }
+                    case 'rssi': {
+                        const rssiA = parseFloat(cellsA[5]?.textContent) || -999;
+                        const rssiB = parseFloat(cellsB[5]?.textContent) || -999;
+                        return dir * (rssiA - rssiB);
+                    }
+                    case 'snr': {
+                        const snrA = parseFloat(cellsA[6]?.textContent) || -999;
+                        const snrB = parseFloat(cellsB[6]?.textContent) || -999;
+                        return dir * (snrA - snrB);
+                    }
+                    case 'q': {
+                        const qA = parseFloat(cellsA[7]?.textContent) || 0;
+                        const qB = parseFloat(cellsB[7]?.textContent) || 0;
+                        return dir * (qA - qB);
+                    }
+                    case 'iface': {
+                        const ifaceA = cellsA[8]?.textContent || '';
+                        const ifaceB = cellsB[8]?.textContent || '';
+                        return dir * ifaceA.localeCompare(ifaceB);
+                    }
+                    case 'data': {
+                        const dataA = cellsA[9]?.textContent || '';
+                        const dataB = cellsB[9]?.textContent || '';
+                        return dir * dataA.localeCompare(dataB);
+                    }
+                    default:
+                        return 0;
+                }
+            });
+            
+            tbody.innerHTML = '';
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // ============================================
+        // === FUNZIONI MODAL (PROBE, PATH, BLACKHOLE) ===
+        // ============================================
 
         function showIdentityInTab(identityHash) {
             document.querySelectorAll('.tab-main').forEach(t => t.classList.remove('active'));
@@ -286,22 +463,7 @@
             
             document.getElementById('identity-search-input').value = identityHash;
             state.identitySearch = identityHash;
-            
             renderIdentities();
-            
-            setTimeout(() => {
-                const identityGroups = document.querySelectorAll('.identity-group');
-                identityGroups.forEach(group => {
-                    const header = group.querySelector('.identity-header');
-                    const hashSpan = group.querySelector('.identity-hash');
-                    if (hashSpan && hashSpan.textContent.includes(identityHash.slice(0, 32))) {
-                        if (!header.classList.contains('expanded')) {
-                            header.click();
-                        }
-                        group.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                });
-            }, 500);
         }
 
         function hideAspectModal() {
@@ -314,65 +476,38 @@
 
         function executeRnsCommand(command, destination, aspect = null) {
             const outputDiv = document.getElementById('modal-output');
-            if (!outputDiv) {
-                console.error('outputDiv non trovato');
-                return;
-            }
+            if (!outputDiv) return;
             
             outputDiv.innerHTML = '⏳ Esecuzione in corso...';
             outputDiv.style.color = '#88ff88';
             
-            console.log(`[DEBUG] Eseguo ${command} per:`, destination);
-            
             if (command === 'path') {
-                const url = `/api/rns/paths?dest=${encodeURIComponent(destination)}`;
-                console.log('[DEBUG] Fetch URL:', url);
-                
-                fetch(url)
-                    .then(response => {
-                        console.log('[DEBUG] Response status:', response.status);
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
+                fetch(`/api/rns/paths?dest=${encodeURIComponent(destination)}`)
+                    .then(response => response.json())
                     .then(data => {
-                        console.log('[DEBUG] Response data:', data);
-                        
                         if (data.success) {
                             let output = data.output || '';
-                            
-                            // Cerca la linea che contiene "Path found"
                             const lines = output.split('\n');
                             let cleanOutput = '';
                             
                             for (let i = lines.length - 1; i >= 0; i--) {
-                                const line = lines[i];
-                                if (line.includes('Path found')) {
-                                    cleanOutput = line;
+                                if (lines[i].includes('Path found')) {
+                                    cleanOutput = lines[i];
                                     break;
                                 }
                             }
                             
                             if (cleanOutput) {
-                                // Pulisci dai caratteri di controllo
                                 cleanOutput = cleanOutput
-                                    .replace(/.\u0008/g, '')  // Rimuovi backspace + carattere
-                                    .replace(/[\u2800-\u28FF]/g, '')  // Rimuovi caratteri Braille
-                                    .replace(/\s+/g, ' ')  // Normalizza spazi
-                                    .trim();
-                                
-                                // ESCAPE DEI CARATTERI HTML PER VISUALIZZARE CORRETTAMENTE <>
-                                cleanOutput = cleanOutput
+                                    .replace(/.\u0008/g, '')
+                                    .replace(/[\u2800-\u28FF]/g, '')
+                                    .replace(/\s+/g, ' ')
+                                    .trim()
                                     .replace(/&/g, '&amp;')
                                     .replace(/</g, '&lt;')
-                                    .replace(/>/g, '&gt;')
-                                    .replace(/"/g, '&quot;')
-                                    .replace(/'/g, '&#039;');
-                                
+                                    .replace(/>/g, '&gt;');
                                 outputDiv.innerHTML = cleanOutput;
                             } else {
-                                // Se non trovi "Path found", mostra tutto l'output
                                 output = output
                                     .replace(/.\u0008/g, '')
                                     .replace(/[\u2800-\u28FF]/g, '')
@@ -380,11 +515,8 @@
                                     .trim()
                                     .replace(/&/g, '&amp;')
                                     .replace(/</g, '&lt;')
-                                    .replace(/>/g, '&gt;')
-                                    .replace(/"/g, '&quot;')
-                                    .replace(/'/g, '&#039;');
-                                
-                                outputDiv.innerHTML = output || '✅ Comando eseguito (nessun output)';
+                                    .replace(/>/g, '&gt;');
+                                outputDiv.innerHTML = output || '✅ Comando eseguito';
                             }
                         } else {
                             outputDiv.innerHTML = `❌ Errore: ${data.error || 'Comando fallito'}`;
@@ -392,11 +524,9 @@
                         }
                     })
                     .catch(err => {
-                        console.error('[DEBUG] Fetch error:', err);
-                        outputDiv.innerHTML = `❌ Errore di connessione: ${err.message}`;
+                        outputDiv.innerHTML = `❌ Errore: ${err.message}`;
                         outputDiv.style.color = '#ff6666';
                     });
-                    
             } else if (command === 'probe') {
                 fetch('/api/rns/probe', {
                     method: 'POST',
@@ -406,52 +536,35 @@
                         aspect: aspect || 'rnstransport.probe'
                     })
                 })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
+                    .then(response => response.json())
                     .then(data => {
-                        console.log('[DEBUG] Probe response:', data);
-                        
                         if (data.success) {
                             let output = data.output || '';
-                            
-                            // Pulisci l'output
                             output = output
-                                .replace(/.\u0008/g, '')  // backspace
-                                .replace(/[\u2800-\u28FF]/g, '')  // caratteri braille
+                                .replace(/.\u0008/g, '')
+                                .replace(/[\u2800-\u28FF]/g, '')
                                 .split('\n')
                                 .filter(line => line.trim() && !line.includes('Sent probe'))
                                 .join('\n')
-                                .trim();
-                            
-                            // Escape HTML
-                            output = output
+                                .trim()
                                 .replace(/&/g, '&amp;')
                                 .replace(/</g, '&lt;')
-                                .replace(/>/g, '&gt;')
-                                .replace(/"/g, '&quot;')
-                                .replace(/'/g, '&#039;');
-                            
-                            outputDiv.innerHTML = output || '✅ Probe inviato (nessuna risposta)';
+                                .replace(/>/g, '&gt;');
+                            outputDiv.innerHTML = output || '✅ Probe inviato';
                         } else {
-                            outputDiv.innerHTML = `❌ Errore probe: ${data.error || 'Fallito'}`;
+                            outputDiv.innerHTML = `❌ Errore: ${data.error}`;
                             outputDiv.style.color = '#ff6666';
                         }
                     })
                     .catch(err => {
-                        console.error('[DEBUG] Probe error:', err);
                         outputDiv.innerHTML = `❌ Errore: ${err.message}`;
                         outputDiv.style.color = '#ff6666';
                     });
             } else if (command === 'blackhole') {
-                // destination qui è l'identityHash, non l'aspect hash
                 fetch('/api/rns/paths/blackhole', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ destination: destination })  // destination = identityHash
+                    body: JSON.stringify({ destination: destination })
                 })
                     .then(res => res.json())
                     .then(data => {
@@ -467,8 +580,7 @@
                                 .replace(/&/g, '&amp;')
                                 .replace(/</g, '&lt;')
                                 .replace(/>/g, '&gt;');
-                            
-                            outputDiv.innerHTML = output || '✅ Nessun blackhole trovato per questa identità';
+                            outputDiv.innerHTML = output || '✅ Nessun blackhole trovato';
                         } else {
                             outputDiv.innerHTML = `❌ Errore: ${data.error}`;
                         }
@@ -552,12 +664,10 @@
                 actionsDiv.appendChild(probeBtn);
             }
             
-            // Per rnstransport.info.blackhole - comando speciale rnpath -p
             if (aspect === 'rnstransport.info.blackhole') {
                 const blackholeBtn = document.createElement('button');
                 blackholeBtn.className = 'modal-btn blackhole';
-                blackholeBtn.innerHTML = '🕳️ rnpath -p (blackhole)';
-                // Usa identityHash invece di destHash!
+                blackholeBtn.innerHTML = '🕳️ rnpath -p';
                 blackholeBtn.onclick = () => executeRnsCommand('blackhole', modalState.identityHash);
                 actionsDiv.appendChild(blackholeBtn);
             }
@@ -565,6 +675,308 @@
             modal.classList.add('visible');
             modalState.visible = true;
         }
+
+        // ============================================
+        // === FUNZIONI DI BACKEND ===
+        // ============================================
+
+        function refreshBackendStats() {
+            return fetch('/api/monitor/stats')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        state.backendStats = {
+                            total: data.total_announces || 0,
+                            unique: data.unique_sources || 0,
+                            cacheSize: data.cache?.size || 0
+                        };
+                        
+                        document.getElementById('total-announces').textContent = state.backendStats.total;
+                        document.getElementById('unique-sources').textContent = state.backendStats.unique;
+                        document.getElementById('cache-size-indicator').textContent = state.backendStats.cacheSize;
+                    }
+                })
+                .catch(err => console.error('Errore refresh stats:', err));
+        }
+
+        // ============================================
+// === ASPECT TABS - VERSIONE FINALE CON CACHE ===
+// ============================================
+
+function getAspectCounts() {
+    const counts = new Map();
+    
+    // Inizializza tutti i contatori a ZERO
+    counts.set('all', 0);
+    counts.set('known', 0);
+    counts.set('unknown', 0);
+    ASPECTS.forEach(a => counts.set(a, 0));
+    
+    // Se siamo in modalità cache, dobbiamo contare gli annunci dalla cache!
+    if (state.cacheSource === 'cache') {
+        console.log('📁 Calcolo conteggi dalla cache...');
+        
+        // Dobbiamo fare una chiamata API per ottenere i conteggi dalla cache
+        fetch('/api/monitor/cache/stats')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.stats && data.stats.aspects) {
+                    console.log('📊 Conteggi cache:', data.stats.aspects);
+                    
+                    // Aggiorna i contatori con i dati della cache
+                    Object.entries(data.stats.aspects).forEach(([asp, cnt]) => {
+                        if (ASPECTS.includes(asp)) {
+                            counts.set(asp, cnt);
+                            counts.set('known', (counts.get('known') || 0) + cnt);
+                            counts.set('all', (counts.get('all') || 0) + cnt);
+                        } else {
+                            counts.set('unknown', (counts.get('unknown') || 0) + cnt);
+                            counts.set('all', (counts.get('all') || 0) + cnt);
+                        }
+                    });
+                    
+                    // Forza l'aggiornamento dei tab
+                    if (window.updateAspectTabs) {
+                        window.updateAspectTabs();
+                    }
+                }
+            })
+            .catch(err => console.error('Errore caricamento stats cache:', err));
+            
+        return counts;
+    }
+    
+    // Calcola i conteggi dalle identità (per modalità memory)
+    state.identities.forEach(id => {
+        id.aspects.forEach((data, asp) => {
+            const count = data.count || 1;
+            
+            if (ASPECTS.includes(asp)) {
+                // Aspect conosciuto
+                counts.set(asp, (counts.get(asp) || 0) + count);
+                counts.set('known', (counts.get('known') || 0) + count);
+                counts.set('all', (counts.get('all') || 0) + count);
+            } else if (asp !== 'identity_hash') {
+                // Aspect sconosciuto
+                counts.set('unknown', (counts.get('unknown') || 0) + count);
+                counts.set('all', (counts.get('all') || 0) + count);
+            }
+        });
+    });
+    
+    return counts;
+}
+
+// ============================================
+// === FUNZIONE PER AGGIORNARE TAB DALLA CACHE ===
+// ============================================
+
+function updateTabsFromCache() {
+    console.log('🔄 Aggiornamento tab dalla cache...');
+    
+    // Chiamata API per ottenere le statistiche della cache
+    fetch('/api/monitor/cache/stats')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.stats) {
+                console.log('📊 Stats cache:', data.stats);
+                
+                // Salva i conteggi in una variabile globale per usarli nei tab
+                window._cacheAspectCounts = data.stats.aspects || {};
+                
+                // Forza l'aggiornamento dei tab
+                if (window.updateAspectTabs) {
+                    window.updateAspectTabs();
+                }
+            }
+        })
+        .catch(err => console.error('Errore caricamento stats cache:', err));
+    
+    // Ricarica la history dalla cache
+    loadHistory();
+}
+
+// ============================================
+// === MODIFICA renderAspectTabs PER USARE I DATI CACHE ===
+// ============================================
+
+function initAspectTabs() {
+    const row1 = document.getElementById('aspect-row-1');
+    const row2 = document.getElementById('aspect-row-2');
+    const row3 = document.getElementById('aspect-row-3');
+    
+    function renderAspectTabs() {
+        let counts;
+        
+        if (state.cacheSource === 'cache') {
+            // Usa i conteggi dalla cache se disponibili
+            counts = new Map();
+            counts.set('all', 0);
+            counts.set('known', 0);
+            counts.set('unknown', 0);
+            ASPECTS.forEach(a => counts.set(a, 0));
+            
+            // Se abbiamo i dati della cache, usali
+            if (window._cacheAspectCounts) {
+                Object.entries(window._cacheAspectCounts).forEach(([asp, cnt]) => {
+                    if (ASPECTS.includes(asp)) {
+                        counts.set(asp, cnt);
+                        counts.set('known', (counts.get('known') || 0) + cnt);
+                        counts.set('all', (counts.get('all') || 0) + cnt);
+                    } else {
+                        counts.set('unknown', (counts.get('unknown') || 0) + cnt);
+                        counts.set('all', (counts.get('all') || 0) + cnt);
+                    }
+                });
+            }
+        } else {
+            // Usa i conteggi dalle identità live
+            counts = getAspectCounts();
+        }
+        
+        // Pulisci completamente i container
+        row1.innerHTML = '';
+        row2.innerHTML = '';
+        row3.innerHTML = '';
+        
+        // Riga 1: "tutti" + primi 10 aspect
+        let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (${counts.get('all') || 0})</div>`;
+        ASPECTS.slice(0, 10).forEach(a => {
+            const short = a.split('.').pop();
+            const count = counts.get(a) || 0;
+            html1 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+        });
+        row1.innerHTML = html1;
+        
+        // Riga 2: aspect 10-20
+        let html2 = ``;
+        ASPECTS.slice(10, 20).forEach(a => {
+            const short = a.split('.').pop();
+            const count = counts.get(a) || 0;
+            html2 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+        });
+        row2.innerHTML = html2;
+        
+        // Riga 3: aspect rimanenti + known + unknown
+        let html3 = ``;
+        ASPECTS.slice(20).forEach(a => {
+            const short = a.split('.').pop();
+            const count = counts.get(a) || 0;
+            html3 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
+        });
+        html3 += `<div class="tab-aspect ${state.aspect === 'known' ? 'active' : ''}" data-aspect="known">✓ conosciuti (${counts.get('known') || 0})</div>`;
+        html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (${counts.get('unknown') || 0})</div>`;
+        row3.innerHTML = html3;
+        
+        // Riapplica gli event listener a TUTTI i nuovi tab
+        document.querySelectorAll('.tab-aspect').forEach(tab => {
+            const newTab = tab.cloneNode(true);
+            tab.parentNode.replaceChild(newTab, tab);
+            
+            newTab.addEventListener('click', function(e) {
+                document.querySelectorAll('.tab-aspect').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                state.aspect = this.dataset.aspect;
+                state.page = 1;
+                loadHistory();
+            });
+        });
+    }
+    
+    renderAspectTabs();
+    window.updateAspectTabs = renderAspectTabs;
+}
+
+// ============================================
+// === MODIFICA IL LISTENER PER cache-source-select ===
+// ============================================
+
+document.getElementById('cache-source-select').addEventListener('change', function() {
+    const newSource = this.value;
+    console.log(`🔄 Cambio sorgente: ${state.cacheSource} -> ${newSource}`);
+    
+    state.cacheSource = newSource;
+    state.page = 1;
+    
+    if (newSource === 'cache') {
+        // Quando passi a cache, carica i conteggi dalla cache
+        updateTabsFromCache();
+    } else {
+        // Quando torni a memory, ricarica normalmente
+        loadHistory();
+        // Aggiorna i tab con le identità esistenti
+        if (window.updateAspectTabs) {
+            window.updateAspectTabs();
+        }
+    }
+});
+
+        function initMainTabs() {
+            document.querySelectorAll('.tab-main').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.tab-main').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                    document.getElementById(`view-${this.dataset.view}`).classList.add('active');
+                    state.view = this.dataset.view;
+                    
+                    if (state.view === 'identities') renderIdentities();
+                    if (state.view === 'stats') renderStats();
+                });
+            });
+        }
+
+        // ============================================
+        // === RENDERING TABELLA CON DATI RADIO ===
+        // ============================================
+
+        function createAnnounceRow(a) {
+            const idShort = a.identity_hash?.slice(0, 32) || '?';
+            const destShort = a.dest_hash?.slice(0, 32) || '-';
+            const decodedData = decodeUTF8(a.data || '');
+            
+            const rssiClass = getRSSIClass(a.rssi);
+            const snrClass = getSNRClass(a.snr);
+            const qClass = getQClass(a.q);
+            
+            const rssiDisplay = a.rssi !== undefined && a.rssi !== null ? a.rssi.toFixed(1) : '-';
+            const snrDisplay = a.snr !== undefined && a.snr !== null ? a.snr.toFixed(1) : '-';
+            const qDisplay = a.q !== undefined && a.q !== null ? a.q.toFixed(1) : '-';
+            
+            let hopsDisplay = a.hops !== undefined && a.hops !== null ? a.hops : '?';
+            let hopsClass = '';
+            if (a.hops === 0) {
+                hopsDisplay = '🏠 locale';
+                hopsClass = 'badge-local';
+            } else if (a.hops === 1) {
+                hopsClass = 'badge-hop1';
+            }
+            
+            let row = '<tr>';
+            row += `<td style="white-space:nowrap; color:var(--dim);">${a.time || ''}</td>`;
+            row += `<td class="identity" title="${a.identity_hash || ''}"><span class="clickable-hash" onclick="showIdentityInTab('${a.identity_hash}')">${idShort}</span></td>`;
+            row += `<td class="dest" title="${a.dest_hash || ''}"><span class="clickable-hash" onclick="showAspectModal('${a.identity_hash}', '${a.aspect || 'unknown'}', '${a.dest_hash}')">${destShort}</span></td>`;
+            
+            if (a.aspect && a.aspect !== 'unknown' && a.aspect !== 'identity_hash') {
+                row += `<td><span class="badge">${a.aspect}</span></td>`;
+            } else {
+                row += `<td><span class="unknown">sconosciuto</span></td>`;
+            }
+            
+            row += `<td style="text-align:center;"><span class="${hopsClass}">${hopsDisplay}</span></td>`;
+            row += `<td class="${rssiClass} radio-data">${rssiDisplay}</td>`;
+            row += `<td class="${snrClass} radio-data">${snrDisplay}</td>`;
+            row += `<td class="${qClass} radio-data">${qDisplay}</td>`;
+            row += `<td class="iface">${a.interface?.split('[')[0] || '?'}</td>`;
+            row += `<td class="data" style="font-family: monospace;">${decodedData || ''}</td>`;
+            row += '</tr>';
+            
+            return row;
+        }
+
+        // ============================================
+        // === GESTIONE IDENTITÀ ===
+        // ============================================
 
         function saveIdentitiesToStorage() {
             try {
@@ -585,7 +997,6 @@
                         }))
                     });
                 });
-                
                 localStorage.setItem(STORAGE_KEY, JSON.stringify({
                     timestamp: Date.now(),
                     identities: identitiesArray
@@ -637,270 +1048,38 @@
             }
         }
 
-        function decodeUTF8(str) {
-            if (!str) return '';
-            try {
-                return decodeURIComponent(escape(str));
-            } catch(e) {
-                return str;
-            }
-        }
-
-        function formatRate(rateHz) {
-            if (rateHz >= 1) {
-                return rateHz.toFixed(2) + ' Hz';
-            } else if (rateHz >= 0.001) {
-                return (rateHz * 1000).toFixed(1) + ' mHz';
-            } else if (rateHz > 0) {
-                return (rateHz * 1000000).toFixed(0) + ' µHz';
-            } else {
-                return '—';
-            }
-        }
-
-        function formatPeriod(periodSeconds) {
-            if (periodSeconds >= 3600) {
-                return (periodSeconds / 3600).toFixed(1) + ' h';
-            } else if (periodSeconds >= 60) {
-                return (periodSeconds / 60).toFixed(1) + ' min';
-            } else if (periodSeconds >= 1) {
-                return periodSeconds.toFixed(1) + ' s';
-            } else if (periodSeconds > 0) {
-                return (periodSeconds * 1000).toFixed(0) + ' ms';
-            } else {
-                return '—';
-            }
-        }
-
-        function isActive(timestamp) {
-            const now = Date.now() / 1000;
-            return (now - timestamp) < INACTIVE_TIMEOUT;
-        }
-
-        function getAspectCounts() {
-            const counts = new Map();
-            counts.set('all', 0);
-            counts.set('known', 0);
-            counts.set('unknown', 0);
-            
-            ASPECTS.forEach(a => counts.set(a, 0));
-            
-            state.identities.forEach(id => {
-                id.aspects.forEach((data, asp) => {
-                    if (ASPECTS.includes(asp)) {
-                        counts.set(asp, (counts.get(asp) || 0) + data.count);
-                        counts.set('known', counts.get('known') + data.count);
-                        counts.set('all', counts.get('all') + data.count);
-                    }
-                });
-            });
-            
-            let unknownCount = 0;
-            state.identities.forEach(id => {
-                id.aspects.forEach((data, asp) => {
-                    if (!ASPECTS.includes(asp) && asp !== 'identity_hash') {
-                        unknownCount += data.count;
-                        counts.set('all', counts.get('all') + data.count);
-                    }
-                });
-            });
-            counts.set('unknown', unknownCount);
-            
-            return counts;
-        }
-
-        function initAspectTabs() {
-            const row1 = document.getElementById('aspect-row-1');
-            const row2 = document.getElementById('aspect-row-2');
-            const row3 = document.getElementById('aspect-row-3');
-            
-            function renderAspectTabs() {
-                const counts = getAspectCounts();
-                
-                let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (${counts.get('all') || 0})</div>`;
-                ASPECTS.slice(0, 10).forEach(a => {
-                    const short = a.split('.').pop();
-                    const count = counts.get(a) || 0;
-                    html1 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
-                });
-                row1.innerHTML = html1;
-                
-                let html2 = ``;
-                ASPECTS.slice(10, 20).forEach(a => {
-                    const short = a.split('.').pop();
-                    const count = counts.get(a) || 0;
-                    html2 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
-                });
-                row2.innerHTML = html2;
-                
-                let html3 = ``;
-                ASPECTS.slice(20).forEach(a => {
-                    const short = a.split('.').pop();
-                    const count = counts.get(a) || 0;
-                    html3 += `<div class="tab-aspect ${state.aspect === a ? 'active' : ''}" data-aspect="${a}">${short} (${count})</div>`;
-                });
-                html3 += `<div class="tab-aspect ${state.aspect === 'known' ? 'active' : ''}" data-aspect="known">✓ conosciuti (${counts.get('known') || 0})</div>`;
-                html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (${counts.get('unknown') || 0})</div>`;
-                row3.innerHTML = html3;
-                
-                document.querySelectorAll('.tab-aspect').forEach(tab => {
-                    tab.addEventListener('click', function(e) {
-                        document.querySelectorAll('.tab-aspect').forEach(t => t.classList.remove('active'));
-                        this.classList.add('active');
-                        state.aspect = this.dataset.aspect;
-                        state.page = 1;
-                        loadHistory();
-                    });
-                });
-            }
-            
-            renderAspectTabs();
-            window.updateAspectTabs = renderAspectTabs;
-        }
-
-        function initMainTabs() {
-            document.querySelectorAll('.tab-main').forEach(tab => {
-                tab.addEventListener('click', function() {
-                    document.querySelectorAll('.tab-main').forEach(t => t.classList.remove('active'));
-                    this.classList.add('active');
-                    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-                    document.getElementById(`view-${this.dataset.view}`).classList.add('active');
-                    state.view = this.dataset.view;
-                    
-                    if (state.view === 'identities') {
-                        renderIdentities();
-                    }
-                    if (state.view === 'stats') {
-                        renderStats();
-                    }
-                    if (state.view === 'cache') {
-                        loadCacheStats();
-                    }
-                });
-            });
-        }
-
-        function createAnnounceRow(a) {
-            const idShort = a.identity_hash?.slice(0, 32) || '?';
-            const destShort = a.dest_hash?.slice(0, 32) || '-';
-            const decodedData = decodeUTF8(a.data || '');
-            
-            let row = '<tr>';
-            row += `<td style="white-space:nowrap; color:var(--dim);">${a.time || ''}</td>`;
-            
-            row += `<td class="identity" title="${a.identity_hash || ''}">`;
-            row += `<span class="clickable-hash" onclick="showIdentityInTab('${a.identity_hash}')">${idShort}</span>`;
-            row += `</td>`;
-            
-            row += `<td class="dest" title="${a.dest_hash || ''}">`;
-            row += `<span class="clickable-hash" onclick="showAspectModal('${a.identity_hash}', '${a.aspect || 'unknown'}', '${a.dest_hash}')">${destShort}</span>`;
-            row += `</td>`;
-            
-            if (a.aspect && a.aspect !== 'unknown' && a.aspect !== 'identity_hash') {
-                row += `<td><span class="badge">${a.aspect}</span></td>`;
-            } else {
-                row += `<td><span class="unknown">sconosciuto</span></td>`;
-            }
-            
-            row += `<td style="text-align:center;"><span class="badge-hops">${a.hops || '?'}</span></td>`;
-            row += `<td class="iface">${a.interface?.split('[')[0] || '?'}</td>`;
-            row += `<td class="data" style="font-family: monospace;">${decodedData || ''}</td>`;
-            row += '</tr>';
-            
-            return row;
-        }
-
-        function renderTable(announces) {
-            const tbody = document.getElementById('announce-body');
-            if (!announces?.length) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
-                return;
-            }
-
-            let html = '';
-            announces.forEach(a => {
-                html += createAnnounceRow(a);
-            });
-            tbody.innerHTML = html;
-        }
-
-        function sortTableRows(rows, sortType) {
-            const rowsArray = Array.from(rows);
-            
-            return rowsArray.sort((a, b) => {
-                const cellsA = a.querySelectorAll('td');
-                const cellsB = b.querySelectorAll('td');
-                
-                try {
-                    switch(sortType) {
-                        case 'time_desc': {
-                            const timeA = cellsA[0]?.textContent || '';
-                            const timeB = cellsB[0]?.textContent || '';
-                            return timeB.localeCompare(timeA);
-                        }
-                        case 'time_asc': {
-                            const timeA = cellsA[0]?.textContent || '';
-                            const timeB = cellsB[0]?.textContent || '';
-                            return timeA.localeCompare(timeB);
-                        }
-                        case 'hops_asc': {
-                            const hopsA = parseInt(cellsA[4]?.textContent) || 999;
-                            const hopsB = parseInt(cellsB[4]?.textContent) || 999;
-                            return hopsA - hopsB;
-                        }
-                        case 'hops_desc': {
-                            const hopsA = parseInt(cellsA[4]?.textContent) || 0;
-                            const hopsB = parseInt(cellsB[4]?.textContent) || 0;
-                            return hopsB - hopsA;
-                        }
-                        case 'aspect_asc': {
-                            const aspectA = cellsA[3]?.textContent?.replace(/[⚡📶🏷🔑📋]/g, '').trim() || '';
-                            const aspectB = cellsB[3]?.textContent?.replace(/[⚡📶🏷🔑📋]/g, '').trim() || '';
-                            return aspectA.localeCompare(aspectB);
-                        }
-                        case 'aspect_desc': {
-                            const aspectA = cellsA[3]?.textContent?.replace(/[⚡📶🏷🔑📋]/g, '').trim() || '';
-                            const aspectB = cellsB[3]?.textContent?.replace(/[⚡📶🏷🔑📋]/g, '').trim() || '';
-                            return aspectB.localeCompare(aspectA);
-                        }
-                        case 'identity_asc': {
-                            const idA = cellsA[1]?.textContent || '';
-                            const idB = cellsB[1]?.textContent || '';
-                            return idA.localeCompare(idB);
-                        }
-                        case 'identity_desc': {
-                            const idA = cellsA[1]?.textContent || '';
-                            const idB = cellsB[1]?.textContent || '';
-                            return idB.localeCompare(idA);
-                        }
-                        default:
-                            return 0;
-                    }
-                } catch(e) {
-                    console.error('Errore ordinamento:', e);
-                    return 0;
-                }
-            });
-        }
-
-        function resortLiveTable() {
-            if (state.view !== 'live') return;
-            
-            const tbody = document.getElementById('announce-body');
-            const rows = tbody.querySelectorAll('tr');
-            
-            if (rows.length && !rows[0].innerHTML.includes('nessun annuncio')) {
-                const sortedRows = sortTableRows(rows, state.sort);
-                tbody.innerHTML = '';
-                sortedRows.forEach(r => tbody.appendChild(r));
-            }
-        }
+        // ============================================
+        // === UPDATE IDENTITY STATS - CON CONTROLLO DUPLICATI ===
+        // ============================================
 
         function updateIdentityStats(ann) {
-            // IGNORA DURANTE IL RESET
-            if (state.resetting) return;
+            if (state.resetting || !ann.identity_hash) return;
             
-            if (!ann.identity_hash) return;
+            // Usa un Set per tracciare gli annunci già processati
+            if (!window._processedAnnounces) {
+                window._processedAnnounces = new Set();
+            }
+            
+            // Crea un ID univoco per l'annuncio (packet_hash o combinazione)
+            const announceId = ann.packet_hash || `${ann.identity_hash}_${ann.timestamp}`;
+            
+            // Se l'annuncio è già stato processato, salta
+            if (window._processedAnnounces.has(announceId)) {
+                console.log('⏭️ Annuncio già processato:', announceId.slice(0,16));
+                return;
+            }
+            
+            // Aggiungi al Set dei processati
+            window._processedAnnounces.add(announceId);
+            
+            // Limita la dimensione del Set
+            if (window._processedAnnounces.size > 10000) {
+                const iterator = window._processedAnnounces.values();
+                for (let i = 0; i < 1000; i++) {
+                    window._processedAnnounces.delete(iterator.next().value);
+                }
+            }
+            
             const id = ann.identity_hash.slice(0, 32);
             
             if (!state.identities.has(id)) {
@@ -940,19 +1119,14 @@
 
         function identityPassesSearch(identity, searchTerm) {
             if (!searchTerm) return true;
-            
             const term = searchTerm.toLowerCase();
-            
             if (identity.hash.toLowerCase().includes(term)) return true;
-            
             if (identity.lastData && identity.lastData.toLowerCase().includes(term)) return true;
-            
             for (let [asp, data] of identity.aspects) {
                 if (asp.toLowerCase().includes(term)) return true;
                 if (data.dest && data.dest.toLowerCase().includes(term)) return true;
                 if (data.data && data.data.toLowerCase().includes(term)) return true;
             }
-            
             return false;
         }
 
@@ -999,22 +1173,9 @@
                             return dir * (b.count - a.count);
                     }
                 } catch(e) {
-                    console.error('Errore ordinamento identità:', e);
                     return 0;
                 }
             };
-        }
-
-        function toggleIdentity(identityHash, element) {
-            if (state.expandedIdentities.has(identityHash)) {
-                state.expandedIdentities.delete(identityHash);
-                element.classList.remove('expanded');
-                element.nextElementSibling.classList.remove('expanded');
-            } else {
-                state.expandedIdentities.add(identityHash);
-                element.classList.add('expanded');
-                element.nextElementSibling.classList.add('expanded');
-            }
         }
 
         function renderIdentities() {
@@ -1030,7 +1191,7 @@
             }
             
             const sorted = filteredIdentities.sort(getIdentitySortFunction());
-            document.getElementById('identity-count').textContent = `${sorted.length} identità${searchTerm ? ` (filtrate)` : ''}`;
+            document.getElementById('identity-count').textContent = `${sorted.length} identità${searchTerm ? ' (filtrate)' : ''}`;
             
             sorted.slice(0, 100).forEach(id => {
                 const now = Date.now() / 1000;
@@ -1070,8 +1231,7 @@
                 }
                 
                 if (lastData) {
-                    const cleanData = lastData.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
-                    html += `<span class="app-data-preview" title="${cleanData}">📋 ${cleanData.slice(0,40)}${cleanData.length > 64 ? '…' : ''}</span>`;
+                    html += `<span class="app-data-preview">📋 ${lastData.slice(0,40)}</span>`;
                 }
                 html += `</div>`;
                 html += `<span style="color:var(--dim);">${id.aspects.size} aspect</span>`;
@@ -1092,7 +1252,7 @@
                         aspPeriodFormatted = formatPeriod(aspPeriodSeconds);
                     }
                     
-                    const destShort = data.dest ? `${data.dest.slice(0,32)} ` : '-';
+                    const destShort = data.dest ? `${data.dest.slice(0,32)}` : '-';
                     const aspData = decodeUTF8(data.data);
                     
                     html += `<div class="aspect-item">`;
@@ -1102,8 +1262,7 @@
                     html += `<span class="clickable-hash" onclick="showAspectModal('${id.hash}', '${asp}', '${data.dest}')">${destShort}</span>`;
                     html += `</span>`;
                     if (aspData) {
-                        const cleanAspData = aspData.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
-                        html += `<span style="color:#88ff88; font-size:10px;">📋 ${cleanAspData.slice(0,25)}${cleanAspData.length > 64 ? '…' : ''}</span>`;
+                        html += `<span style="color:#88ff88; font-size:10px;">📋 ${aspData.slice(0,25)}</span>`;
                     }
                     html += `</div>`;
                     html += `<div style="display: flex; gap: 10px;">`;
@@ -1120,6 +1279,22 @@
             container.innerHTML = html || '<div style="color:var(--dim); text-align:center; padding:40px;">nessuna identità</div>';
         }
 
+        function toggleIdentity(identityHash, element) {
+            if (state.expandedIdentities.has(identityHash)) {
+                state.expandedIdentities.delete(identityHash);
+                element.classList.remove('expanded');
+                element.nextElementSibling.classList.remove('expanded');
+            } else {
+                state.expandedIdentities.add(identityHash);
+                element.classList.add('expanded');
+                element.nextElementSibling.classList.add('expanded');
+            }
+        }
+
+        // ============================================
+        // === STATISTICHE ===
+        // ============================================
+
         function renderStats() {
             const now = Date.now() / 1000;
             let totalAnnounces = 0;
@@ -1135,10 +1310,10 @@
             });
             
             const elapsedTotal = lastSeen - firstSeen;
-            const globalRateHz = elapsedTotal > 0 ? totalAnnounces / elapsedTotal : 0;
+            const globalRateHz = elapsedTotal > 0 ? state.backendStats.total / elapsedTotal : 0;
             const globalPeriod = globalRateHz > 0 ? 1 / globalRateHz : 0;
             
-            document.getElementById('stat-total').textContent = totalAnnounces;
+            document.getElementById('stat-total').textContent = state.backendStats.total;
             document.getElementById('stat-identities').textContent = `${state.identities.size} (${activeIdentities} attive)`;
             document.getElementById('stat-rate').textContent = formatRate(globalRateHz);
             document.getElementById('stat-period').textContent = formatPeriod(globalPeriod);
@@ -1171,13 +1346,12 @@
                     const idRateHz = elapsed > 0 && id.count > 1 ? id.count / elapsed : 0;
                     const idPeriod = idRateHz > 0 ? 1 / idRateHz : 0;
                     const lastData = decodeUTF8(id.lastData);
-                    const cleanData = lastData ? lastData.replace(/[\x00-\x1F\x7F-\x9F]/g, '') : '';
                     const lastActiveAgo = Math.round((now - id.last) / 60);
                     
                     idHtml += `<div class="stat-card">`;
                     idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
                     idHtml += `<span style="font-family:monospace; color:#8888ff;" title="${id.hash}">${id.hash.slice(0,16)}…</span>`;
-                    if (cleanData) idHtml += `<span style="color:#88ff88; font-size:9px;">${cleanData.slice(0,16)}</span>`;
+                    if (lastData) idHtml += `<span style="color:#88ff88; font-size:9px;">${lastData.slice(0,16)}</span>`;
                     idHtml += `</div>`;
                     idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">`;
                     idHtml += `<span style="color:var(--dim);">${id.count} ann.</span>`;
@@ -1197,34 +1371,9 @@
             document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
         }
 
-        function loadCacheStats() {
-            fetch('/api/monitor/cache/stats')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const stats = data.stats;
-                        
-                        document.getElementById('cache-size').textContent = stats.size || 0;
-                        document.getElementById('cache-age').textContent = (stats.age_days || 0).toFixed(1);
-                        document.getElementById('cache-saves').textContent = stats.stats?.save_count || 0;
-                        document.getElementById('cache-file').textContent = stats.cache_file?.split('/').pop() || '-';
-                        
-                        // Mostra distribuzione aspect
-                        let aspectsHtml = '';
-                        const aspectEntries = Object.entries(stats.aspects || {}).sort((a,b) => b[1] - a[1]).slice(0, 8);
-                        
-                        aspectEntries.forEach(([asp, cnt]) => {
-                            aspectsHtml += `<div class="stat-card"><div style="display:flex; justify-content:space-between;">`;
-                            aspectsHtml += `<span style="color:var(--fg);">${asp.slice(0,15)} </span>`;
-                            aspectsHtml += `<span style="color:var(--dim);"> ${cnt} ann.</span>`;
-                            aspectsHtml += `</div></div>`;
-                        });
-                        
-                        document.getElementById('cache-aspects').innerHTML = aspectsHtml || '<div style="color:var(--dim);">nessun dato</div>';
-                    }
-                })
-                .catch(err => console.error('Errore caricamento cache stats:', err));
-        }
+        // ============================================
+        // === PAGINAZIONE ===
+        // ============================================
 
         function updatePagination(total) {
             const pages = Math.ceil(total / state.limit) || 1;
@@ -1240,232 +1389,268 @@
             document.getElementById('next-page').disabled = state.page >= pages;
         }
 
+        
+        // ============================================
+        // === LOAD HISTORY - VERSIONE CORRETTA ===
+        // ============================================
+
         function loadHistory() {
-            const source = state.cacheSource;
-            
             const params = new URLSearchParams({
                 aspect: state.aspect,
                 search: state.search,
-                limit: state.limit,
-                offset: (state.page - 1) * state.limit,
+                limit: 1000,  // AUMENTATO per prendere più dati
+                offset: 0,     // PARTE DA 0 per prendere tutto
                 sort: state.sort,
-                source: source
+                source: state.cacheSource
             });
 
             fetch(`/api/monitor/history?${params}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
-                        let html = '';
-                        data.announces.forEach(a => {
-                            html += createAnnounceRow(a);
-                            if (source === 'memory') {
-                                updateIdentityStats(a);
+                        // Prendi TUTTI gli annunci (fino a 1000)
+                        const allAnnounces = data.announces;
+                        
+                        // ORDINA GLOBALMENTE prima di paginare
+                        const sortedAnnounces = [...allAnnounces].sort((a, b) => {
+                            switch(state.sort) {
+                                case 'time_desc':
+                                    return (b.timestamp || 0) - (a.timestamp || 0);
+                                case 'time_asc':
+                                    return (a.timestamp || 0) - (b.timestamp || 0);
+                                case 'rssi_desc':
+                                    return (b.rssi || -999) - (a.rssi || -999);
+                                case 'rssi_asc':
+                                    return (a.rssi || 999) - (b.rssi || 999);
+                                case 'snr_desc':
+                                    return (b.snr || -999) - (a.snr || -999);
+                                case 'snr_asc':
+                                    return (a.snr || 999) - (b.snr || 999);
+                                case 'q_desc':
+                                    return (b.q || 0) - (a.q || 0);
+                                case 'q_asc':
+                                    return (a.q || 0) - (b.q || 0);
+                                case 'hops_desc':
+                                    return (parseInt(b.hops) || 0) - (parseInt(a.hops) || 0);
+                                case 'hops_asc':
+                                    return (parseInt(a.hops) || 999) - (parseInt(b.hops) || 999);
+                                case 'aspect_desc':
+                                    return (b.aspect || '').localeCompare(a.aspect || '');
+                                case 'aspect_asc':
+                                    return (a.aspect || '').localeCompare(b.aspect || '');
+                                case 'identity_desc':
+                                    return (b.identity_hash || '').localeCompare(a.identity_hash || '');
+                                case 'identity_asc':
+                                    return (a.identity_hash || '').localeCompare(b.identity_hash || '');
+                                case 'dest_desc':
+                                    return (b.dest_hash || '').localeCompare(a.dest_hash || '');
+                                case 'dest_asc':
+                                    return (a.dest_hash || '').localeCompare(b.dest_hash || '');
+                                case 'iface_desc':
+                                    return (b.interface || '').localeCompare(a.interface || '');
+                                case 'iface_asc':
+                                    return (a.interface || '').localeCompare(b.interface || '');
+                                case 'data_desc':
+                                    return (b.data || '').localeCompare(a.data || '');
+                                case 'data_asc':
+                                    return (a.data || '').localeCompare(b.data || '');
+                                default:
+                                    return (b.timestamp || 0) - (a.timestamp || 0);
                             }
                         });
-                        document.getElementById('announce-body').innerHTML = html || '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
-                        updatePagination(data.total);
-                        if (window.updateAspectTabs) window.updateAspectTabs();
+                        
+                        // PAGINA dopo l'ordinamento globale
+                        const start = (state.page - 1) * state.limit;
+                        const paginatedAnnounces = sortedAnnounces.slice(start, start + state.limit);
+                        
+                        // Renderizza
+                        let html = '';
+                        paginatedAnnounces.forEach(a => {
+                            html += createAnnounceRow(a);
+                        });
+                        
+                        document.getElementById('announce-body').innerHTML = html || '<tr><td colspan="10" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
+                        
+                        // Il totale è la lunghezza di TUTTI gli annunci
+                        updatePagination(sortedAnnounces.length);
+                        
+                        // Aggiorna i tab
+                        if (window.updateAspectTabs) {
+                            window.updateAspectTabs();
+                        }
+                        
+                        // Non serve più sortTableByState perché abbiamo già ordinato
+                        // sortTableByState();
+                        
+                        console.log(`📊 Caricati ${paginatedAnnounces.length} annunci (totale: ${sortedAnnounces.length})`);
                     }
                 })
                 .catch(err => console.error('History error:', err));
         }
 
         // ============================================
-        // === CONNESSIONE SSE MIGLIORATA ===
+        // === CONNESSIONE SSE - MIGLIORATA ===
         // ============================================
+
         function connectSSE() {
-            // Chiudi connessione esistente se presente
+            // Se c'è già una connessione attiva e funzionante, non crearne un'altra
+            if (state.eventSource && state.eventSource.readyState === EventSource.OPEN) {
+                console.log('SSE già connesso, salto...');
+                return;
+            }
+            
+            // Chiudi connessione esistente se in stato di errore
             if (state.eventSource) {
-                console.log('Chiusura vecchia connessione SSE');
+                console.log('Chiusura vecchia connessione SSE...');
                 state.eventSource.close();
                 state.eventSource = null;
             }
             
-            console.log('Apertura nuova connessione SSE');
-            const es = new EventSource('/api/monitor/stream');
-            state.eventSource = es;
+            // Usa un flag per evitare connessioni multiple simultanee
+            if (state.connecting) {
+                console.log('Connessione già in corso...');
+                return;
+            }
             
-            es.onopen = () => {
-                document.getElementById('status').className = 'status online';
-                console.log('SSE connesso');
-            };
+            state.connecting = true;
             
-            es.onmessage = (e) => {
-                if (e.data) {
-                    try {
-                        const ann = JSON.parse(e.data);
-                        if (ann.id > state.lastId) {
-                            state.lastId = ann.id;
-                            
-                            // Aggiorna stats dal backend
-                            fetch('/api/monitor/stats')
-                                .then(r => r.json())
-                                .then(s => {
-                                    if (s.success) {
-                                        document.getElementById('total-announces').textContent = s.total_announces || 0;
-                                        document.getElementById('unique-sources').textContent = s.unique_sources || 0;
-                                    }
-                                });
-                            
-                            updateIdentityStats(ann);
-                            if (window.updateAspectTabs) window.updateAspectTabs();
-                            
-                            if (state.view === 'live' && state.cacheSource === 'memory') {
-                                let shouldShow = true;
-                                
-                                if (state.aspect !== 'all') {
-                                    if (state.aspect === 'unknown') {
-                                        shouldShow = ann.aspect === 'unknown' || !ann.aspect;
-                                    } else if (state.aspect === 'known') {
-                                        shouldShow = ann.aspect && ann.aspect !== 'unknown' && ann.aspect !== 'identity_hash' && ASPECTS.includes(ann.aspect);
-                                    } else {
-                                        shouldShow = ann.aspect === state.aspect;
-                                    }
-                                }
-                                
-                                if (shouldShow && state.search) {
-                                    const searchLower = state.search.toLowerCase();
-                                    shouldShow = 
-                                        (ann.dest_hash && ann.dest_hash.toLowerCase().includes(searchLower)) ||
-                                        (ann.identity_hash && ann.identity_hash.toLowerCase().includes(searchLower)) ||
-                                        (ann.aspect && ann.aspect.toLowerCase().includes(searchLower)) ||
-                                        (ann.data && ann.data.toLowerCase().includes(searchLower));
-                                }
-                                
-                                if (shouldShow) {
-                                    const tbody = document.getElementById('announce-body');
-                                    const firstRow = tbody.querySelector('tr');
-                                    
-                                    if (firstRow && firstRow.innerHTML.includes('nessun annuncio')) {
-                                        tbody.innerHTML = '';
-                                    }
-                                    
-                                    const row = createAnnounceRow(ann);
-                                    tbody.insertAdjacentHTML('afterbegin', row);
-                                    
-                                    resortLiveTable();
-                                    
-                                    const rows = tbody.querySelectorAll('tr');
-                                    if (rows.length > state.limit) {
-                                        rows[rows.length-1].remove();
-                                    }
-                                    
-                                    const totalSpan = document.getElementById('total-items');
-                                    if (totalSpan) {
-                                        totalSpan.textContent = parseInt(totalSpan.textContent || '0') + 1;
-                                    }
-                                }
+            // Timeout per evitare connessioni multiple
+            setTimeout(() => {
+                try {
+                    console.log('Tentativo connessione SSE...');
+                    const es = new EventSource('/api/monitor/stream');
+                    
+                    // Timeout per la connessione
+                    const connectionTimeout = setTimeout(() => {
+                        if (es.readyState !== EventSource.OPEN) {
+                            console.log('Timeout connessione SSE');
+                            es.close();
+                            if (state.eventSource === es) {
+                                state.eventSource = null;
                             }
-                            
-                            // Aggiorna le viste se necessario
-                            if (state.view === 'identities') {
-                                renderIdentities();
-                            } else if (state.view === 'stats') {
-                                renderStats();
+                            state.connecting = false;
+                            setTimeout(connectSSE, 3000);
+                        }
+                    }, 5000);
+                    
+                    es.onopen = () => {
+                        clearTimeout(connectionTimeout);
+                        console.log('✅ SSE connesso');
+                        document.getElementById('status').className = 'status online';
+                        state.eventSource = es;
+                        state.connecting = false;
+                        state.reconnectAttempt = 1;
+                        refreshBackendStats();
+                    };
+                    
+                    // ============================================
+                    // === CONNESSIONE SSE - MODIFICATA ===
+                    // ============================================
+
+                    es.onmessage = (e) => {
+                        if (e.data && e.data !== ':') {
+                            try {
+                                const ann = JSON.parse(e.data);
+                                if (ann.id > state.lastId) {
+                                    state.lastId = ann.id;
+                                    refreshBackendStats();
+                                    
+                                    // AGGIORNA LE STATISTICHE SOLO PER I NUOVI ANNUNCI
+                                    if (!state.resetting) {
+                                        updateIdentityStats(ann);
+                                    }
+                                    
+                                    if (window.updateAspectTabs) window.updateAspectTabs();
+                                    
+                                    if (state.view === 'live' && state.cacheSource === 'memory') {
+                                        let shouldShow = true;
+                                        if (state.aspect !== 'all') {
+                                            if (state.aspect === 'unknown') {
+                                                shouldShow = ann.aspect === 'unknown' || !ann.aspect;
+                                            } else if (state.aspect === 'known') {
+                                                shouldShow = ann.aspect && ann.aspect !== 'unknown' && ann.aspect !== 'identity_hash' && ASPECTS.includes(ann.aspect);
+                                            } else {
+                                                shouldShow = ann.aspect === state.aspect;
+                                            }
+                                        }
+                                        if (shouldShow && state.search) {
+                                            const searchLower = state.search.toLowerCase();
+                                            shouldShow = (ann.dest_hash && ann.dest_hash.toLowerCase().includes(searchLower)) ||
+                                                        (ann.identity_hash && ann.identity_hash.toLowerCase().includes(searchLower)) ||
+                                                        (ann.aspect && ann.aspect.toLowerCase().includes(searchLower)) ||
+                                                        (ann.data && ann.data.toLowerCase().includes(searchLower));
+                                        }
+                                        if (shouldShow) {
+                                            const tbody = document.getElementById('announce-body');
+                                            const firstRow = tbody.querySelector('tr');
+                                            if (firstRow && firstRow.innerHTML.includes('nessun annuncio')) {
+                                                tbody.innerHTML = '';
+                                            }
+                                            tbody.insertAdjacentHTML('afterbegin', createAnnounceRow(ann));
+                                            sortTableByState();
+                                            const rows = tbody.querySelectorAll('tr');
+                                            if (rows.length > state.limit) {
+                                                rows[rows.length-1].remove();
+                                            }
+                                        }
+                                    }
+                                    if (state.view === 'identities') renderIdentities();
+                                    if (state.view === 'stats') renderStats();
+                                }
+                            } catch(e) {
+                                console.error('SSE parse error:', e);
                             }
                         }
-                    } catch(e) {
-                        console.error('SSE parse error:', e);
-                    }
+                    };
+                    
+                    es.onerror = (err) => {
+                        clearTimeout(connectionTimeout);
+                        console.error('SSE errore:', err);
+                        document.getElementById('status').className = 'status offline';
+                        
+                        if (state.eventSource === es) {
+                            state.eventSource = null;
+                        }
+                        
+                        state.connecting = false;
+                        
+                        // Riconnetti con backoff esponenziale
+                        const delay = Math.min(3000 * (state.reconnectAttempt || 1), 30000);
+                        state.reconnectAttempt = (state.reconnectAttempt || 1) + 1;
+                        
+                        setTimeout(() => {
+                            if (!state.eventSource && !state.resetting) {
+                                connectSSE();
+                            }
+                        }, delay);
+                    };
+                    
+                } catch (e) {
+                    console.error('Errore creazione SSE:', e);
+                    state.connecting = false;
+                    setTimeout(connectSSE, 5000);
                 }
-            };
+            }, 100);
+        }
+
+
+        // ============================================
+        // === FUNZIONE CHE FORZA I TAB A ZERO ===
+        // ============================================
+
+        function forceTabsToZero() {
+            console.log('🔨 FORZATURA TAB A ZERO');
             
-            es.onerror = () => {
-                document.getElementById('status').className = 'status offline';
-                console.log('Errore SSE, tentativo riconnessione tra 3s');
-                setTimeout(connectSSE, 3000);
-            };
-        }
-
-        // ============================================
-        // === FUNZIONE RESET TOTALE - VERSIONE ULTRA ===
-        // ============================================
-        function resetAllCounters() {
-            if (confirm('💥 RESET TOTALE: cancellare TUTTI i dati (statistiche, identità, cache e storico)?')) {
-                
-                // Blocca gli aggiornamenti durante il reset
-                state.resetting = true;
-                
-                // Mostra messaggio di caricamento
-                const originalBody = document.getElementById('announce-body').innerHTML;
-                document.getElementById('announce-body').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:40px; color:#ffff88;">🔄 RESET IN CORSO... ATTENDERE</td></tr>';
-                
-                // 1. RESET COMPLETO BACKEND
-                fetch('/api/monitor/reset-all', { 
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Reset response:', data);
-                    
-                    // 2. RESET COMPLETO FRONTEND
-                    state.identities = new Map();
-                    state.expandedIdentities.clear();
-                    state.lastId = 0;
-                    
-                    // 3. Pulisci localStorage
-                    localStorage.clear();
-                    
-                    // 4. AZZERA TUTTI I CONTATORI VISIBILI
-                    document.getElementById('total-announces').textContent = '0';
-                    document.getElementById('unique-sources').textContent = '0';
-                    
-                    document.getElementById('stat-total').textContent = '0';
-                    document.getElementById('stat-identities').textContent = '0 (0 attive)';
-                    document.getElementById('stat-rate').textContent = '—';
-                    document.getElementById('stat-period').textContent = '—';
-                    
-                    document.getElementById('cache-size').textContent = '0';
-                    document.getElementById('cache-age').textContent = '0';
-                    document.getElementById('cache-saves').textContent = '0';
-                    
-                    // 5. SVUOTA TABELLE
-                    document.getElementById('announce-body').innerHTML = 
-                        '<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
-                    
-                    document.getElementById('identity-container').innerHTML = 
-                        '<div style="color:var(--dim); text-align:center; padding:40px;">nessuna identità</div>';
-                    
-                    document.getElementById('stats-aspects').innerHTML = '';
-                    document.getElementById('stats-identities').innerHTML = '';
-                    document.getElementById('cache-aspects').innerHTML = '';
-                    
-                    // 6. AZZERA I TAB DEGLI ASPECT
-                    updateTabsWithZero();
-                    
-                    // 7. RICARICA I DATI
-                    state.page = 1;
-                    loadHistory();
-                    renderStats();
-                    renderIdentities();
-                    
-                    // 8. RIAPRI LA CONNESSIONE SSE
-                    connectSSE();
-                    
-                    alert('✅ RESET COMPLETO EFFETTUATO');
-                    
-                })
-                .catch(error => {
-                    console.error('Errore durante il reset:', error);
-                    alert('❌ Errore durante il reset: ' + error.message);
-                    document.getElementById('announce-body').innerHTML = originalBody;
-                })
-                .finally(() => {
-                    state.resetting = false;
-                });
-            }
-        }
-
-        // Funzione per azzerare i tab degli aspect
-        function updateTabsWithZero() {
             const row1 = document.getElementById('aspect-row-1');
             const row2 = document.getElementById('aspect-row-2');
             const row3 = document.getElementById('aspect-row-3');
             
-            if (!row1 || !row2 || !row3) return;
+            if (!row1 || !row2 || !row3) {
+                console.log('❌ Righe tab non trovate');
+                return;
+            }
             
+            // Resetta TUTTI i tab a ZERO
             let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (0)</div>`;
             ASPECTS.slice(0, 10).forEach(a => {
                 const short = a.split('.').pop();
@@ -1489,9 +1674,12 @@
             html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (0)</div>`;
             row3.innerHTML = html3;
             
-            // Ricollega gli event listener
+            // Riapplica gli event listener
             document.querySelectorAll('.tab-aspect').forEach(tab => {
-                tab.addEventListener('click', function(e) {
+                const newTab = tab.cloneNode(true);
+                tab.parentNode.replaceChild(newTab, tab);
+                
+                newTab.addEventListener('click', function(e) {
                     document.querySelectorAll('.tab-aspect').forEach(t => t.classList.remove('active'));
                     this.classList.add('active');
                     state.aspect = this.dataset.aspect;
@@ -1499,16 +1687,154 @@
                     loadHistory();
                 });
             });
+            
+            console.log('✅ Tab forzati a zero');
         }
 
-        function initEventListeners() {
-            document.getElementById('sort-select').addEventListener('change', function() {
-                state.sort = this.value;
-                state.page = 1;
-                loadHistory();
-                setTimeout(resortLiveTable, 100);
-            });
+        // ============================================
+        // === RESET TOTALE CHE FUNZIONE DAVVERO ===
+        // ============================================
 
+        function resetAll() {
+            if (confirm('💥 RESET TOTALE: cancellare TUTTI i dati (cache, storico, identità)?')) {
+                state.resetting = true;
+                state.reconnectAttempt = 1;
+                
+                document.getElementById('announce-body').innerHTML = '<tr><td colspan="10" style="text-align:center; padding:40px; color:#ffff88;">🔄 RESET IN CORSO...</td></tr>';
+                
+                if (state.eventSource) {
+                    state.eventSource.close();
+                    state.eventSource = null;
+                }
+                
+                const resetBtn = document.getElementById('reset-all-btn');
+                resetBtn.disabled = true;
+                resetBtn.style.opacity = '0.5';
+                
+                // PRIMA: Pulisci TUTTO il frontend
+                console.log('🧹 Pulizia frontend...');
+                
+                // 1. Pulisci la mappa delle identità
+                state.identities.clear();
+                
+                // 2. Pulisci expandedIdentities
+                state.expandedIdentities.clear();
+                
+                // 3. Resetta lastId
+                state.lastId = 0;
+                
+                // 4. Resetta backendStats
+                state.backendStats = { total: 0, unique: 0, cacheSize: 0 };
+                
+                // 5. Resetta aspect a 'all'
+                state.aspect = 'all';
+                
+                // 6. Resetta page a 1
+                state.page = 1;
+                
+                // 7. Resetta search
+                state.search = '';
+                
+                // 8. Pulisci localStorage COMPLETAMENTE
+                console.log('🗑️ Pulizia localStorage...');
+                localStorage.clear();  // Pulisce TUTTO
+                localStorage.removeItem(STORAGE_KEY);  // Pulisce specifico
+                
+                // 9. Forza la rimozione di qualsiasi dato residuo
+                try {
+                    // Sovrascrivi con array vuoto
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                        timestamp: Date.now(),
+                        identities: []
+                    }));
+                } catch(e) {
+                    console.log('Errore sovrascrittura:', e);
+                }
+
+                resetProcessedAnnounces();
+
+                // 10. Aggiorna UI
+                document.getElementById('total-announces').textContent = '0';
+                document.getElementById('unique-sources').textContent = '0';
+                document.getElementById('cache-size-indicator').textContent = '0';
+                
+                document.getElementById('stat-total').textContent = '0';
+                document.getElementById('stat-identities').textContent = '0 (0 attive)';
+                document.getElementById('stat-rate').textContent = '—';
+                document.getElementById('stat-period').textContent = '—';
+                
+                document.getElementById('announce-body').innerHTML = 
+                    '<tr><td colspan="10" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';
+                
+                document.getElementById('identity-container').innerHTML = 
+                    '<div style="color:var(--dim); text-align:center; padding:40px;">nessuna identità</div>';
+                
+                document.getElementById('stats-aspects').innerHTML = '';
+                document.getElementById('stats-identities').innerHTML = '';
+                
+                // 11. Forza refresh dei tab con conteggi ZERO
+                console.log('🔄 Forzatura tab a zero...');
+                forceTabsToZero();
+                
+                // POI: Chiama il backend
+                console.log('📡 Chiamata backend reset-all...');
+                fetch('/api/monitor/reset-all', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Reset completato:', data);
+                    
+                    if (data.success) {
+                        // Ricarica history vuota
+                        loadHistory();
+                        
+                        setTimeout(() => {
+                            connectSSE();
+                        }, 500);
+                        
+                        alert('✅ RESET COMPLETO');
+                    } else {
+                        alert('❌ Errore: ' + (data.error || 'Sconosciuto'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Errore reset:', error);
+                    alert('❌ Errore di connessione: ' + error.message);
+                    
+                    setTimeout(() => {
+                        connectSSE();
+                    }, 1000);
+                })
+                .finally(() => {
+                    state.resetting = false;
+                    resetBtn.disabled = false;
+                    resetBtn.style.opacity = '1';
+                });
+            }
+        }
+
+        // ============================================
+        // === RESET PROCESSED ANNOUNCES ===
+        // ============================================
+
+        function resetProcessedAnnounces() {
+            window._processedAnnounces = new Set();
+            console.log('🧹 Set annunci processati resettato');
+        }
+
+
+        // ============================================
+        // === EVENT LISTENERS ===
+        // ============================================
+
+        function initEventListeners() {
             document.getElementById('limit-select').addEventListener('change', function() {
                 state.limit = parseInt(this.value);
                 state.page = 1;
@@ -1531,43 +1857,7 @@
                 loadHistory();
             });
 
-            // IMPORTANTE: Collega i pulsanti di reset
-            document.getElementById('clear-btn').addEventListener('click', resetAllCounters);
-            document.getElementById('clear-all-btn').addEventListener('click', resetAllCounters);
-
-            document.getElementById('cache-clear-btn').addEventListener('click', function() {
-                if (confirm('PULIRE TUTTA LA CACHE PERSISTENTE SU DISCO?')) {
-                    fetch('/api/monitor/cache/clear', { method: 'POST' })
-                        .then(() => {
-                            alert('Cache pulita');
-                            if (state.view === 'cache') loadCacheStats();
-                        });
-                }
-            });
-
-            document.getElementById('cache-save-btn').addEventListener('click', function() {
-                fetch('/api/monitor/cache/save', { method: 'POST' })
-                    .then(() => {
-                        alert('Cache salvata su disco');
-                    });
-            });
-
-            document.getElementById('cache-cleanup-old').addEventListener('click', function() {
-                fetch('/api/monitor/cache/cleanup', { method: 'POST' })
-                    .then(res => res.json())
-                    .then(data => {
-                        alert(`Rimossi ${data.removed} annunci vecchi`);
-                        loadCacheStats();
-                    });
-            });
-
-            document.getElementById('cache-refresh-stats').addEventListener('click', function() {
-                loadCacheStats();
-            });
-
-            document.getElementById('cache-export').addEventListener('click', function() {
-                window.open('/api/monitor/history/persistent?days=7&limit=5000', '_blank');
-            });
+            document.getElementById('reset-all-btn').addEventListener('click', resetAll);
 
             document.getElementById('prev-page').addEventListener('click', function() {
                 if (state.page > 1) { state.page--; loadHistory(); }
@@ -1581,23 +1871,6 @@
                 renderIdentities();
             });
 
-            document.querySelectorAll('.table th[data-sort]').forEach(th => {
-                th.addEventListener('click', function() {
-                    const sort = this.dataset.sort;
-                    const currentSort = state.sort;
-                    if (currentSort === sort + '_desc') {
-                        state.sort = sort + '_asc';
-                    } else if (currentSort === sort + '_asc') {
-                        state.sort = sort + '_desc';
-                    } else {
-                        state.sort = sort + '_desc';
-                    }
-                    state.page = 1;
-                    loadHistory();
-                    document.getElementById('sort-select').value = state.sort;
-                });
-            });
-
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && modalState.visible) {
                     hideAspectModal();
@@ -1605,28 +1878,41 @@
             });
         }
 
-        // Inizializzazione
-        loadIdentitiesFromStorage();
-        initAspectTabs();
-        initMainTabs();
-        initEventListeners();
-        connectSSE(); // Questa chiude automaticamente le vecchie connessioni
-        loadHistory();
-        
-        setInterval(saveIdentitiesToStorage, 30000);
-        setInterval(() => {
-            if (state.view === 'identities') {
-                renderIdentities();
-            }
-            if (state.view === 'stats') {
-                renderStats();
-            }
-            if (state.view === 'live') {
-                resortLiveTable();
-            }
-        }, 2000);
-        
-        window.addEventListener('beforeunload', saveIdentitiesToStorage);
+        // ============================================
+        // === INIZIALIZZAZIONE - CON DEDUPLICAZIONE ===
+        // ============================================
+
+        // Usa una variabile globale per tracciare se l'inizializzazione è già stata fatta
+        if (!window._rnsMonitorInitialized) {
+            window._rnsMonitorInitialized = true;
+            
+            window.addEventListener('beforeunload', function() {
+                if (state.eventSource) {
+                    state.eventSource.close();
+                    state.eventSource = null;
+                }
+                saveIdentitiesToStorage();
+            });
+
+            loadIdentitiesFromStorage();
+            initAspectTabs();
+            initMainTabs();
+            initEventListeners();
+            connectSSE();
+            loadHistory();
+            refreshBackendStats();
+            updateSortIndicators();
+            
+            setInterval(saveIdentitiesToStorage, 30000);
+            setInterval(() => {
+                if (state.view === 'identities') renderIdentities();
+                if (state.view === 'stats') renderStats();
+                if (state.view === 'live') sortTableByState();
+                refreshBackendStats();
+            }, 2000);
+        } else {
+            console.log('Inizializzazione già eseguita, salto...');
+        }
     </script>
 </body>
 </html>

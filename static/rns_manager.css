@@ -761,6 +761,10 @@ select, input {
 }
 
 /* Form elements identity manager */
+.form-group {
+    margin-bottom: 10px;
+}
+/* Form elements identity manager */
 .id-mgr .form-group {
     margin-bottom: 10px;
 }
