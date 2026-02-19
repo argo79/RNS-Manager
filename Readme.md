@@ -77,6 +77,8 @@ Poi apri il browser su:
 rns-identity-manager/
 ├── manager.py                 # Server Flask principale
 ├── Readme.md                  # This file
+├── modules/
+│   ├── rns_monitor.py             # Modulo RNS Monitor
 ├── static/
 │   └── rns_monitor.css        # Stili CSS
 ├── templates/
