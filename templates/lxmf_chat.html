@@ -32,146 +32,7 @@
             background-size: 12px;
             padding-right: 28px;
         }
-        .aspect-selector:hover {
-            background-color: #7a3e00;
-            border-color: #ffbb00;
-            color: #ffbb00;
-        }
-        .aspect-selector option {
-            background: #1a1a1a;
-            color: #ffaa00;
-            padding: 8px;
-        }
-        .map-container {
-            width: 100%;
-            height: 200px;
-            border-radius: 3px;
-            border: 1px solid #333;
-            margin-top: 4px;
-        }
-        .raw-message {
-            font-family: monospace;
-            font-size: 11px;
-            padding: 4px;
-            background: #0a0a0a;
-            border-left: 2px solid #88ff88;
-            margin: 2px 0;
-            word-break: break-word;
-        }
-        .debug-panel {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            background: #111;
-            border: 2px solid #ff00ff;
-            color: #0f0;
-            padding: 8px;
-            font-family: monospace;
-            font-size: 10px;
-            max-width: 500px;
-            max-height: 300px;
-            overflow: auto;
-            z-index: 10000;
-            display: none;
-            box-shadow: 0 0 20px rgba(255,0,255,0.5);
-        }
-        .debug-button {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            z-index: 9999;
-            background: #222;
-            color: #ff00ff;
-            border: 2px solid #ff00ff;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(255,0,255,0.5);
-        }
-        .debug-button:hover {
-            background: #ff00ff;
-            color: #000;
-        }
-        .message-telemetry {
-            background: #1a2a1a;
-            border-left: 3px solid #88ff88;
-            padding: 6px;
-            margin: 4px 0;
-            font-family: monospace;
-            font-size: 10px;
-            line-height: 1.4;
-        }
-        .message-telemetry-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .retry-button {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 4px 8px;
-            margin-left: 8px;
-            background: #3a1e1e;
-            border: 1px solid #ff8888;
-            color: #ff8888;
-            border-radius: 4px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .retry-button:hover {
-            background: #4a2e2e;
-            border-color: #ffaaaa;
-            color: #ffaaaa;
-            transform: scale(1.05);
-        }
-        .retry-button:active {
-            transform: scale(0.95);
-        }
-        .lxmf-message-content.formatted {
-            white-space: pre-wrap;
-            font-family: monospace;
-            font-size: 11px;
-        }
-        .telemetry-compact {
-            font-family: monospace;
-            font-size: 10px;
-            line-height: 1.3;
-            color: #88ff88;
-            background: #1a1a1a;
-            padding: 6px;
-            border-radius: 3px;
-            margin-bottom: 6px;
-            border-left: 2px solid #88ff88;
-        }
-        .telemetry-compact-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .telemetry-compact-item {
-            white-space: nowrap;
-        }
-        .telemetry-compact-label {
-            color: #888;
-            margin-right: 2px;
-        }
-        .telemetry-compact-value {
-            color: #88ff88;
-            font-weight: bold;
-        }
-        .aspect-badge-sidebar {
-            font-size: 9px;
-            color: #ffaa00;
-            background: #2a1a00;
-            padding: 2px 4px;
-            border-radius: 2px;
-            margin: 4px 0;
-            text-align: center;
-            border: 1px solid #ffaa00;
-        }
+        
     </style>
 </head>
 <body>
@@ -327,13 +188,18 @@
                 
                 <!-- AREA FISSA 60% - TELEMETRIA + MAPPA -->
                 <div class="telemetry-fixed-area" id="telemetryFixedArea">
-                    <!-- DASHBOARD TELEMETRIA COMPATTA -->
+                    <!-- DASHBOARD TELEMETRIA MIGLIORATA -->
                     <div class="peer-telemetry" id="telemetryDashboard">
                         <div class="telemetry-empty">👈 Seleziona un peer per vedere i dati</div>
                     </div>
                     
-                    <!-- MAPPA INTEGRATA -->
+                    <!-- MAPPA INTEGRATA CON CONTROLLI -->
                     <div class="telemetry-map" id="telemetryMap">
+                        <div class="map-controls">
+                            <button class="map-style-btn active" onclick="setMapStyle('topo')" id="mapStyleTopo">🗺️ Rilievi</button>
+                            <button class="map-style-btn" onclick="setMapStyle('satellite')" id="mapStyleSatellite">🛰️ Satellite</button>
+                            <button class="map-style-btn" onclick="setMapStyle('street')" id="mapStyleStreet">🏙️ Strade</button>
+                        </div>
                         <div class="map-placeholder" id="mapPlaceholder">
                             <span>🗺️ Nessuna posizione disponibile</span>
                         </div>
@@ -384,21 +250,13 @@
         // Notifiche peer
         let unreadPeers = new Set();
 
-        // Ultimi dati telemetria
-        let lastTelemetry = {
-            battery: null,
-            location: null,
-            appearance: null,
-            timestamp: null,
-            information: null,
-            pressure: null,
-            temperature: null,
-            humidity: null
-        };
+        // Database telemetria per peer
+        let telemetryDatabase = {};
 
-        // Variabili mappa Leaflet
+        // Mappa Leaflet
         let mapInstance = null;
         let mapMarker = null;
+        let currentMapStyle = 'topo';
 
         // Cache messaggi per debug
         let messageCache = new Map();
@@ -702,10 +560,11 @@
             if (!mapInstance) {
                 mapInstance = L.map('mapContainer').setView([41.9028, 12.4964], 5);
                 
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                    attribution: '&copy; OpenStreetMap',
-                    subdomains: 'abcd',
-                    maxZoom: 19
+                // Mappa predefinita - rilievi (OpenTopoMap)
+                L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenTopoMap',
+                    maxZoom: 17,
+                    opacity: 1
                 }).addTo(mapInstance);
                 
                 mapMarker = L.marker([41.9028, 12.4964], {
@@ -718,8 +577,63 @@
                 }).addTo(mapInstance);
                 
                 mapMarker.setOpacity(0);
-                debugLog('Mappa inizializzata');
+                debugLog('Mappa inizializzata con stile rilievi');
             }
+        }
+
+        function setMapStyle(style) {
+            currentMapStyle = style;
+            
+            // Aggiorna pulsanti
+            document.getElementById('mapStyleTopo').classList.toggle('active', style === 'topo');
+            document.getElementById('mapStyleSatellite').classList.toggle('active', style === 'satellite');
+            document.getElementById('mapStyleStreet').classList.toggle('active', style === 'street');
+            
+            if (!mapInstance) {
+                initMap();
+                return;
+            }
+            
+            // Rimuovi tutti i layer esistenti
+            mapInstance.eachLayer(layer => {
+                if (layer instanceof L.TileLayer) {
+                    mapInstance.removeLayer(layer);
+                }
+            });
+            
+            // Aggiungi il nuovo layer in base allo stile
+            let tileLayer;
+            
+            switch(style) {
+                case 'satellite':
+                    tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                        attribution: '&copy; Esri',
+                        maxZoom: 18
+                    });
+                    break;
+                case 'street':
+                    tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; OpenStreetMap',
+                        maxZoom: 19
+                    });
+                    break;
+                case 'topo':
+                default:
+                    tileLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenTopoMap',
+                        maxZoom: 17
+                    });
+                    break;
+            }
+            
+            tileLayer.addTo(mapInstance);
+            
+            // Riaggiungi il marker se esiste
+            if (mapMarker) {
+                mapMarker.addTo(mapInstance);
+            }
+            
+            debugLog('Stile mappa cambiato:', style);
         }
 
         function updateMap(lat, lon) {
@@ -760,9 +674,72 @@
         }
 
         // ============================================
-        // TELEMETRIA COMPATTA
+        // TELEMETRIA DASHBOARD MIGLIORATA
         // ============================================
-        function renderTelemetryCompact() {
+        function saveTelemetryToDatabase(peerHash, telemetryData) {
+            if (!peerHash || !telemetryData) return;
+            
+            if (!telemetryDatabase[peerHash]) {
+                telemetryDatabase[peerHash] = {
+                    battery: null,
+                    location: null,
+                    appearance: null,
+                    information: null,
+                    pressure: null,
+                    temperature: null,
+                    humidity: null,
+                    lastUpdate: null,
+                    history: []
+                };
+            }
+            
+            // Aggiorna i dati
+            if (telemetryData.battery) telemetryDatabase[peerHash].battery = telemetryData.battery;
+            if (telemetryData.location) telemetryDatabase[peerHash].location = telemetryData.location;
+            if (telemetryData.appearance) telemetryDatabase[peerHash].appearance = telemetryData.appearance;
+            if (telemetryData.information) telemetryDatabase[peerHash].information = telemetryData.information;
+            if (telemetryData.pressure) telemetryDatabase[peerHash].pressure = telemetryData.pressure;
+            if (telemetryData.temperature) telemetryDatabase[peerHash].temperature = telemetryData.temperature;
+            if (telemetryData.humidity) telemetryDatabase[peerHash].humidity = telemetryData.humidity;
+            
+            telemetryDatabase[peerHash].lastUpdate = telemetryData.timestamp || Math.floor(Date.now() / 1000);
+            
+            // Salva nello storico (max 100 entry)
+            if (!telemetryDatabase[peerHash].history) {
+                telemetryDatabase[peerHash].history = [];
+            }
+            
+            telemetryDatabase[peerHash].history.unshift({
+                timestamp: telemetryData.timestamp || Math.floor(Date.now() / 1000),
+                battery: telemetryData.battery?.charge_percent,
+                location: telemetryData.location
+            });
+            
+            if (telemetryDatabase[peerHash].history.length > 100) {
+                telemetryDatabase[peerHash].history.pop();
+            }
+            
+            debugLog('Telemetria salvata per peer', { peer: peerHash.substring(0,8), data: telemetryData });
+        }
+
+        function getTelemetryFromDatabase(peerHash) {
+            if (!peerHash || !telemetryDatabase[peerHash]) {
+                return {
+                    battery: null,
+                    location: null,
+                    appearance: null,
+                    information: null,
+                    pressure: null,
+                    temperature: null,
+                    humidity: null,
+                    lastUpdate: null
+                };
+            }
+            
+            return telemetryDatabase[peerHash];
+        }
+
+        function renderTelemetryDashboard() {
             const dashboard = document.getElementById('telemetryDashboard');
             const mapPlaceholder = document.getElementById('mapPlaceholder');
             const mapContainer = document.getElementById('mapContainer');
@@ -774,8 +751,11 @@
                 return;
             }
             
-            if (!lastTelemetry.location && !lastTelemetry.battery && !lastTelemetry.appearance) {
-                dashboard.innerHTML = '<div class="telemetry-empty">📡 Nessun dato telemetria</div>';
+            const peerHash = cleanHash(currentPeer.hash);
+            const telemetry = getTelemetryFromDatabase(peerHash);
+            
+            if (!telemetry.battery && !telemetry.location && !telemetry.appearance && !telemetry.information) {
+                dashboard.innerHTML = '<div class="telemetry-empty">📡 Nessun dato telemetria disponibile per questo peer</div>';
                 
                 if (mapContainer) mapContainer.style.display = 'none';
                 if (mapPlaceholder) {
@@ -785,44 +765,158 @@
                 return;
             }
             
-            let html = '<div class="telemetry-compact">';
+            // Costruisci la dashboard migliorata
+            let html = '<div class="telemetry-dashboard">';
             
-            if (lastTelemetry.location) {
-                const loc = lastTelemetry.location;
-                html += '<div class="telemetry-compact-row">';
-                html += `<span class="telemetry-compact-item"><span class="telemetry-compact-label">📍</span> <span class="telemetry-compact-value">${loc.latitude?.toFixed(4) || '?'}, ${loc.longitude?.toFixed(4) || '?'}</span></span>`;
-                if (loc.altitude) html += `<span class="telemetry-compact-item"><span class="telemetry-compact-label">⛰️</span> ${loc.altitude.toFixed(0)}m</span>`;
-                if (loc.accuracy) html += `<span class="telemetry-compact-item"><span class="telemetry-compact-label">🎯</span> ±${loc.accuracy.toFixed(0)}m</span>`;
-                html += '</div>';
+            // Header con icona MDI
+            const iconName = telemetry.appearance?.icon || 'account';
+            html += `<div class="telemetry-peer-header">`;
+            html += `<div class="telemetry-peer-icon"><span class="mdi mdi-${iconName}"></span></div>`;
+            html += `<div class="telemetry-peer-info">`;
+            html += `<div class="telemetry-peer-name">${escapeHtml(cleanDisplayName(currentPeer.display_name))}</div>`;
+            html += `<div class="telemetry-peer-hash">${peerHash.substring(0, 16)}...</div>`;
+            html += `</div></div>`;
+            
+            // Griglia telemetria
+            html += `<div class="telemetry-grid">`;
+            
+            // Batteria
+            if (telemetry.battery) {
+                const battery = telemetry.battery;
+                const chargePercent = battery.charge_percent || battery.charge || 0;
+                const isCharging = battery.charging || false;
+                const batteryIcon = isCharging ? 'mdi-lightning-bolt' : (chargePercent > 20 ? 'mdi-battery' : 'mdi-battery-outline');
+                
+                html += `<div class="telemetry-card">`;
+                html += `<div class="telemetry-card-title"><span class="mdi ${batteryIcon}"></span> BATTERIA</div>`;
+                html += `<div class="telemetry-card-content">`;
+                html += `<div class="battery-level">`;
+                html += `<div class="battery-bar"><div class="battery-fill" style="width: ${chargePercent}%;"></div></div>`;
+                html += `<span class="battery-text">${chargePercent}%</span>`;
+                html += `</div>`;
+                if (battery.temperature) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Temperatura</span><span class="telemetry-data-value">${battery.temperature}°C</span></div>`;
+                }
+                if (battery.voltage) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Tensione</span><span class="telemetry-data-value">${battery.voltage}V</span></div>`;
+                }
+                html += `</div></div>`;
             }
             
-            if (lastTelemetry.battery) {
-                const bat = lastTelemetry.battery;
-                html += '<div class="telemetry-compact-row">';
-                html += `<span class="telemetry-compact-item"><span class="telemetry-compact-label">🔋</span> <span class="telemetry-compact-value">${bat.charge_percent || bat.charge || '?'}%</span></span>`;
-                if (bat.charging) html += `<span class="telemetry-compact-item">⚡</span>`;
-                if (bat.temperature) html += `<span class="telemetry-compact-item"><span class="telemetry-compact-label">🌡️</span> ${bat.temperature}°C</span>`;
-                html += '</div>';
+            // Posizione
+            if (telemetry.location) {
+                const loc = telemetry.location;
+                html += `<div class="telemetry-card">`;
+                html += `<div class="telemetry-card-title"><span class="mdi mdi-map-marker"></span> POSIZIONE</div>`;
+                html += `<div class="telemetry-card-content">`;
+                html += `<div class="location-badge">`;
+                html += `<div class="location-coord"><span>Lat:</span><span class="telemetry-data-value">${loc.latitude?.toFixed(6) || '?'}</span></div>`;
+                html += `<div class="location-coord"><span>Lon:</span><span class="telemetry-data-value">${loc.longitude?.toFixed(6) || '?'}</span></div>`;
+                if (loc.altitude) {
+                    html += `<div class="location-coord"><span>Alt:</span><span class="telemetry-data-value">${loc.altitude.toFixed(1)}m</span></div>`;
+                }
+                if (loc.accuracy) {
+                    html += `<div class="location-coord"><span>Acc:</span><span class="telemetry-data-value">±${loc.accuracy.toFixed(1)}m</span></div>`;
+                }
+                if (loc.speed !== undefined && !isNaN(loc.speed)) {
+                    html += `<div class="location-coord"><span>Vel:</span><span class="telemetry-data-value">${(loc.speed * 3.6).toFixed(1)} km/h</span></div>`;
+                }
+                if (loc.bearing !== undefined && !isNaN(loc.bearing)) {
+                    html += `<div class="location-coord"><span>Dir:</span><span class="telemetry-data-value">${loc.bearing.toFixed(0)}°</span></div>`;
+                }
+                html += `</div></div></div>`;
+                
+                // Aggiorna mappa
+                if (loc.latitude && loc.longitude) {
+                    updateMap(loc.latitude, loc.longitude);
+                }
             }
             
-            if (lastTelemetry.appearance) {
-                const app = lastTelemetry.appearance;
-                html += '<div class="telemetry-compact-row">';
-                html += `<span class="telemetry-compact-item"><span class="telemetry-compact-label">🖼️</span> ${app.icon || 'account'}</span>`;
-                html += '</div>';
+            // Informazioni di sistema
+            if (telemetry.information || telemetry.pressure || telemetry.temperature || telemetry.humidity) {
+                html += `<div class="telemetry-card">`;
+                html += `<div class="telemetry-card-title"><span class="mdi mdi-information"></span> SISTEMA</div>`;
+                html += `<div class="telemetry-card-content">`;
+                
+                if (telemetry.temperature) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Temperatura</span><span class="telemetry-data-value">${telemetry.temperature}°C</span></div>`;
+                }
+                if (telemetry.humidity) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Umidità</span><span class="telemetry-data-value">${telemetry.humidity}%</span></div>`;
+                }
+                if (telemetry.pressure) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Pressione</span><span class="telemetry-data-value">${telemetry.pressure} hPa</span></div>`;
+                }
+                if (telemetry.information?.uptime) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Uptime</span><span class="telemetry-data-value">${telemetry.information.uptime}</span></div>`;
+                }
+                if (telemetry.information?.cpu) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">CPU</span><span class="telemetry-data-value">${telemetry.information.cpu}</span></div>`;
+                }
+                if (telemetry.information?.ram) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">RAM</span><span class="telemetry-data-value">${telemetry.information.ram}</span></div>`;
+                }
+                if (telemetry.information?.disk) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Disk</span><span class="telemetry-data-value">${telemetry.information.disk}</span></div>`;
+                }
+                
+                html += `</div></div>`;
             }
             
-            if (lastTelemetry.timestamp) {
-                const date = new Date(lastTelemetry.timestamp * 1000);
-                html += `<div><span class="telemetry-compact-label">🕐</span> ${date.toLocaleTimeString()}</div>`;
+            // Aspetto/Icona
+            if (telemetry.appearance) {
+                html += `<div class="telemetry-card">`;
+                html += `<div class="telemetry-card-title"><span class="mdi mdi-palette"></span> ASPETTO</div>`;
+                html += `<div class="telemetry-card-content">`;
+                
+                if (telemetry.appearance.icon) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Icona</span><span class="telemetry-data-value"><span class="mdi mdi-${telemetry.appearance.icon}"></span> ${telemetry.appearance.icon}</span></div>`;
+                }
+                if (telemetry.appearance.color) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Colore</span><span class="telemetry-data-value" style="color:${telemetry.appearance.color};">${telemetry.appearance.color}</span></div>`;
+                }
+                if (telemetry.appearance.name) {
+                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Nome</span><span class="telemetry-data-value">${escapeHtml(telemetry.appearance.name)}</span></div>`;
+                }
+                
+                html += `</div></div>`;
             }
             
-            html += '</div>';
+            // Ultimo aggiornamento
+            if (telemetry.lastUpdate) {
+                const date = new Date(telemetry.lastUpdate * 1000);
+                html += `<div class="telemetry-card">`;
+                html += `<div class="telemetry-card-title"><span class="mdi mdi-clock-outline"></span> ULTIMO AGGIORNAMENTO</div>`;
+                html += `<div class="telemetry-card-content">`;
+                html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Data</span><span class="telemetry-data-value">${date.toLocaleDateString()}</span></div>`;
+                html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Ora</span><span class="telemetry-data-value">${date.toLocaleTimeString()}</span></div>`;
+                html += `</div></div>`;
+            }
+            
+            html += `</div>`; // Chiudi griglia
+            
+            // Storico batteria (se disponibile)
+            if (telemetry.history && telemetry.history.length > 1) {
+                html += `<div class="telemetry-divider"></div>`;
+                html += `<div class="telemetry-card-title"><span class="mdi mdi-chart-line"></span> STORICO BATTERIA</div>`;
+                html += `<div class="info-grid">`;
+                
+                // Mostra ultimi 4 valori
+                telemetry.history.slice(0, 4).forEach((entry, index) => {
+                    if (entry.battery) {
+                        const entryDate = new Date(entry.timestamp * 1000);
+                        html += `<div class="info-item">`;
+                        html += `<div class="info-label">${entryDate.toLocaleTimeString()}</div>`;
+                        html += `<div class="info-value">${entry.battery}%</div>`;
+                        html += `</div>`;
+                    }
+                });
+                
+                html += `</div>`;
+            }
+            
+            html += `</div>`;
             dashboard.innerHTML = html;
-            
-            if (lastTelemetry.location?.latitude && lastTelemetry.location?.longitude) {
-                updateMap(lastTelemetry.location.latitude, lastTelemetry.location.longitude);
-            }
         }
 
         // ============================================
@@ -857,7 +951,7 @@
                 btn.innerHTML = '📊 MONITOR ON';
                 messageColumn.style.flex = '1';
                 renderMonitorPackets();
-                renderTelemetryCompact();
+                renderTelemetryDashboard();
             } else {
                 monitor.style.display = 'none';
                 container.classList.remove('monitor-active');
@@ -902,39 +996,32 @@
                 incomingPackets[packetPeer].pop();
             }
             
+            // Estrai dati telemetria dal pacchetto
+            const telemetryData = {
+                timestamp: packet.timestamp,
+                battery: packet.battery,
+                location: packet.location,
+                appearance: packet.appearance,
+                information: packet.information,
+                pressure: packet.pressure,
+                temperature: packet.temperature,
+                humidity: packet.humidity
+            };
+            
+            // Se ci sono dati nel pacchetto, aggiungili
+            if (packet.telemetry) {
+                if (packet.telemetry.battery) telemetryData.battery = packet.telemetry.battery;
+                if (packet.telemetry.location) telemetryData.location = packet.telemetry.location;
+                if (packet.telemetry.appearance) telemetryData.appearance = packet.telemetry.appearance;
+                if (packet.telemetry.information) telemetryData.information = packet.telemetry.information;
+            }
+            
+            // Salva nel database
+            saveTelemetryToDatabase(packetPeer, telemetryData);
+            
             if (currentPeerHash && packetPeer === currentPeerHash) {
-                if (packet.timestamp) {
-                    lastTelemetry.timestamp = packet.timestamp;
-                }
-                
-                if (packet.battery) {
-                    lastTelemetry.battery = packet.battery;
-                }
-                
-                if (packet.location) {
-                    lastTelemetry.location = packet.location;
-                    if (packet.location.latitude && packet.location.longitude) {
-                        updateMap(packet.location.latitude, packet.location.longitude);
-                    }
-                }
-                
-                if (packet.appearance) {
-                    lastTelemetry.appearance = packet.appearance;
-                }
-                
-                if (packet.telemetry) {
-                    if (packet.telemetry.battery) lastTelemetry.battery = packet.telemetry.battery;
-                    if (packet.telemetry.location) {
-                        lastTelemetry.location = packet.telemetry.location;
-                        if (packet.telemetry.location.latitude && packet.telemetry.location.longitude) {
-                            updateMap(packet.telemetry.location.latitude, packet.telemetry.location.longitude);
-                        }
-                    }
-                    if (packet.telemetry.appearance) lastTelemetry.appearance = packet.telemetry.appearance;
-                }
-                
                 if (monitorActive) {
-                    renderTelemetryCompact();
+                    renderTelemetryDashboard();
                     renderMonitorPackets();
                     document.getElementById('packetCount').textContent = incomingPackets[packetPeer].length;
                 }
@@ -951,21 +1038,9 @@
             const peerHash = cleanHash(currentPeer.hash);
             incomingPackets[peerHash] = [];
             
-            lastTelemetry = {
-                battery: null,
-                location: null,
-                appearance: null,
-                timestamp: null,
-                information: null,
-                pressure: null,
-                temperature: null,
-                humidity: null
-            };
-            
             document.getElementById('packetCount').textContent = '0';
             if (monitorActive) {
                 renderMonitorPackets();
-                renderTelemetryCompact();
             }
             debugLog('Monitor log pulito');
         }
@@ -995,14 +1070,26 @@
                     html += `<div style="color:#88ff88;">${escapeHtml(short)}</div>`;
                 }
                 
+                // Mostra RAW HEX e ASCII se disponibili (questa parte era stata tagliata!)
                 if (pkt.raw_hex) {
-                    html += `<div style="color:#88f; font-size:8px;">HEX: ${pkt.raw_hex.substring(0,200)}...</div>`;
+                    html += `<div style="color:#88f; font-size:8px; margin-top:2px;">HEX: ${pkt.raw_hex.substring(0, 100)}${pkt.raw_hex.length > 100 ? '...' : ''}</div>`;
+                }
+                if (pkt.raw_ascii) {
+                    html += `<div style="color:#ff8; font-size:8px;">ASCII: ${escapeHtml(pkt.raw_ascii.substring(0, 100))}${pkt.raw_ascii.length > 100 ? '...' : ''}</div>`;
                 }
                 
                 if (pkt.rssi || pkt.snr) {
                     html += `<div style="display:flex; gap:8px; margin-top:2px;">`;
                     if (pkt.rssi) html += `<span>📶 ${pkt.rssi.toFixed(1)}</span>`;
                     if (pkt.snr) html += `<span>📊 ${pkt.snr.toFixed(1)}</span>`;
+                    html += `</div>`;
+                }
+                
+                // Mostra badge se ci sono dati telemetria
+                if (pkt.battery || pkt.location) {
+                    html += `<div style="display:flex; gap:4px; margin-top:2px;">`;
+                    if (pkt.battery) html += `<span style="color:#7ec8e0;">🔋 ${pkt.battery.charge_percent || pkt.battery.charge || '?'}%</span>`;
+                    if (pkt.location) html += `<span style="color:#7ec8e0;">📍 pos</span>`;
                     html += `</div>`;
                 }
                 
@@ -1346,11 +1433,11 @@
                     
                     renderMessages();
                     
-                    // Aggiungi al monitor (senza duplicati)
+                    // Aggiungi al monitor e salva telemetria (senza duplicati)
                     if (messages.length > 0) {
                         messages.forEach(msg => {
                             if (msg.direction === 'incoming') {
-                                addMonitorPacket({
+                                const packet = {
                                     timestamp: msg.timestamp,
                                     direction: msg.direction,
                                     peer: msg.from || msg.to,
@@ -1365,7 +1452,27 @@
                                     raw_hex: msg.raw_hex,
                                     raw_ascii: msg.raw_ascii,
                                     raw_size: msg.raw_size
-                                });
+                                };
+                                
+                                addMonitorPacket(packet);
+                                
+                                // Estrai e salva telemetria
+                                const telemetryData = {
+                                    timestamp: msg.timestamp,
+                                    battery: msg.battery,
+                                    location: msg.location,
+                                    appearance: msg.appearance,
+                                    information: msg.information
+                                };
+                                
+                                if (msg.telemetry) {
+                                    if (msg.telemetry.battery) telemetryData.battery = msg.telemetry.battery;
+                                    if (msg.telemetry.location) telemetryData.location = msg.telemetry.location;
+                                    if (msg.telemetry.appearance) telemetryData.appearance = msg.telemetry.appearance;
+                                    if (msg.telemetry.information) telemetryData.information = msg.telemetry.information;
+                                }
+                                
+                                saveTelemetryToDatabase(cleanHash(msg.from || msg.to), telemetryData);
                             }
                         });
                     }
@@ -1379,6 +1486,11 @@
                             activeTransfers.set(msg.id || msg.timestamp, msg);
                         }
                     });
+                    
+                    // Aggiorna dashboard se monitor attivo
+                    if (monitorActive) {
+                        renderTelemetryDashboard();
+                    }
                 }
             } catch (e) {
                 debugLog('Errore poll', e.message);
@@ -1395,17 +1507,6 @@
                 unreadPeers.delete(peerHash);
                 
                 debugLog('Peer selezionato', { name: currentPeer.display_name, hash: peerHash.substring(0,8) });
-                
-                lastTelemetry = {
-                    battery: null,
-                    location: null,
-                    appearance: null,
-                    timestamp: null,
-                    information: null,
-                    pressure: null,
-                    temperature: null,
-                    humidity: null
-                };
                 
                 let displayName = cleanDisplayName(currentPeer.display_name || 'Anonimo');
                 if (displayName.length > 20) {
@@ -1443,7 +1544,7 @@
                 await pollMessages();
                 
                 if (monitorActive) {
-                    renderTelemetryCompact();
+                    renderTelemetryDashboard();
                     renderMonitorPackets();
                     document.getElementById('packetCount').textContent = (incomingPackets[peerHash] || []).length;
                 }
@@ -1828,17 +1929,15 @@
                     });
                 }
                 
-                // ⚠️ RAW VIEW MODIFICATA - Carica on-demand
+                // RAW VIEW - Carica on-demand
                 let rawHtml = '';
                 if (rawViewActive && msg.lxmf_file) {
-                    // ID unico per questo raw block
                     const rawId = `raw-${msg.timestamp}-${Date.now()}`;
                     rawHtml = `
                         <div class="lxmf-message-raw" id="${rawId}">
                             <div class="lxmf-message-raw-hex">📦 Caricamento dati raw...</div>
                         </div>
                     `;
-                    // Carica asincrono dopo il rendering
                     setTimeout(() => loadRawData(msg, peerHash, rawId), 50);
                 }
                 
@@ -1867,7 +1966,7 @@
             document.getElementById('messageList').scrollTop = document.getElementById('messageList').scrollHeight;
         }
 
-        // ⚠️ Funzione per caricare i dati raw dal file .lxb
+        // Funzione per caricare i dati raw dal file .lxb
         async function loadRawData(msg, peerHash, rawId) {
             if (!msg.lxmf_file) return;
             
@@ -2066,6 +2165,7 @@
         window.openModal = openModal;
         window.closeModal = closeModal;
         window.retryMessage = retryMessage;
+        window.setMapStyle = setMapStyle;
         window.debugRaw = function() {
             debugLog('DEBUG RAW:', {
                 currentPeer: currentPeer?.hash?.substring(0,16),
@@ -2074,6 +2174,9 @@
             });
         };
         window.debugIdentity = debugIdentity;
+        window.debugTelemetry = function() {
+            console.log("📊 DATABASE TELEMETRIA:", telemetryDatabase);
+        };
     </script>
 </body>
 </html>

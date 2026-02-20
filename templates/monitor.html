@@ -63,7 +63,7 @@
                 <div class="header-subtitle">Monitoraggio annunci e identità Reticulum</div>
             </div>
             <div>
-                <a href="/" class="back-button">← IDENTITY MANAGER</a>
+                <a href="/" class="back-button">← TORNA A IDENTITY MANAGER</a>
             </div>
         </header>
 
@@ -269,124 +269,6 @@
         window._allAnnounces = [];
 
         // ============================================
-        // === FUNZIONI ORDINAMENTO COLONNE ===
-        // ============================================
-
-        function setSort(field) {
-            const currentSort = state.sort;
-            let direction = 'desc';
-            
-            if (currentSort.startsWith(field)) {
-                if (currentSort.endsWith('_desc')) {
-                    direction = 'asc';
-                } else if (currentSort.endsWith('_asc')) {
-                    direction = 'desc';
-                }
-            }
-            
-            state.sort = `${field}_${direction}`;
-            state.page = 1;
-            
-            updateSortIndicators();
-            
-            // Usa l'array globale se disponibile, altrimenti ricarica
-            if (window._allAnnounces && window._allAnnounces.length > 0) {
-                applyCurrentSortAndRender();
-            } else {
-                loadHistory();
-            }
-        }
-
-        function updateSortIndicators() {
-            const indicators = {
-                time: document.getElementById('sort-indicator-time'),
-                identity: document.getElementById('sort-indicator-identity'),
-                dest: document.getElementById('sort-indicator-dest'),
-                aspect: document.getElementById('sort-indicator-aspect'),
-                hops: document.getElementById('sort-indicator-hops'),
-                rssi: document.getElementById('sort-indicator-rssi'),
-                snr: document.getElementById('sort-indicator-snr'),
-                q: document.getElementById('sort-indicator-q'),
-                iface: document.getElementById('sort-indicator-iface'),
-                data: document.getElementById('sort-indicator-data')
-            };
-            
-            Object.values(indicators).forEach(ind => {
-                if (ind) ind.innerHTML = '';
-            });
-            
-            const [field, dir] = state.sort.split('_');
-            if (indicators[field]) {
-                indicators[field].innerHTML = dir === 'desc' ? '▼' : '▲';
-            }
-        }
-
-        // ============================================
-        // === FUNZIONI DI UTILITÀ ===
-        // ============================================
-
-        function decodeUTF8(str) {
-            if (!str) return '';
-            try {
-                return decodeURIComponent(escape(str));
-            } catch(e) {
-                return str;
-            }
-        }
-
-        function formatRate(rateHz) {
-            if (rateHz >= 1) return rateHz.toFixed(2) + ' Hz';
-            if (rateHz >= 0.001) return (rateHz * 1000).toFixed(1) + ' mHz';
-            if (rateHz > 0) return (rateHz * 1000000).toFixed(0) + ' µHz';
-            return '—';
-        }
-
-        function formatPeriod(periodSeconds) {
-            if (periodSeconds >= 3600) return (periodSeconds / 3600).toFixed(1) + ' h';
-            if (periodSeconds >= 60) return (periodSeconds / 60).toFixed(1) + ' min';
-            if (periodSeconds >= 1) return periodSeconds.toFixed(1) + ' s';
-            if (periodSeconds > 0) return (periodSeconds * 1000).toFixed(0) + ' ms';
-            return '—';
-        }
-
-        function isActive(timestamp) {
-            const now = Date.now() / 1000;
-            return (now - timestamp) < INACTIVE_TIMEOUT;
-        }
-
-        function getRSSIClass(rssi) {
-            if (rssi === null || rssi === undefined) return '';
-            if (rssi > -70) return 'rssi-good';
-            if (rssi > -85) return 'rssi-ok';
-            return 'rssi-poor';
-        }
-
-        function getSNRClass(snr) {
-            if (snr === null || snr === undefined) return '';
-            if (snr > 15) return 'snr-good';
-            if (snr > 5) return 'snr-ok';
-            return 'snr-poor';
-        }
-
-        function getQClass(q) {
-            if (q === null || q === undefined) return '';
-            if (q > 80) return 'q-good';
-            if (q > 50) return 'q-ok';
-            return 'q-poor';
-        }
-
-        // ============================================
-        // === FUNZIONI DI ORDINAMENTO TABELLA ===
-        // ============================================
-
-        function getNumericHops(hopText) {
-            if (hopText === '🏠 locale') return 0;
-            if (hopText === '?') return 999;
-            const num = parseInt(hopText);
-            return isNaN(num) ? 999 : num;
-        }
-
-        // ============================================
         // === APPLICA ORDINAMENTO E RENDERIZZA ===
         // ============================================
 
@@ -506,6 +388,202 @@
             updatePagination(filtered.length);
             
             console.log(`📊 Renderizzati ${paginated.length} annunci (filtrati: ${filtered.length}, totali: ${window._allAnnounces.length})`);
+        }
+
+        // ============================================
+        // === FUNZIONI ORDINAMENTO COLONNE ===
+        // ============================================
+
+        function setSort(field) {
+            const currentSort = state.sort;
+            let direction = 'desc';
+            
+            if (currentSort.startsWith(field)) {
+                if (currentSort.endsWith('_desc')) {
+                    direction = 'asc';
+                } else if (currentSort.endsWith('_asc')) {
+                    direction = 'desc';
+                }
+            }
+            
+            const newSort = `${field}_${direction}`;
+            
+            if (newSort === state.sort) return;
+            
+            state.sort = newSort;
+            state.page = 1;
+            
+            updateSortIndicators();
+            
+            if (window._allAnnounces && window._allAnnounces.length > 0) {
+                applyCurrentSortAndRender();
+            } else {
+                loadHistory();
+            }
+        }
+
+        function updateSortIndicators() {
+            const indicators = {
+                time: document.getElementById('sort-indicator-time'),
+                identity: document.getElementById('sort-indicator-identity'),
+                dest: document.getElementById('sort-indicator-dest'),
+                aspect: document.getElementById('sort-indicator-aspect'),
+                hops: document.getElementById('sort-indicator-hops'),
+                rssi: document.getElementById('sort-indicator-rssi'),
+                snr: document.getElementById('sort-indicator-snr'),
+                q: document.getElementById('sort-indicator-q'),
+                iface: document.getElementById('sort-indicator-iface'),
+                data: document.getElementById('sort-indicator-data')
+            };
+            
+            Object.values(indicators).forEach(ind => {
+                if (ind) ind.innerHTML = '';
+            });
+            
+            const [field, dir] = state.sort.split('_');
+            if (indicators[field]) {
+                indicators[field].innerHTML = dir === 'desc' ? '▼' : '▲';
+            }
+        }
+
+        // ============================================
+        // === FUNZIONI DI UTILITÀ ===
+        // ============================================
+
+        function decodeUTF8(str) {
+            if (!str) return '';
+            try {
+                return decodeURIComponent(escape(str));
+            } catch(e) {
+                return str;
+            }
+        }
+
+        function formatRate(rateHz) {
+            if (rateHz >= 1) return rateHz.toFixed(2) + ' Hz';
+            if (rateHz >= 0.001) return (rateHz * 1000).toFixed(1) + ' mHz';
+            if (rateHz > 0) return (rateHz * 1000000).toFixed(0) + ' µHz';
+            return '—';
+        }
+
+        function formatPeriod(periodSeconds) {
+            if (periodSeconds >= 3600) return (periodSeconds / 3600).toFixed(1) + ' h';
+            if (periodSeconds >= 60) return (periodSeconds / 60).toFixed(1) + ' min';
+            if (periodSeconds >= 1) return periodSeconds.toFixed(1) + ' s';
+            if (periodSeconds > 0) return (periodSeconds * 1000).toFixed(0) + ' ms';
+            return '—';
+        }
+
+        function isActive(timestamp) {
+            const now = Date.now() / 1000;
+            return (now - timestamp) < INACTIVE_TIMEOUT;
+        }
+
+        function getRSSIClass(rssi) {
+            if (rssi === null || rssi === undefined) return '';
+            if (rssi > -70) return 'rssi-good';
+            if (rssi > -85) return 'rssi-ok';
+            return 'rssi-poor';
+        }
+
+        function getSNRClass(snr) {
+            if (snr === null || snr === undefined) return '';
+            if (snr > 15) return 'snr-good';
+            if (snr > 5) return 'snr-ok';
+            return 'snr-poor';
+        }
+
+        function getQClass(q) {
+            if (q === null || q === undefined) return '';
+            if (q > 80) return 'q-good';
+            if (q > 50) return 'q-ok';
+            return 'q-poor';
+        }
+
+        // ============================================
+        // === FUNZIONI DI ORDINAMENTO TABELLA ===
+        // ============================================
+
+        function getNumericHops(hopText) {
+            if (hopText === '🏠 locale') return 0;
+            if (hopText === '?') return 999;
+            const num = parseInt(hopText);
+            return isNaN(num) ? 999 : num;
+        }
+
+        function sortTableByState() {
+            const tbody = document.getElementById('announce-body');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            if (rows.length === 0 || rows[0].innerHTML.includes('nessun annuncio')) return;
+            
+            const [field, direction] = state.sort.split('_');
+            const dir = direction === 'desc' ? -1 : 1;
+            
+            rows.sort((a, b) => {
+                const cellsA = a.querySelectorAll('td');
+                const cellsB = b.querySelectorAll('td');
+                
+                if (cellsA.length < 10 || cellsB.length < 10) return 0;
+                
+                switch(field) {
+                    case 'time': {
+                        const timeA = cellsA[0]?.textContent || '';
+                        const timeB = cellsB[0]?.textContent || '';
+                        return dir * timeB.localeCompare(timeA);
+                    }
+                    case 'identity': {
+                        const idA = cellsA[1]?.textContent || '';
+                        const idB = cellsB[1]?.textContent || '';
+                        return dir * idA.localeCompare(idB);
+                    }
+                    case 'dest': {
+                        const destA = cellsA[2]?.textContent || '';
+                        const destB = cellsB[2]?.textContent || '';
+                        return dir * destA.localeCompare(destB);
+                    }
+                    case 'aspect': {
+                        const aspectA = cellsA[3]?.textContent || '';
+                        const aspectB = cellsB[3]?.textContent || '';
+                        return dir * aspectA.localeCompare(aspectB);
+                    }
+                    case 'hops': {
+                        const hopsA = getNumericHops(cellsA[4]?.textContent);
+                        const hopsB = getNumericHops(cellsB[4]?.textContent);
+                        return dir * (hopsA - hopsB);
+                    }
+                    case 'rssi': {
+                        const rssiA = parseFloat(cellsA[5]?.textContent) || -999;
+                        const rssiB = parseFloat(cellsB[5]?.textContent) || -999;
+                        return dir * (rssiA - rssiB);
+                    }
+                    case 'snr': {
+                        const snrA = parseFloat(cellsA[6]?.textContent) || -999;
+                        const snrB = parseFloat(cellsB[6]?.textContent) || -999;
+                        return dir * (snrA - snrB);
+                    }
+                    case 'q': {
+                        const qA = parseFloat(cellsA[7]?.textContent) || 0;
+                        const qB = parseFloat(cellsB[7]?.textContent) || 0;
+                        return dir * (qA - qB);
+                    }
+                    case 'iface': {
+                        const ifaceA = cellsA[8]?.textContent || '';
+                        const ifaceB = cellsB[8]?.textContent || '';
+                        return dir * ifaceA.localeCompare(ifaceB);
+                    }
+                    case 'data': {
+                        const dataA = cellsA[9]?.textContent || '';
+                        const dataB = cellsB[9]?.textContent || '';
+                        return dir * dataA.localeCompare(dataB);
+                    }
+                    default:
+                        return 0;
+                }
+            });
+            
+            tbody.innerHTML = '';
+            rows.forEach(row => tbody.appendChild(row));
         }
 
         // ============================================
@@ -758,7 +836,7 @@
         }
 
         // ============================================
-        // === ASPECT TABS ===
+        // === ASPECT TABS - VERSIONE FINALE CON CACHE ===
         // ============================================
 
         function getAspectCounts() {
@@ -769,23 +847,36 @@
             counts.set('unknown', 0);
             ASPECTS.forEach(a => counts.set(a, 0));
             
-            // Se siamo in modalità cache, usa l'array globale
-            if (state.cacheSource === 'cache' && window._allAnnounces && window._allAnnounces.length > 0) {
-                window._allAnnounces.forEach(ann => {
-                    const asp = ann.aspect || 'unknown';
-                    if (ASPECTS.includes(asp)) {
-                        counts.set(asp, (counts.get(asp) || 0) + 1);
-                        counts.set('known', (counts.get('known') || 0) + 1);
-                        counts.set('all', (counts.get('all') || 0) + 1);
-                    } else {
-                        counts.set('unknown', (counts.get('unknown') || 0) + 1);
-                        counts.set('all', (counts.get('all') || 0) + 1);
-                    }
-                });
+            if (state.cacheSource === 'cache') {
+                console.log('📁 Calcolo conteggi dalla cache...');
+                
+                fetch('/api/monitor/cache/stats')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success && data.stats && data.stats.aspects) {
+                            console.log('📊 Conteggi cache:', data.stats.aspects);
+                            
+                            Object.entries(data.stats.aspects).forEach(([asp, cnt]) => {
+                                if (ASPECTS.includes(asp)) {
+                                    counts.set(asp, cnt);
+                                    counts.set('known', (counts.get('known') || 0) + cnt);
+                                    counts.set('all', (counts.get('all') || 0) + cnt);
+                                } else {
+                                    counts.set('unknown', (counts.get('unknown') || 0) + cnt);
+                                    counts.set('all', (counts.get('all') || 0) + cnt);
+                                }
+                            });
+                            
+                            if (window.updateAspectTabs) {
+                                window.updateAspectTabs();
+                            }
+                        }
+                    })
+                    .catch(err => console.error('Errore caricamento stats cache:', err));
+                    
                 return counts;
             }
             
-            // Calcola i conteggi dalle identità (per modalità memory)
             state.identities.forEach(id => {
                 id.aspects.forEach((data, asp) => {
                     const count = data.count || 1;
@@ -804,13 +895,65 @@
             return counts;
         }
 
+        // ============================================
+        // === UPDATE TABS FROM CACHE - MODIFICATA ===
+        // ============================================
+
+        function updateTabsFromCache() {
+            console.log('🔄 Aggiornamento dalla cache...');
+            
+            fetch('/api/monitor/cache/stats')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.stats) {
+                        window._cacheAspectCounts = data.stats.aspects || {};
+                        
+                        // Resetta le identità quando passi alla cache
+                        state.identities.clear();
+                        
+                        if (window.updateAspectTabs) {
+                            window.updateAspectTabs();
+                        }
+                        
+                        loadHistory();
+                    }
+                })
+                .catch(err => {
+                    console.error('Errore stats cache:', err);
+                    loadHistory();
+                });
+        }
+
         function initAspectTabs() {
             const row1 = document.getElementById('aspect-row-1');
             const row2 = document.getElementById('aspect-row-2');
             const row3 = document.getElementById('aspect-row-3');
             
             function renderAspectTabs() {
-                const counts = getAspectCounts();
+                let counts;
+                
+                if (state.cacheSource === 'cache') {
+                    counts = new Map();
+                    counts.set('all', 0);
+                    counts.set('known', 0);
+                    counts.set('unknown', 0);
+                    ASPECTS.forEach(a => counts.set(a, 0));
+                    
+                    if (window._cacheAspectCounts) {
+                        Object.entries(window._cacheAspectCounts).forEach(([asp, cnt]) => {
+                            if (ASPECTS.includes(asp)) {
+                                counts.set(asp, cnt);
+                                counts.set('known', (counts.get('known') || 0) + cnt);
+                                counts.set('all', (counts.get('all') || 0) + cnt);
+                            } else {
+                                counts.set('unknown', (counts.get('unknown') || 0) + cnt);
+                                counts.set('all', (counts.get('all') || 0) + cnt);
+                            }
+                        });
+                    }
+                } else {
+                    counts = getAspectCounts();
+                }
                 
                 row1.innerHTML = '';
                 row2.innerHTML = '';
@@ -851,7 +994,7 @@
                         this.classList.add('active');
                         state.aspect = this.dataset.aspect;
                         state.page = 1;
-                        applyCurrentSortAndRender();
+                        loadHistory();
                     });
                 });
             }
@@ -859,6 +1002,7 @@
             renderAspectTabs();
             window.updateAspectTabs = renderAspectTabs;
         }
+
 
         function initMainTabs() {
             document.querySelectorAll('.tab-main').forEach(tab => {
@@ -876,7 +1020,7 @@
         }
 
         // ============================================
-        // === RENDERING TABELLA CON DATI RADIO ===
+        // === RENDERING TABELLA CON DATI RADIO - CORRETTO ===
         // ============================================
 
         function createAnnounceRow(a) {
@@ -901,10 +1045,14 @@
                 hopsClass = 'badge-hop1';
             }
             
+            const escapedIdentityHash = a.identity_hash ? a.identity_hash.replace(/'/g, "\\'") : '';
+            const escapedDestHash = a.dest_hash ? a.dest_hash.replace(/'/g, "\\'") : '';
+            const escapedAspect = a.aspect ? a.aspect.replace(/'/g, "\\'") : 'unknown';
+            
             let row = '<tr>';
             row += `<td style="white-space:nowrap; color:var(--dim);">${a.time || ''}</td>`;
-            row += `<td class="identity" title="${a.identity_hash || ''}"><span class="clickable-hash" onclick="showIdentityInTab('${a.identity_hash}')">${idShort}</span></td>`;
-            row += `<td class="dest" title="${a.dest_hash || ''}"><span class="clickable-hash" onclick="showAspectModal('${a.identity_hash}', '${a.aspect || 'unknown'}', '${a.dest_hash}')">${destShort}</span></td>`;
+            row += `<td class="identity" title="${a.identity_hash || ''}"><span class="clickable-hash" onclick="showIdentityInTab('${escapedIdentityHash}')">${idShort}</span></td>`;
+            row += `<td class="dest" title="${a.dest_hash || ''}"><span class="clickable-hash" onclick="showAspectModal('${escapedIdentityHash}', '${escapedAspect}', '${escapedDestHash}')">${destShort}</span></td>`;
             
             if (a.aspect && a.aspect !== 'unknown' && a.aspect !== 'identity_hash') {
                 row += `<td><span class="badge">${a.aspect}</span></td>`;
@@ -1008,10 +1156,11 @@
                 window._processedAnnounces = new Set();
             }
             
-            const announceId = ann.packet_hash || `${ann.identity_hash}_${ann.timestamp}`;
+            // Usa più identificatori per essere sicuro
+            const announceId = ann.packet_hash || `${ann.identity_hash}_${ann.timestamp}_${ann.id || ''}`;
             
             if (window._processedAnnounces.has(announceId)) {
-                console.log('⏭️ Annuncio già processato:', announceId.slice(0,16));
+                console.log('⏭️ Annuncio già processato in identity stats:', announceId.slice(0,16));
                 return;
             }
             
@@ -1058,6 +1207,62 @@
             if (ann.data) asp.data = ann.data;
             
             saveIdentitiesToStorage();
+            if (window.updateAspectTabs) window.updateAspectTabs();
+        }
+
+
+        // ============================================
+        // === RIGENERA IDENTITÀ DAGLI ANNUNCI - AGGIUNGI QUESTA ===
+        // ============================================
+
+        function rebuildIdentitiesFromAnnounces() {
+            if (!window._allAnnounces) return;
+            
+            console.log('🔄 Rigenerazione identità dagli annunci...');
+            const newIdentities = new Map();
+            
+            window._allAnnounces.forEach(ann => {
+                if (!ann.identity_hash) return;
+                
+                const id = ann.identity_hash.slice(0, 32);
+                
+                if (!newIdentities.has(id)) {
+                    newIdentities.set(id, {
+                        hash: id,
+                        first: ann.timestamp,
+                        last: ann.timestamp,
+                        count: 0,
+                        aspects: new Map(),
+                        lastData: ann.data
+                    });
+                }
+                
+                const ident = newIdentities.get(id);
+                ident.last = Math.max(ident.last, ann.timestamp);
+                ident.first = Math.min(ident.first, ann.timestamp);
+                ident.count++;
+                if (ann.data) ident.lastData = ann.data;
+                
+                const aspect = ann.aspect || 'unknown';
+                if (!ident.aspects.has(aspect)) {
+                    ident.aspects.set(aspect, {
+                        dest: ann.dest_hash,
+                        count: 0,
+                        last: ann.timestamp,
+                        data: ann.data
+                    });
+                }
+                const asp = ident.aspects.get(aspect);
+                asp.count++;
+                asp.last = ann.timestamp;
+                if (ann.data) asp.data = ann.data;
+            });
+            
+            state.identities = newIdentities;
+            console.log(`📊 Rigenerate ${state.identities.size} identità`);
+            
+            if (state.view === 'identities') renderIdentities();
+            if (state.view === 'stats') renderStats();
             if (window.updateAspectTabs) window.updateAspectTabs();
         }
 
@@ -1236,11 +1441,40 @@
         }
 
         // ============================================
-        // === STATISTICHE ===
+        // === STATISTICHE - CORRETTE ===
         // ============================================
 
         function renderStats() {
             const now = Date.now() / 1000;
+            
+            // Usa i dati reali in base alla sorgente
+            if (state.cacheSource === 'cache') {
+                // In modalità cache, mostra i dati reali della cache
+                document.getElementById('stat-total').textContent = state.backendStats.total || 0;
+                document.getElementById('stat-identities').textContent = `${state.backendStats.unique || 0} (${state.backendStats.unique || 0} attive)`;
+                document.getElementById('stat-rate').textContent = formatRate(0); // Non calcolabile senza dati
+                document.getElementById('stat-period').textContent = formatPeriod(0);
+                
+                // Per aspect e top identità, usa i dati dalla cache se disponibili
+                if (window._cacheAspectCounts) {
+                    let aspHtml = '';
+                    Object.entries(window._cacheAspectCounts)
+                        .sort((a,b) => b[1] - a[1])
+                        .slice(0, 8)
+                        .forEach(([asp, cnt]) => {
+                            aspHtml += `<div class="stat-card"><div style="display:flex; justify-content:space-between;">`;
+                            aspHtml += `<span style="color:var(--fg);">${asp.slice(0,12)} </span>`;
+                            aspHtml += `<span style="color:var(--dim);"> ${cnt} ann.</span>`;
+                            aspHtml += `</div></div>`;
+                        });
+                    document.getElementById('stats-aspects').innerHTML = aspHtml || '<div style="color:var(--dim);">nessun dato</div>';
+                }
+                
+                document.getElementById('stats-identities').innerHTML = '<div style="color:var(--dim);">dati non disponibili in modalità cache</div>';
+                return;
+            }
+            
+            // Modalità memory - usa state.identities
             let totalAnnounces = 0;
             let firstSeen = now;
             let lastSeen = 0;
@@ -1255,12 +1489,11 @@
             
             const elapsedTotal = lastSeen - firstSeen;
             const globalRateHz = elapsedTotal > 0 ? state.backendStats.total / elapsedTotal : 0;
-            const globalPeriod = globalRateHz > 0 ? 1 / globalRateHz : 0;
             
             document.getElementById('stat-total').textContent = state.backendStats.total;
             document.getElementById('stat-identities').textContent = `${state.identities.size} (${activeIdentities} attive)`;
             document.getElementById('stat-rate').textContent = formatRate(globalRateHz);
-            document.getElementById('stat-period').textContent = formatPeriod(globalPeriod);
+            document.getElementById('stat-period').textContent = formatPeriod(globalRateHz > 0 ? 1 / globalRateHz : 0);
             
             const aspectCount = new Map();
             state.identities.forEach(id => {
@@ -1288,7 +1521,6 @@
                     const active = isActive(id.last);
                     const elapsed = id.last - id.first;
                     const idRateHz = elapsed > 0 && id.count > 1 ? id.count / elapsed : 0;
-                    const idPeriod = idRateHz > 0 ? 1 / idRateHz : 0;
                     const lastData = decodeUTF8(id.lastData);
                     const lastActiveAgo = Math.round((now - id.last) / 60);
                     
@@ -1301,7 +1533,7 @@
                     idHtml += `<span style="color:var(--dim);">${id.count} ann.</span>`;
                     if (active) {
                         idHtml += `<span style="color:#ffff88;" title="frequenza: ${formatRate(idRateHz)}">⚡ ${formatRate(idRateHz)}</span>`;
-                        idHtml += `<span style="color:#88ffff;" title="periodo: ogni ${formatPeriod(idPeriod)}">⏱️ ${formatPeriod(idPeriod)}</span>`;
+                        idHtml += `<span style="color:#88ffff;" title="periodo: ogni ${formatPeriod(1 / idRateHz)}">⏱️ ${formatPeriod(1 / idRateHz)}</span>`;
                     } else {
                         idHtml += `<span class="inactive">💤 ${lastActiveAgo} min</span>`;
                     }
@@ -1309,8 +1541,7 @@
                     idHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:9px; color:var(--dim);">`;
                     idHtml += `<span>${id.aspects.size} aspect</span>`;
                     idHtml += `<span>${Math.round(elapsed)}s di vita</span>`;
-                    idHtml += `</div>`;
-                    idHtml += `</div>`;
+                    idHtml += `</div></div>`;
                 });
             document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
         }
@@ -1334,38 +1565,51 @@
         }
 
         // ============================================
-        // === LOAD HISTORY - CARICA TUTTI GLI ANNUNCI ===
+        // === LOAD HISTORY - MODIFICATA ===
         // ============================================
 
         function loadHistory() {
-            const params = new URLSearchParams({
-                aspect: 'all',  // Prende tutti gli aspect
-                search: '',
-                limit: 1000,    // Prende fino a 1000 annunci
-                offset: 0,
-                sort: 'time_desc',
-                source: state.cacheSource
-            });
+            return new Promise((resolve, reject) => {
+                const params = new URLSearchParams({
+                    aspect: 'all',
+                    search: '',
+                    limit: 1000,
+                    offset: 0,
+                    sort: 'time_desc',
+                    source: state.cacheSource
+                });
 
-            fetch(`/api/monitor/history?${params}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        // Salva TUTTI gli annunci nell'array globale
-                        window._allAnnounces = data.announces || [];
-                        
-                        console.log(`📊 Caricati ${window._allAnnounces.length} annunci da ${state.cacheSource}`);
-                        
-                        // Applica l'ordinamento corrente e renderizza
-                        applyCurrentSortAndRender();
-                        
-                        // Aggiorna i tab
-                        if (window.updateAspectTabs) {
-                            window.updateAspectTabs();
+                fetch(`/api/monitor/history?${params}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            if (window._processedAnnounces) {
+                                window._processedAnnounces.clear();
+                            }
+                            
+                            window._allAnnounces = data.announces || [];
+                            
+                            console.log(`📊 Caricati ${window._allAnnounces.length} annunci da ${state.cacheSource}`);
+                            
+                            // AGGIUNGI QUESTA RIGA
+                            rebuildIdentitiesFromAnnounces();
+                            
+                            applyCurrentSortAndRender();
+                            
+                            if (window.updateAspectTabs) {
+                                window.updateAspectTabs();
+                            }
+                            
+                            resolve(window._allAnnounces);
+                        } else {
+                            reject(new Error('Caricamento fallito'));
                         }
-                    }
-                })
-                .catch(err => console.error('History error:', err));
+                    })
+                    .catch(err => {
+                        console.error('History error:', err);
+                        reject(err);
+                    });
+            });
         }
 
         // ============================================
@@ -1415,6 +1659,16 @@
                         state.eventSource = es;
                         state.connecting = false;
                         state.reconnectAttempt = 1;
+                        
+                        // IMPORTANTE: Quando si riconnette, resetta lastId per evitare duplicati
+                        // MA non resettare se è la prima connessione dopo il load
+                        if (window._allAnnounces && window._allAnnounces.length > 0) {
+                            const maxId = Math.max(...window._allAnnounces.map(a => a.id || 0));
+                            if (maxId > state.lastId) {
+                                state.lastId = maxId;
+                            }
+                        }
+                        
                         refreshBackendStats();
                     };
                     
@@ -1422,37 +1676,46 @@
                         if (e.data && e.data !== ':') {
                             try {
                                 const ann = JSON.parse(e.data);
+                                
+                                // CONTROLLO PIÙ ROBUSTO PER EVITARE DUPLICATI
                                 if (ann.id > state.lastId) {
                                     state.lastId = ann.id;
                                     refreshBackendStats();
                                     
-                                    // AGGIUNGI IL NUOVO ANNUNCIO ALL'ARRAY GLOBALE
+                                    // Verifica se l'annuncio esiste già nell'array
                                     if (!window._allAnnounces) {
                                         window._allAnnounces = [];
                                     }
                                     
-                                    // Aggiungi in testa (più recente)
-                                    window._allAnnounces.unshift(ann);
+                                    // Controlla se l'annuncio è già presente (per sicurezza)
+                                    const exists = window._allAnnounces.some(a => 
+                                        a.id === ann.id || 
+                                        (a.packet_hash && a.packet_hash === ann.packet_hash) ||
+                                        (a.identity_hash === ann.identity_hash && a.timestamp === ann.timestamp)
+                                    );
                                     
-                                    // Limita la dimensione
-                                    if (window._allAnnounces.length > 2000) {
-                                        window._allAnnounces.pop();
+                                    if (!exists) {
+                                        window._allAnnounces.unshift(ann);
+                                        
+                                        if (window._allAnnounces.length > 2000) {
+                                            window._allAnnounces.pop();
+                                        }
+                                        
+                                        if (!state.resetting) {
+                                            updateIdentityStats(ann);
+                                        }
+                                        
+                                        if (window.updateAspectTabs) window.updateAspectTabs();
+                                        
+                                        if (state.view === 'live' && state.cacheSource === 'memory') {
+                                            applyCurrentSortAndRender();
+                                        }
+                                        
+                                        if (state.view === 'identities') renderIdentities();
+                                        if (state.view === 'stats') renderStats();
+                                    } else {
+                                        console.log('⏭️ Annuncio già presente, ignorato:', ann.id);
                                     }
-                                    
-                                    // AGGIORNA LE STATISTICHE
-                                    if (!state.resetting) {
-                                        updateIdentityStats(ann);
-                                    }
-                                    
-                                    if (window.updateAspectTabs) window.updateAspectTabs();
-                                    
-                                    // APPLICA L'ORDINAMENTO CORRENTE E RENDERIZZA
-                                    if (state.view === 'live' && state.cacheSource === 'memory') {
-                                        applyCurrentSortAndRender();
-                                    }
-                                    
-                                    if (state.view === 'identities') renderIdentities();
-                                    if (state.view === 'stats') renderStats();
                                 }
                             } catch(e) {
                                 console.error('SSE parse error:', e);
@@ -1574,9 +1837,6 @@
                 state.page = 1;
                 state.search = '';
                 
-                // Pulisci array globale
-                window._allAnnounces = [];
-                
                 console.log('🗑️ Pulizia localStorage...');
                 localStorage.clear();
                 localStorage.removeItem(STORAGE_KEY);
@@ -1672,13 +1932,21 @@
             document.getElementById('limit-select').addEventListener('change', function() {
                 state.limit = parseInt(this.value);
                 state.page = 1;
-                applyCurrentSortAndRender();
+                if (window._allAnnounces && window._allAnnounces.length > 0) {
+                    applyCurrentSortAndRender();
+                } else {
+                    loadHistory();
+                }
             });
 
             document.getElementById('search-input').addEventListener('input', function() {
                 state.search = this.value.toLowerCase();
                 state.page = 1;
-                applyCurrentSortAndRender();
+                if (window._allAnnounces && window._allAnnounces.length > 0) {
+                    applyCurrentSortAndRender();
+                } else {
+                    loadHistory();
+                }
             });
 
             document.getElementById('identity-search-input').addEventListener('input', function() {
@@ -1686,16 +1954,24 @@
             });
 
             document.getElementById('cache-source-select').addEventListener('change', function() {
-                state.cacheSource = this.value;
+                const newSource = this.value;
+                console.log(`🔄 Cambio sorgente: ${state.cacheSource} -> ${newSource}`);
+                
+                // Se è lo stesso, non fare nulla (evita doppie chiamate)
+                if (newSource === state.cacheSource) return;
+                
+                state.cacheSource = newSource;
                 state.page = 1;
                 
-                if (state.cacheSource === 'cache') {
-                    loadHistory();
+                if (newSource === 'cache') {
+                    // Una sola chiamata per aggiornare tab E history
+                    updateTabsFromCache(); // Questa già chiama loadHistory() internamente
                 } else {
+                    // Una sola chiamata per memory
+                    loadHistory();
                     if (window.updateAspectTabs) {
                         window.updateAspectTabs();
                     }
-                    applyCurrentSortAndRender();
                 }
             });
 
@@ -1704,13 +1980,21 @@
             document.getElementById('prev-page').addEventListener('click', function() {
                 if (state.page > 1) { 
                     state.page--; 
-                    applyCurrentSortAndRender();
+                    if (window._allAnnounces && window._allAnnounces.length > 0) {
+                        applyCurrentSortAndRender();
+                    } else {
+                        loadHistory();
+                    }
                 }
             });
 
             document.getElementById('next-page').addEventListener('click', function() {
                 state.page++; 
-                applyCurrentSortAndRender();
+                if (window._allAnnounces && window._allAnnounces.length > 0) {
+                    applyCurrentSortAndRender();
+                } else {
+                    loadHistory();
+                }
             });
 
             document.getElementById('identity-sort-select').addEventListener('change', function() {
@@ -1728,6 +2012,7 @@
         // === INIZIALIZZAZIONE ===
         // ============================================
 
+        // Alla fine del file, dopo loadHistory()
         if (!window._rnsMonitorInitialized) {
             window._rnsMonitorInitialized = true;
             
@@ -1742,9 +2027,20 @@
             loadIdentitiesFromStorage();
             initAspectTabs();
             initMainTabs();
-            initEventListeners();
-            connectSSE();
-            loadHistory();
+            initEventListeners();            
+            connectSSE();            
+            loadHistory().then((announces) => {
+                if (announces && announces.length > 0) {
+                    const maxId = Math.max(...announces.map(a => a.id || 0));
+                    if (maxId > state.lastId) {
+                        state.lastId = maxId;
+                        console.log(`📌 lastId impostato a ${state.lastId}`);
+                    }
+                }
+            }).catch(err => {
+                console.error('Errore nel caricamento iniziale:', err);
+            });
+            
             refreshBackendStats();
             updateSortIndicators();
             
@@ -1752,11 +2048,12 @@
             setInterval(() => {
                 if (state.view === 'identities') renderIdentities();
                 if (state.view === 'stats') renderStats();
-                if (state.view === 'live') {
-                    // Non serve più sortTableByState perché usiamo applyCurrentSortAndRender
+                if (state.view === 'live' && state.cacheSource === 'memory') {
+                    applyCurrentSortAndRender();
                 }
                 refreshBackendStats();
             }, 2000);
+
         } else {
             console.log('Inizializzazione già eseguita, salto...');
         }
