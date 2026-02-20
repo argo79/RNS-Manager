@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title data-i18n="title">RNID Identity Manager 1.0.1</title>
+    <title data-i18n="title">RNID Identity Manager {version}</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="/static/rns_monitor.css">
     <script>
@@ -13,7 +13,8 @@
         
         // Lista lingue supportate
         const supportedLangs = ['it', 'en', 'fr', 'es', 'de', 'pt', 'ru', 'zh', 'ja', 'ar', 'hi', 'bn', 'ur', 'tr', 'pl'];
-        
+        const APP_VERSION = "1.0.2";
+
         // Determina la lingua del browser all'avvio
         function detectBrowserLanguage() {
             try {
@@ -67,7 +68,7 @@
         // Traduzioni italiane di fallback (COMPLETE)
         function getItalianFallback() {
             return {
-                "title": "RNID Identity Manager",
+                "title": "RNID Identity Manager 1.0.1",
                 "subtitle": "Gestione identità Reticulum",
                 "monitor": "📡 APRI MONITOR",
                 "identities": "IDENTITÀ DISPONIBILI",
@@ -224,11 +225,14 @@
             
             let text = translations[key];
             
-            // Sostituisci parametri
+            // Sostituisci i parametri passati
             Object.keys(params).forEach(param => {
                 const regex = new RegExp(`\\{${param}\\}`, 'g');
                 text = text.replace(regex, params[param]);
             });
+            
+            // Sostituisci automaticamente {version} con APP_VERSION
+            text = text.replace(/\{version\}/g, APP_VERSION);
             
             return text;
         }
@@ -344,7 +348,7 @@
     <div class="container">
         <header>
             <div class="header-title">
-                <h1 data-i18n="title">RETICULUM IDENTITY MANAGER 1.0.0</h1>
+                <h1 data-i18n="title">RETICULUM IDENTITY MANAGER 1.0.2</h1>
                 <div class="header-subtitle" data-i18n="subtitle">Gestione identità Reticulum</div>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
