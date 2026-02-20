@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title data-i18n="title">RNID Identity Manager</title>
+    <title data-i18n="title">RNID Identity Manager 1.0.1</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="/static/rns_monitor.css">
     <script>
@@ -136,9 +136,9 @@
                 "output": "OUTPUT",
                 "info": "INFORMAZIONI",
                 "supported_formats": "Formati supportati:",
-                "hex_format": "• <strong>HEX</strong>: 128 caratteri",
-                "base32_format": "• <strong>BASE32</strong>: maiuscolo, con '='",
-                "base64_format": "• <strong>BASE64</strong>: standard, con '=='",
+                "hex_format": "<strong>HEX</strong>: 128 caratteri",
+                "base32_format": "<strong>BASE32</strong>: maiuscolo, con '='",
+                "base64_format": "<strong>BASE64</strong>: standard, con '=='",
                 "aspects_list": "<strong>Aspects RNS:</strong> rnstransport.probe, lxmf.delivery, nomadnetwork.node, lxmf.propagation, call.audio, lxst.telephony",
                 "warning_load": " Premi \"Carica\" per visualizzare le identità",
                 "loading": "Caricamento...",
@@ -263,6 +263,11 @@
                 if (!el.value || el.value === 'New_identity') {
                     el.value = t(key);
                 }
+            });
+            // Per gli elementi che contengono HTML (come le info)
+            document.querySelectorAll('[data-i18n-html]').forEach(el => {
+                const key = el.getAttribute('data-i18n-html');
+                el.innerHTML = t(key); // usa innerHTML invece di textContent
             });
         }
         
@@ -664,10 +669,10 @@
                         <div style="margin-bottom: 5px;" data-i18n="supported_formats">
                             <strong>Formati supportati:</strong>
                         </div>
-                        <div style="margin-bottom: 3px;" data-i18n="hex_format">• <strong>HEX</strong>: 128 caratteri</div>
-                        <div style="margin-bottom: 3px;" data-i18n="base32_format">• <strong>BASE32</strong>: maiuscolo, con '='</div>
-                        <div style="margin-bottom: 3px;" data-i18n="base64_format">• <strong>BASE64</strong>: standard, con '=='</div>
-                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #333;" data-i18n="aspects_list">
+                        <div style="margin-bottom: 3px;" data-i18n-html="hex_format"><strong>HEX</strong>: 128 caratteri</div>
+                        <div style="margin-bottom: 3px;" data-i18n-html="base32_format"><strong>BASE32</strong>: maiuscolo, con '='</div>
+                        <div style="margin-bottom: 3px;" data-i18n-html="base64_format"><strong>BASE64</strong>: standard, con '=='</div>
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #333;" data-i18n-html="aspects_list">
                             <strong>Aspects RNS:</strong> rnstransport.probe, lxmf.delivery, nomadnetwork.node, lxmf.propagation, call.audio, lxst.telephony
                         </div>
                     </div>
