@@ -152,7 +152,7 @@
                 "enter_hash": "❌ Inserisci un hash da verificare!",
                 "invalid_hash": "❌ Hash deve essere 32 o 64 caratteri esadecimali.",
                 "private_identity_needed": "❌ Per DECIFRARE/FIRMARE serve un'identità PRIVATA",
-                "public_only": "❌ Solo identità pubbliche",
+                "public_only": "❌ pubblica",
                 "operation_completed": "✅ Operazione completata",
                 "copy_success": "✅ Copiato!",
                 "copy_error": "❌ Errore nella copia",
@@ -805,7 +805,7 @@
                         <div class="identity-name">${name} ${isPublic ? '🌐' : '🔑'} ${deleteButton}</div>
                         <div class="identity-info">${sizeInfo} • ${app} ${hashInfo} ${aspectInfo}</div>
                     </div>
-                    <span class="identity-badge ${validClass}">${isPublic ? t('public_only') : (identity.valid ? 'PRIVATA' : 'VERIF')}</span>
+                    <span class="identity-badge ${validClass}">${isPublic ? t('public_only') : (identity.valid ? t('private_badge') : t('verify_badge'))}</span>
                 </div>
             `;
         }
