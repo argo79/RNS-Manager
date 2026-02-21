@@ -62,8 +62,9 @@
                 <h1>RETICULUM MONITOR 1.0.6</h1>
                 <div class="header-subtitle">Monitoraggio annunci e identità Reticulum</div>
             </div>
-            <div>
+            <div style="display: flex; gap: 10px;">
                 <a href="/" class="back-button">← TORNA A IDENTITY MANAGER</a>
+                <!-- Pulsante LXMF-CHAT rimosso -->
             </div>
         </header>
 
@@ -607,6 +608,13 @@
             if (modal) {
                 modal.classList.remove('visible');
                 modalState.visible = false;
+                
+                // Pulisci l'output
+                const outputDiv = document.getElementById('modal-output');
+                if (outputDiv) {
+                    outputDiv.innerHTML = '';
+                    outputDiv.style.color = '#88ff88'; // Reset colore
+                }
             }
         }
 
@@ -896,27 +904,33 @@
         }
 
         // ============================================
-        // === UPDATE TABS FROM CACHE - MODIFICATA ===
+        // === UPDATE TABS FROM CACHE - CORRETTA ===
         // ============================================
 
         function updateTabsFromCache() {
             console.log('🔄 Aggiornamento dalla cache...');
             
+            // Pulisci le identità
+            state.identities.clear();
+            
+            // Carica le stats della cache
             fetch('/api/monitor/cache/stats')
                 .then(res => res.json())
                 .then(data => {
                     if (data.success && data.stats) {
                         window._cacheAspectCounts = data.stats.aspects || {};
                         
-                        // Resetta le identità quando passi alla cache
-                        state.identities.clear();
-                        
-                        if (window.updateAspectTabs) {
-                            window.updateAspectTabs();
-                        }
-                        
-                        loadHistory();
+                        // Dopo aver caricato le stats, carica la history
+                        return loadHistory();
                     }
+                })
+                .then(() => {
+                    // Ora che abbiamo la history, possiamo aggiornare i tab
+                    if (window.updateAspectTabs) {
+                        window.updateAspectTabs();
+                    }
+                    // Forza il refresh delle statistiche
+                    if (state.view === 'stats') renderStats();
                 })
                 .catch(err => {
                     console.error('Errore stats cache:', err);
@@ -1212,7 +1226,7 @@
 
 
         // ============================================
-        // === RIGENERA IDENTITÀ DAGLI ANNUNCI - AGGIUNGI QUESTA ===
+        // === RIGENERA IDENTITÀ DAGLI ANNUNCI ===
         // ============================================
 
         function rebuildIdentitiesFromAnnounces() {
@@ -1260,10 +1274,6 @@
             
             state.identities = newIdentities;
             console.log(`📊 Rigenerate ${state.identities.size} identità`);
-            
-            if (state.view === 'identities') renderIdentities();
-            if (state.view === 'stats') renderStats();
-            if (window.updateAspectTabs) window.updateAspectTabs();
         }
 
         function identityPassesSearch(identity, searchTerm) {
@@ -1441,40 +1451,119 @@
         }
 
         // ============================================
-        // === STATISTICHE - CORRETTE ===
+        // === STATISTICHE - CORRETTA (COMPLETA) ===
         // ============================================
 
         function renderStats() {
             const now = Date.now() / 1000;
             
-            // Usa i dati reali in base alla sorgente
             if (state.cacheSource === 'cache') {
-                // In modalità cache, mostra i dati reali della cache
-                document.getElementById('stat-total').textContent = state.backendStats.total || 0;
-                document.getElementById('stat-identities').textContent = `${state.backendStats.unique || 0} (${state.backendStats.unique || 0} attive)`;
-                document.getElementById('stat-rate').textContent = formatRate(0); // Non calcolabile senza dati
-                document.getElementById('stat-period').textContent = formatPeriod(0);
+                // MODALITÀ CACHE - USA I DATI FRESCHI DAL BACKEND
+                fetch('/api/monitor/cache/stats')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success && data.stats) {
+                            window._cacheAspectCounts = data.stats.aspects || {};
+                            
+                            // Calcola totale dagli aspect
+                            const totalFromAspects = Object.values(window._cacheAspectCounts).reduce((a, b) => a + b, 0);
+                            
+                            document.getElementById('stat-total').textContent = totalFromAspects;
+                            document.getElementById('stat-identities').textContent = `${state.identities.size} (${state.identities.size} attive)`;
+                            
+                            // Calcola frequenza e periodo globali
+                            if (window._allAnnounces && window._allAnnounces.length > 1) {
+                                const first = Math.min(...window._allAnnounces.map(a => a.timestamp || 0));
+                                const last = Math.max(...window._allAnnounces.map(a => a.timestamp || 0));
+                                const elapsed = last - first;
+                                if (elapsed > 0) {
+                                    const rate = totalFromAspects / elapsed;
+                                    document.getElementById('stat-rate').textContent = formatRate(rate);
+                                    document.getElementById('stat-period').textContent = formatPeriod(1 / rate);
+                                } else {
+                                    document.getElementById('stat-rate').textContent = '—';
+                                    document.getElementById('stat-period').textContent = '—';
+                                }
+                            } else {
+                                document.getElementById('stat-rate').textContent = '—';
+                                document.getElementById('stat-period').textContent = '—';
+                            }
+                            
+                            // ============================================
+                            // === TOP ASPECT CON FREQUENZE E PERIODI ===
+                            // ============================================
+                            if (window._cacheAspectCounts && window._allAnnounces && window._allAnnounces.length > 1) {
+                                const first = Math.min(...window._allAnnounces.map(a => a.timestamp || 0));
+                                const last = Math.max(...window._allAnnounces.map(a => a.timestamp || 0));
+                                const elapsed = last - first;
+                                
+                                let aspHtml = '';
+                                Object.entries(window._cacheAspectCounts)
+                                    .sort((a,b) => b[1] - a[1])
+                                    .slice(0, 8)
+                                    .forEach(([asp, cnt]) => {
+                                        const short = asp.split('.').pop() || asp;
+                                        const rate = cnt / elapsed;
+                                        
+                                        aspHtml += `<div class="stat-card">`;
+                                        aspHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                                        aspHtml += `<span style="color:var(--fg); font-weight:bold;">${short.slice(0,12)}</span>`;
+                                        aspHtml += `<span style="color:var(--dim);">${cnt} ann.</span>`;
+                                        aspHtml += `</div>`;
+                                        aspHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
+                                        aspHtml += `<span style="color:#ffff88;" title="frequenza">⚡ ${formatRate(rate)}</span>`;
+                                        aspHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(1/rate)}</span>`;
+                                        aspHtml += `</div>`;
+                                        aspHtml += `</div>`;
+                                    });
+                                document.getElementById('stats-aspects').innerHTML = aspHtml || '<div style="color:var(--dim);">nessun dato</div>';
+                            } else {
+                                document.getElementById('stats-aspects').innerHTML = '<div style="color:var(--dim);">nessun dato</div>';
+                            }
+                            
+                            // ============================================
+                            // === TOP IDENTITÀ CON FREQUENZE E PERIODI ===
+                            // ============================================
+                            if (state.identities.size > 0 && window._allAnnounces && window._allAnnounces.length > 1) {
+                                const first = Math.min(...window._allAnnounces.map(a => a.timestamp || 0));
+                                const last = Math.max(...window._allAnnounces.map(a => a.timestamp || 0));
+                                const elapsed = last - first;
+                                
+                                let idHtml = '';
+                                [...state.identities.values()]
+                                    .sort((a,b) => b.count - a.count)
+                                    .slice(0, 10)
+                                    .forEach(id => {
+                                        const rate = id.count / elapsed;
+                                        const lastData = decodeUTF8(id.lastData);
+                                        
+                                        idHtml += `<div class="stat-card">`;
+                                        idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
+                                        idHtml += `<span style="font-family:monospace; color:#8888ff;" title="${id.hash}">${id.hash.slice(0,16)}…</span>`;
+                                        if (lastData) idHtml += `<span style="color:#88ff88; font-size:9px;">${lastData.slice(0,16)}</span>`;
+                                        idHtml += `</div>`;
+                                        idHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                                        idHtml += `<span style="color:var(--dim);">${id.count} ann.</span>`;
+                                        idHtml += `<span>${id.aspects.size} aspect</span>`;
+                                        idHtml += `</div>`;
+                                        idHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
+                                        idHtml += `<span style="color:#ffff88;" title="frequenza">⚡ ${formatRate(rate)}</span>`;
+                                        idHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(1/rate)}</span>`;
+                                        idHtml += `</div>`;
+                                        idHtml += `</div>`;
+                                    });
+                                document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
+                            } else {
+                                document.getElementById('stats-identities').innerHTML = '<div style="color:var(--dim);">nessun dato</div>';
+                            }
+                        }
+                    })
+                    .catch(err => console.error('Errore caricamento stats cache:', err));
                 
-                // Per aspect e top identità, usa i dati dalla cache se disponibili
-                if (window._cacheAspectCounts) {
-                    let aspHtml = '';
-                    Object.entries(window._cacheAspectCounts)
-                        .sort((a,b) => b[1] - a[1])
-                        .slice(0, 8)
-                        .forEach(([asp, cnt]) => {
-                            aspHtml += `<div class="stat-card"><div style="display:flex; justify-content:space-between;">`;
-                            aspHtml += `<span style="color:var(--fg);">${asp.slice(0,12)} </span>`;
-                            aspHtml += `<span style="color:var(--dim);"> ${cnt} ann.</span>`;
-                            aspHtml += `</div></div>`;
-                        });
-                    document.getElementById('stats-aspects').innerHTML = aspHtml || '<div style="color:var(--dim);">nessun dato</div>';
-                }
-                
-                document.getElementById('stats-identities').innerHTML = '<div style="color:var(--dim);">dati non disponibili in modalità cache</div>';
                 return;
             }
             
-            // Modalità memory - usa state.identities
+            // MODALITÀ MEMORY - invariata (con frequenze e periodi)
             let totalAnnounces = 0;
             let firstSeen = now;
             let lastSeen = 0;
@@ -1488,13 +1577,15 @@
             });
             
             const elapsedTotal = lastSeen - firstSeen;
-            const globalRateHz = elapsedTotal > 0 ? state.backendStats.total / elapsedTotal : 0;
+            const globalRateHz = elapsedTotal > 0 ? totalAnnounces / elapsedTotal : 0;
+            const globalPeriod = globalRateHz > 0 ? 1 / globalRateHz : 0;
             
-            document.getElementById('stat-total').textContent = state.backendStats.total;
+            document.getElementById('stat-total').textContent = totalAnnounces;
             document.getElementById('stat-identities').textContent = `${state.identities.size} (${activeIdentities} attive)`;
             document.getElementById('stat-rate').textContent = formatRate(globalRateHz);
-            document.getElementById('stat-period').textContent = formatPeriod(globalRateHz > 0 ? 1 / globalRateHz : 0);
+            document.getElementById('stat-period').textContent = formatPeriod(globalPeriod);
             
+            // TOP ASPECT CON FREQUENZE
             const aspectCount = new Map();
             state.identities.forEach(id => {
                 id.aspects.forEach((data, asp) => {
@@ -1505,14 +1596,26 @@
             });
             
             let aspHtml = '';
-            [...aspectCount.entries()].sort((a,b) => b[1] - a[1]).slice(0, 8).forEach(([asp, cnt]) => {
-                aspHtml += `<div class="stat-card"><div style="display:flex; justify-content:space-between;">`;
-                aspHtml += `<span style="color:var(--fg);">${asp.slice(0,12)} </span>`;
-                aspHtml += `<span style="color:var(--dim);"> ${cnt} ann.</span>`;
-                aspHtml += `</div></div>`;
-            });
+            if (elapsedTotal > 0) {
+                [...aspectCount.entries()].sort((a,b) => b[1] - a[1]).slice(0, 8).forEach(([asp, cnt]) => {
+                    const short = asp.split('.').pop() || asp;
+                    const rate = cnt / elapsedTotal;
+                    
+                    aspHtml += `<div class="stat-card">`;
+                    aspHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                    aspHtml += `<span style="color:var(--fg); font-weight:bold;">${short.slice(0,12)}</span>`;
+                    aspHtml += `<span style="color:var(--dim);">${cnt} ann.</span>`;
+                    aspHtml += `</div>`;
+                    aspHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
+                    aspHtml += `<span style="color:#ffff88;" title="frequenza">⚡ ${formatRate(rate)}</span>`;
+                    aspHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(1/rate)}</span>`;
+                    aspHtml += `</div>`;
+                    aspHtml += `</div>`;
+                });
+            }
             document.getElementById('stats-aspects').innerHTML = aspHtml || '<div style="color:var(--dim);">nessun dato</div>';
             
+            // TOP IDENTITÀ CON FREQUENZE
             let idHtml = '';
             [...state.identities.values()]
                 .sort((a,b) => b.count - a.count)
@@ -1521,6 +1624,7 @@
                     const active = isActive(id.last);
                     const elapsed = id.last - id.first;
                     const idRateHz = elapsed > 0 && id.count > 1 ? id.count / elapsed : 0;
+                    const idPeriod = idRateHz > 0 ? 1 / idRateHz : 0;
                     const lastData = decodeUTF8(id.lastData);
                     const lastActiveAgo = Math.round((now - id.last) / 60);
                     
@@ -1529,19 +1633,21 @@
                     idHtml += `<span style="font-family:monospace; color:#8888ff;" title="${id.hash}">${id.hash.slice(0,16)}…</span>`;
                     if (lastData) idHtml += `<span style="color:#88ff88; font-size:9px;">${lastData.slice(0,16)}</span>`;
                     idHtml += `</div>`;
-                    idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">`;
+                    idHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
                     idHtml += `<span style="color:var(--dim);">${id.count} ann.</span>`;
                     if (active) {
-                        idHtml += `<span style="color:#ffff88;" title="frequenza: ${formatRate(idRateHz)}">⚡ ${formatRate(idRateHz)}</span>`;
-                        idHtml += `<span style="color:#88ffff;" title="periodo: ogni ${formatPeriod(1 / idRateHz)}">⏱️ ${formatPeriod(1 / idRateHz)}</span>`;
+                        idHtml += `<span style="color:#ffff88;" title="frequenza">⚡ ${formatRate(idRateHz)}</span>`;
                     } else {
                         idHtml += `<span class="inactive">💤 ${lastActiveAgo} min</span>`;
                     }
                     idHtml += `</div>`;
-                    idHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:9px; color:var(--dim);">`;
+                    idHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
                     idHtml += `<span>${id.aspects.size} aspect</span>`;
-                    idHtml += `<span>${Math.round(elapsed)}s di vita</span>`;
-                    idHtml += `</div></div>`;
+                    if (active && idRateHz > 0) {
+                        idHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(idPeriod)}</span>`;
+                    }
+                    idHtml += `</div>`;
+                    idHtml += `</div>`;
                 });
             document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
         }
@@ -1565,7 +1671,7 @@
         }
 
         // ============================================
-        // === LOAD HISTORY - MODIFICATA ===
+        // === LOAD HISTORY - CORRETTA ===
         // ============================================
 
         function loadHistory() {
@@ -1591,7 +1697,6 @@
                             
                             console.log(`📊 Caricati ${window._allAnnounces.length} annunci da ${state.cacheSource}`);
                             
-                            // AGGIUNGI QUESTA RIGA
                             rebuildIdentitiesFromAnnounces();
                             
                             applyCurrentSortAndRender();
@@ -1613,143 +1718,124 @@
         }
 
         // ============================================
-        // === CONNESSIONE SSE ===
+        // === CONNESSIONE SSE - CORRETTA ===
         // ============================================
 
         function connectSSE() {
+            // Se già connesso attivo, esci
             if (state.eventSource && state.eventSource.readyState === EventSource.OPEN) {
-                console.log('SSE già connesso, salto...');
+                console.log('✅ SSE già connesso');
                 return;
             }
             
+            // Chiudi connessione vecchia/stale
             if (state.eventSource) {
-                console.log('Chiusura vecchia connessione SSE...');
+                console.log('🔄 Chiusura vecchia connessione');
                 state.eventSource.close();
                 state.eventSource = null;
             }
             
+            // Evita connessioni multiple
             if (state.connecting) {
-                console.log('Connessione già in corso...');
+                console.log('⏳ Connessione già in corso...');
                 return;
             }
             
             state.connecting = true;
+            console.log('📡 Connessione SSE...');
             
-            setTimeout(() => {
-                try {
-                    console.log('Tentativo connessione SSE...');
-                    const es = new EventSource('/api/monitor/stream');
-                    
-                    const connectionTimeout = setTimeout(() => {
-                        if (es.readyState !== EventSource.OPEN) {
-                            console.log('Timeout connessione SSE');
-                            es.close();
-                            if (state.eventSource === es) {
-                                state.eventSource = null;
-                            }
-                            state.connecting = false;
-                            setTimeout(connectSSE, 3000);
-                        }
-                    }, 5000);
-                    
-                    es.onopen = () => {
-                        clearTimeout(connectionTimeout);
-                        console.log('✅ SSE connesso');
-                        document.getElementById('status').className = 'status online';
-                        state.eventSource = es;
+            try {
+                const es = new EventSource('/api/monitor/stream');
+                
+                const timeout = setTimeout(() => {
+                    if (es.readyState !== EventSource.OPEN) {
+                        console.log('⏱️ Timeout connessione');
+                        es.close();
                         state.connecting = false;
-                        state.reconnectAttempt = 1;
-                        
-                        // IMPORTANTE: Quando si riconnette, resetta lastId per evitare duplicati
-                        // MA non resettare se è la prima connessione dopo il load
-                        if (window._allAnnounces && window._allAnnounces.length > 0) {
-                            const maxId = Math.max(...window._allAnnounces.map(a => a.id || 0));
-                            if (maxId > state.lastId) {
-                                state.lastId = maxId;
-                            }
-                        }
-                        
-                        refreshBackendStats();
-                    };
+                        setTimeout(connectSSE, 3000);
+                    }
+                }, 5000);
+                
+                es.onopen = () => {
+                    clearTimeout(timeout);
+                    console.log('✅ SSE CONNESSO');
+                    document.getElementById('status').className = 'status online';
+                    state.eventSource = es;
+                    state.connecting = false;
+                    state.reconnectAttempt = 1;
                     
-                    es.onmessage = (e) => {
-                        if (e.data && e.data !== ':') {
-                            try {
-                                const ann = JSON.parse(e.data);
+                    // Sincronizza lastId
+                    if (window._allAnnounces && window._allAnnounces.length > 0) {
+                        const maxId = Math.max(...window._allAnnounces.map(a => a.id || 0));
+                        if (maxId > state.lastId) state.lastId = maxId;
+                    }
+                    
+                    refreshBackendStats();
+                };
+                
+                es.onmessage = (e) => {
+                    if (e.data && e.data !== ':') {
+                        try {
+                            const ann = JSON.parse(e.data);
+                            if (ann.id > state.lastId) {
+                                state.lastId = ann.id;
+                                refreshBackendStats();
                                 
-                                // CONTROLLO PIÙ ROBUSTO PER EVITARE DUPLICATI
-                                if (ann.id > state.lastId) {
-                                    state.lastId = ann.id;
-                                    refreshBackendStats();
+                                if (state.cacheSource === 'memory') {
+                                    if (!window._allAnnounces) window._allAnnounces = [];
                                     
-                                    // Verifica se l'annuncio esiste già nell'array
-                                    if (!window._allAnnounces) {
-                                        window._allAnnounces = [];
-                                    }
-                                    
-                                    // Controlla se l'annuncio è già presente (per sicurezza)
+                                    // Controllo esistenza
                                     const exists = window._allAnnounces.some(a => 
                                         a.id === ann.id || 
-                                        (a.packet_hash && a.packet_hash === ann.packet_hash) ||
+                                        a.packet_hash === ann.packet_hash ||
                                         (a.identity_hash === ann.identity_hash && a.timestamp === ann.timestamp)
                                     );
                                     
                                     if (!exists) {
                                         window._allAnnounces.unshift(ann);
+                                        if (window._allAnnounces.length > 1000) window._allAnnounces.pop();
                                         
-                                        if (window._allAnnounces.length > 2000) {
-                                            window._allAnnounces.pop();
-                                        }
+                                        updateIdentityStats(ann);
                                         
-                                        if (!state.resetting) {
-                                            updateIdentityStats(ann);
-                                        }
-                                        
-                                        if (window.updateAspectTabs) window.updateAspectTabs();
-                                        
-                                        if (state.view === 'live' && state.cacheSource === 'memory') {
-                                            applyCurrentSortAndRender();
-                                        }
-                                        
+                                        if (state.view === 'live') applyCurrentSortAndRender();
                                         if (state.view === 'identities') renderIdentities();
                                         if (state.view === 'stats') renderStats();
-                                    } else {
-                                        console.log('⏭️ Annuncio già presente, ignorato:', ann.id);
+                                        if (window.updateAspectTabs) window.updateAspectTabs();
                                     }
                                 }
-                            } catch(e) {
-                                console.error('SSE parse error:', e);
                             }
+                        } catch(e) {
+                            console.error('SSE parse error:', e);
                         }
-                    };
+                    }
+                };
+                
+                es.onerror = (err) => {
+                    clearTimeout(timeout);
+                    console.error('❌ SSE errore');
+                    document.getElementById('status').className = 'status offline';
                     
-                    es.onerror = (err) => {
-                        clearTimeout(connectionTimeout);
-                        console.error('SSE errore:', err);
-                        document.getElementById('status').className = 'status offline';
-                        
-                        if (state.eventSource === es) {
-                            state.eventSource = null;
-                        }
-                        
-                        state.connecting = false;
-                        
-                        const delay = Math.min(3000 * (state.reconnectAttempt || 1), 30000);
-                        state.reconnectAttempt = (state.reconnectAttempt || 1) + 1;
-                        
-                        setTimeout(() => {
-                            if (!state.eventSource && !state.resetting) {
-                                connectSSE();
-                            }
-                        }, delay);
-                    };
+                    if (state.eventSource === es) {
+                        state.eventSource = null;
+                    }
                     
-                } catch (e) {
-                    console.error('Errore creazione SSE:', e);
                     state.connecting = false;
-                    setTimeout(connectSSE, 5000);
-                }
-            }, 100);
+                    
+                    const delay = Math.min(3000 * (state.reconnectAttempt || 1), 30000);
+                    state.reconnectAttempt = (state.reconnectAttempt || 1) + 1;
+                    
+                    setTimeout(() => {
+                        if (!state.eventSource && !state.resetting) {
+                            connectSSE();
+                        }
+                    }, delay);
+                };
+                
+            } catch (e) {
+                console.error('Errore creazione SSE:', e);
+                state.connecting = false;
+                setTimeout(connectSSE, 5000);
+            }
         }
 
         // ============================================
@@ -1993,7 +2079,7 @@
                 if (window._allAnnounces && window._allAnnounces.length > 0) {
                     applyCurrentSortAndRender();
                 } else {
-                    loadHistory();
+                        loadHistory();
                 }
             });
 

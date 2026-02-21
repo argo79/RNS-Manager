@@ -757,6 +757,10 @@ class RNSMonitorManager:
 # === BLUEPRINT PER FLASK (CORRETTO) ===
 # ============================================
 
+# ============================================
+# === BLUEPRINT PER FLASK (CORRETTO) ===
+# ============================================
+
 def create_monitor_blueprint(monitor_manager):
     """Crea un blueprint Flask con le route del monitor - ORA CON DATI RADIO"""
     from flask import Blueprint, request, jsonify, Response, stream_with_context, render_template, make_response
@@ -770,14 +774,10 @@ def create_monitor_blueprint(monitor_manager):
     # Pagina principale - CORRETTA
     @monitor_bp.route('')
     def monitor_page():
-        # Crea una response object da render_template
         response = make_response(render_template('monitor.html'))
-        
-        # Headers per evitare caching della pagina
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
-        
         return response
     
     # API stats
@@ -820,35 +820,31 @@ def create_monitor_blueprint(monitor_manager):
             return jsonify({'success': True, 'peer': peer})
         return jsonify({'success': False, 'error': 'Peer non trovato'}), 404
     
-    # API stream - MIGLIORATA
+    # API stream
     @monitor_bp.route('/stream')
     def stream():
         def generate():
             client_id = str(uuid.uuid4())[:8]
             print(f"[SSE] Client {client_id} connesso")
             
-            # Invia un commento ogni 15 secondi per mantenere viva la connessione
             last_keepalive = time.time()
             
             with monitor_manager.history_lock:
                 last_id = monitor_manager.announce_counter
-                # Invia gli ultimi 10 annunci al nuovo client
                 recent = list(reversed(monitor_manager.announce_history[-10:])) if monitor_manager.announce_history else []
                 for ann in recent:
                     yield f"data: {json.dumps(ann)}\n\n"
             
             while True:
                 try:
-                    # Timeout ridotto per keepalive più frequenti
                     announce = monitor_manager.announce_queue.get(timeout=15)
                     if announce['id'] > last_id:
                         last_id = announce['id']
                         yield f"data: {json.dumps(announce)}\n\n"
                         print(f"[SSE] Inviato #{announce['id']} a {client_id}")
                 except queue.Empty:
-                    # Invia keepalive ogni 15 secondi
                     if time.time() - last_keepalive > 15:
-                        yield ":\n\n"  # Commento SSE (keepalive)
+                        yield ":\n\n"
                         last_keepalive = time.time()
                     continue
                 except GeneratorExit:
@@ -875,10 +871,7 @@ def create_monitor_blueprint(monitor_manager):
     @monitor_bp.route('/clear', methods=['POST'])
     def clear():
         monitor_manager.clear_all()
-        return jsonify({
-            'success': True,
-            'message': 'TUTTO PULITO!'
-        })
+        return jsonify({'success': True, 'message': 'TUTTO PULITO!'})
     
     # API reset-all
     @monitor_bp.route('/reset-all', methods=['POST'])
@@ -889,13 +882,10 @@ def create_monitor_blueprint(monitor_manager):
             print("🔄 RESET TOTALE RICHIESTO")
             print("="*60)
             
-            # Reset del manager
             monitor_manager.clear_all()
             
-            # Reset della cache persistente (doppia pulizia)
             if monitor_manager.announce_cache:
                 monitor_manager.announce_cache.clear()
-                # Elimina fisicamente il file
                 try:
                     if os.path.exists(monitor_manager.announce_cache.cache_file):
                         os.remove(monitor_manager.announce_cache.cache_file)
@@ -903,7 +893,6 @@ def create_monitor_blueprint(monitor_manager):
                 except Exception as e:
                     print(f"[Reset] Errore eliminazione file: {e}")
                 
-                # Ricrea file cache vuoto
                 try:
                     with open(monitor_manager.announce_cache.cache_file, 'w') as f:
                         json.dump([], f)
@@ -911,9 +900,7 @@ def create_monitor_blueprint(monitor_manager):
                 except Exception as e:
                     print(f"[Reset] Errore creazione file: {e}")
             
-            # Ottieni statistiche aggiornate
             stats = monitor_manager.get_stats()
-            
             print(f"[Reset] Completato. Stats: {stats}")
             
             return jsonify({
@@ -976,6 +963,140 @@ def create_monitor_blueprint(monitor_manager):
             'success': True,
             'aspects': monitor_manager.aspects
         })
+    
+    # ============================================
+    # === ENDPOINT PER LXMF-CHAT (UNICO) ===
+    # ============================================
+
+    @monitor_bp.route('/launch-lxmfchat', methods=['GET'])
+    def launch_lxmfchat():
+        """Avvia LXMF-Chat (rns_lxmf.py) e apre il browser"""
+        print("\n" + "="*60)
+        print("🔴🔴🔴 LAUNCH LXMF-CHAT CHIAMATO 🔴🔴🔴")
+        print("="*60)
+        
+        try:
+            import subprocess
+            import threading
+            import os
+            import sys
+            import time
+            import webbrowser
+            import requests
+            
+            print("📦 Import completati")
+            
+            def run_lxmfchat():
+                try:
+                    print("\n🚀 THREAD AVVIATO")
+                    
+                    # Trova il percorso BASE (dove sta rns_manager.py)
+                    # Risali di un livello da modules/ alla root del progetto
+                    current_dir = os.path.dirname(os.path.abspath(__file__))  # .../modules/
+                    base_dir = os.path.dirname(current_dir)  # .../rnsManagerEvo/
+                    
+                    # Percorso ASSOLUTO a rns_lxmf.py (nella root)
+                    script_path = os.path.join(base_dir, 'rns_lxmf.py')
+                    
+                    print(f"📁 Base dir: {base_dir}")
+                    print(f"📁 Script: {script_path}")
+                    print(f"📁 Esiste: {os.path.exists(script_path)}")
+                    
+                    if not os.path.exists(script_path):
+                        print(f"❌ Script non trovato!")
+                        return
+                    
+                    python_exe = sys.executable
+                    print(f"🐍 Python: {python_exe}")
+                    
+                    # AVVIA IL PROCESSO NELLA DIRECTORY BASE (dove stanno i templates/)
+                    print(f"🚀 Avvio processo in {base_dir}...")
+                    process = subprocess.Popen(
+                        [python_exe, script_path],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        start_new_session=True,
+                        text=True,
+                        bufsize=1,
+                        cwd=base_dir  # ⚠️ LAVORA NELLA ROOT!
+                    )
+                    
+                    print(f"✅ Processo avviato PID: {process.pid}")
+                    
+                    # Trova la porta dall'output
+                    print("\n🔍 Cerco porta nell'output...")
+                    port = None
+                    start_time = time.time()
+                    
+                    while time.time() - start_time < 15:
+                        line = process.stdout.readline()
+                        if not line:
+                            time.sleep(0.1)
+                            continue
+                        
+                        line = line.strip()
+                        print(f"STDOUT: {line}")
+                        
+                        if "http://localhost:" in line:
+                            import re
+                            match = re.search(r'http://localhost:(\d+)/chat', line)
+                            if match:
+                                port = int(match.group(1))
+                                print(f"\n✅ Trovata porta {port}!")
+                                break
+                    
+                    if not port:
+                        print("\n❌ Porta non trovata nell'output")
+                        stderr = process.stderr.read()
+                        if stderr:
+                            print(f"\n📤 STDERR:\n{stderr}")
+                        return
+                    
+                    # Aspetta che il server sia pronto
+                    print(f"\n⏳ Attendo che il server su porta {port} sia pronto...")
+                    start_time = time.time()
+                    
+                    while time.time() - start_time < 30:
+                        try:
+                            r = requests.get(f'http://localhost:{port}/chat', timeout=1)
+                            if r.status_code == 200:
+                                elapsed = time.time() - start_time
+                                print(f"\n✅ Server pronto dopo {elapsed:.1f} secondi!")
+                                break
+                        except:
+                            print(f"   ⏳ Attesa... ({int(time.time()-start_time)}s)")
+                            time.sleep(1)
+                    else:
+                        print(f"\n❌ Server non risponde dopo 30 secondi")
+                        return
+                    
+                    # Apri browser
+                    url = f'http://localhost:{port}/chat'
+                    print(f"\n🌐 Apro browser: {url}")
+                    webbrowser.open(url)
+                    print(f"✅ Browser aperto")
+                    
+                except Exception as e:
+                    print(f"\n💥 ECCEZIONE NEL THREAD: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            print("🎯 Avvio thread...")
+            thread = threading.Thread(target=run_lxmfchat, daemon=True)
+            thread.start()
+            print("✅ Thread avviato")
+            
+            return jsonify({'success': True, 'message': 'Avvio LXMF-Chat...'})
+        
+        except Exception as e:
+            print(f"\n💥 ECCEZIONE ENDPOINT: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # ============================================
+    # === RITORNA IL BLUEPRINT ===
+    # ============================================
     
     return monitor_bp
 

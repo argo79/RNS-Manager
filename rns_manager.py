@@ -227,6 +227,36 @@ def execute_rnid():
                 timeout=30
             )
             
+            # ===== PULIZIA OUTPUT =====
+            stdout = result.stdout
+            stderr = result.stderr
+            
+            # Rimuovi caratteri di controllo e backspace
+            stdout = re.sub(r'.\x08', '', stdout)  # Rimuovi backspace
+            stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)  # Caratteri controllo
+            stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)  # Codici ANSI
+            stdout = re.sub(r'[\u2800-\u28FF]', '', stdout)  # Braille
+            
+            # Per output base64/encrypted, mantieni ma formatta meglio
+            if len(stdout) > 1000 or '4U+6vC' in stdout:
+                # Suddividi in righe di lunghezza ragionevole
+                lines = []
+                for line in stdout.split('\n'):
+                    if len(line) > 80:
+                        # Spezza righe molto lunghe ogni 80 caratteri
+                        for i in range(0, len(line), 80):
+                            lines.append(line[i:i+80])
+                    else:
+                        lines.append(line)
+                stdout = '\n'.join(lines)
+            
+            return jsonify({
+                'success': result.returncode == 0,
+                'output': stdout,
+                'error': re.sub(r'.\x08', '', stderr),  # Pulisci anche stderr
+                'return_code': result.returncode
+            })
+            
         elif command.startswith(('rm -f ', 'echo ', 'base64 ', 'cat ', 'stat -c%s ', 'cp ', 'mkdir -p ')):
             allowed_paths = [
                 '/tmp/web_input.txt',
@@ -801,10 +831,24 @@ def rns_paths():
         print(f"[DEBUG] rnpath stdout: {result.stdout[:200]}...")
         print(f"[DEBUG] rnpath stderr: {result.stderr[:200]}...")
         
+        # ===== PULIZIA OUTPUT =====
+        stdout = result.stdout
+        stderr = result.stderr
+        
+        # Rimuovi caratteri backspace (molto importanti!)
+        stdout = re.sub(r'.\x08', '', stdout)
+        stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)  # Caratteri controllo
+        stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)  # Codici ANSI
+        stdout = re.sub(r'[\u2800-\u28FF]', '', stdout)  # Caratteri braille
+        
+        # Pulisci anche stderr
+        stderr = re.sub(r'.\x08', '', stderr)
+        stderr = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stderr)
+        
         return jsonify({
             'success': result.returncode == 0,
-            'output': result.stdout,
-            'error': result.stderr,
+            'output': stdout,
+            'error': stderr,
             'destination': destination,
             'cmd': ' '.join(cmd) if destination else 'rnpath'
         })
@@ -814,6 +858,7 @@ def rns_paths():
     except Exception as e:
         print(f"[DEBUG] Errore rnpath: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
+
 
 @app.route('/api/rns/probe', methods=['POST'])
 def rns_probe():
@@ -840,10 +885,24 @@ def rns_probe():
         print(f"[DEBUG] Probe returncode: {result.returncode}")
         print(f"[DEBUG] Probe stdout: {result.stdout[:200]}")
         
+        # ===== PULIZIA OUTPUT =====
+        stdout = result.stdout
+        stderr = result.stderr
+        
+        # Rimuovi caratteri backspace (molto importanti!)
+        stdout = re.sub(r'.\x08', '', stdout)
+        stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)  # Caratteri controllo
+        stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)  # Codici ANSI
+        stdout = re.sub(r'[\u2800-\u28FF]', '', stdout)  # Caratteri braille
+        
+        # Pulisci anche stderr
+        stderr = re.sub(r'.\x08', '', stderr)
+        stderr = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stderr)
+        
         return jsonify({
             'success': result.returncode == 0,
-            'output': result.stdout,
-            'error': result.stderr,
+            'output': stdout,
+            'error': stderr,
             'destination': destination,
             'aspect': aspect,
             'cmd': ' '.join(cmd)

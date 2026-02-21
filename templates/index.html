@@ -799,7 +799,7 @@
                 if (aspectHashes[aspect]) {
                     const hash = aspectHashes[aspect];
                     const shortHash = hash.length > 32 ? hash.substring(0, 32) + '...' : hash;
-                    aspectInfo += `<div style="font-size: 9px; color: ${isPublic ? '#8f8' : '#888'}; margin-top: 1px;">${aspect.split('.')[0]}: ${shortHash}</div>`;
+                    aspectInfo += `<div style="font-size: 9px; color: ${isPublic ? '#8f8' : '#888'}; margin-top: 1px;">${aspect.split('.').pop()}: ${shortHash}</div>`;
                 }
             });
             
