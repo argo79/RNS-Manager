@@ -8,30 +8,9 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/opus-media-recorder@latest/OpusMediaRecorder.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/opus-media-recorder@latest/encoderWorker.umd.js"></script>
     <style>
-        .aspect-menu-container {
-            margin: 8px 0;
-            width: 100%;
-        }
-        .aspect-selector {
-            width: 100%;
-            padding: 6px 8px;
-            background: #5a2e00;
-            color: #ffaa00;
-            border: 1px solid #ffaa00;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 10px;
-            cursor: pointer;
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffaa00' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-            background-repeat: no-repeat;
-            background-position: right 8px center;
-            background-size: 12px;
-            padding-right: 28px;
-        }
         
     </style>
 </head>
@@ -166,8 +145,15 @@
                            autocomplete="off"
                            disabled>
                     <button class="lxmf-file-btn" id="fileBtn" onclick="document.getElementById('fileInput').click()" disabled title="Allega file">📎</button>
+                    <button class="lxmf-voice-btn" id="voiceBtn" onclick="toggleVoiceRecording()" disabled title="Messaggio vocale (Codec2)">🎤</button>
                     <button id="sendButton" onclick="sendMessage()" disabled>INVIA</button>
                     <input type="file" id="fileInput" class="lxmf-file-input" onchange="handleFileSelect()">
+                </div>
+
+                <!-- INDICATORE REGISTRAZIONE VOCALE -->
+                <div id="voiceRecordingIndicator" style="display: none; padding: 5px 15px; background: #330000; color: #ff6666; border-top: 1px solid #ff6666; text-align: center;">
+                    <span>🔴 REGISTRAZIONE IN CORSO... <span id="voiceTimer">0s</span></span>
+                    <button onclick="stopVoiceRecording()" style="background: #ff6666; color: black; border: none; padding: 2px 10px; margin-left: 10px; cursor: pointer;">FERMA</button>
                 </div>
                 
                 <!-- Statistiche trasferimento -->
@@ -193,7 +179,7 @@
                         <div class="telemetry-empty">👈 Seleziona un peer per vedere i dati</div>
                     </div>
                     
-                    <!-- MAPPA INTEGRATA CON CONTROLLI -->
+                    <!-- MAPPA INTEGRATA CON CONTROLLI - QUESTI RIMANGONO INTATTI! -->
                     <div class="telemetry-map" id="telemetryMap">
                         <div class="map-controls">
                             <button class="map-style-btn active" onclick="setMapStyle('topo')" id="mapStyleTopo">🗺️ Rilievi</button>
@@ -374,14 +360,14 @@
                 html += '<div class="message-telemetry-row">';
                 
                 if (d.uptime) html += `<span><span style="color:#888;">⏱️</span> ${d.uptime}</span>`;
-                if (d.cpu) html += `<span><span style="color:#888;">CPU</span> ${d.cpu}</span>`;
-                if (d.ram) html += `<span><span style="color:#888;">RAM</span> ${d.ram}</span>`;
-                if (d.disk) html += `<span><span style="color:#888;">DISK</span> ${d.disk}</span>`;
+                if (d.cpu) html += `<span><span style="color:#888;"> -CPU:</span> ${d.cpu}</span>`;
+                if (d.ram) html += `<span><span style="color:#888;"> -RAM:</span> ${d.ram}</span>`;
+                if (d.disk) html += `<span><span style="color:#888;"> -DISK:</span> ${d.disk}</span>`;
                 
                 html += '</div><div class="message-telemetry-row" style="margin-top:4px;">';
                 
-                if (d.net_sent) html += `<span><span style="color:#888;">📤</span> ${d.net_sent} KB</span>`;
-                if (d.net_recv) html += `<span><span style="color:#888;">📥</span> ${d.net_recv} KB</span>`;
+                if (d.net_sent) html += `<span><span style="color:#888;"> 📤 OUT </span> ${d.net_sent} KB</span>`;
+                if (d.net_recv) html += `<span><span style="color:#888;"> 📥 IN </span> ${d.net_recv} KB</span>`;
                 
                 html += '</div></div>';
                 return html;
@@ -443,7 +429,7 @@
                 document.getElementById('sidebarIdentityName').innerHTML = currentIdentity.name || '-';
                 document.getElementById('sidebarAspect').innerHTML = '🔗 lxmf.delivery';
 
-                // DELIVERY HASH nella sidebar (campo nero) - QUESTO È QUELLO CHE MANCAVA!
+                // DELIVERY HASH nella sidebar (campo nero)
                 if (currentIdentity.delivery_hash) {
                     // Pulisci solo caratteri problematici
                     let deliveryHash = currentIdentity.delivery_hash;
@@ -462,7 +448,7 @@
                     }
                 }
                 
-                // Identity hash piccolo sotto (se vuoi mostrarlo anche lì)
+                // Identity hash piccolo sotto
                 if (currentIdentity.identity_hash) {
                     let identityHash = currentIdentity.identity_hash.replace(/[<>:\s]/g, '');
                     document.getElementById('sidebarIdentityHash').innerHTML = identityHash.substring(0, 32);
@@ -560,17 +546,16 @@
             if (!mapInstance) {
                 mapInstance = L.map('mapContainer').setView([41.9028, 12.4964], 5);
                 
-                // Mappa predefinita - rilievi (OpenTopoMap)
                 L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; OpenTopoMap',
-                    maxZoom: 17,
-                    opacity: 1
+                    maxZoom: 17
                 }).addTo(mapInstance);
                 
+                // 🔥 Icona predefinita usando MDI
                 mapMarker = L.marker([41.9028, 12.4964], {
                     icon: L.divIcon({
                         className: 'custom-marker',
-                        html: '📡',
+                        html: '<span class="mdi mdi-antenna" style="font-size:24px; color:#88ff88;"></span>',
                         iconSize: [30, 30],
                         popupAnchor: [0, -15]
                     })
@@ -594,16 +579,24 @@
                 return;
             }
             
-            // Rimuovi tutti i layer esistenti
+            // 🔥 SALVA TUTTO
+            const center = mapInstance.getCenter();
+            const zoom = mapInstance.getZoom();
+            const markerLatLng = mapMarker ? mapMarker.getLatLng() : null;
+            const markerVisible = mapMarker ? mapMarker.isPopupOpen() : false;
+            
+            // 🔥 RIMUOVI SOLO I TILE LAYER
+            const layersToRemove = [];
             mapInstance.eachLayer(layer => {
                 if (layer instanceof L.TileLayer) {
-                    mapInstance.removeLayer(layer);
+                    layersToRemove.push(layer);
                 }
             });
             
-            // Aggiungi il nuovo layer in base allo stile
-            let tileLayer;
+            layersToRemove.forEach(layer => mapInstance.removeLayer(layer));
             
+            // Aggiungi il nuovo layer
+            let tileLayer;
             switch(style) {
                 case 'satellite':
                     tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -628,9 +621,18 @@
             
             tileLayer.addTo(mapInstance);
             
-            // Riaggiungi il marker se esiste
+            // 🔥 RIPRISTINA TUTTO
+            mapInstance.setView(center, zoom);
+            
+            // 🔥 ASSICURA CHE IL MARKER SIA PRESENTE
             if (mapMarker) {
-                mapMarker.addTo(mapInstance);
+                if (!mapInstance.hasLayer(mapMarker)) {
+                    mapMarker.addTo(mapInstance);
+                }
+                if (markerLatLng) {
+                    mapMarker.setLatLng(markerLatLng);
+                }
+                mapMarker.setOpacity(markerVisible ? 1 : 0);
             }
             
             debugLog('Stile mappa cambiato:', style);
@@ -658,18 +660,39 @@
             
             if (mapInstance && mapMarker) {
                 mapInstance.setView([lat, lon], 13);
+                
+                // 🔥 RECUPERA L'ICONA DALLA TELEMETRIA (GIÀ IN `telemetryDatabase`)
+                let iconName = 'antenna'; // icona predefinita
+                if (currentPeer) {
+                    const peerHash = cleanHash(currentPeer.hash);
+                    const telemetry = getTelemetryFromDatabase(peerHash);
+                    if (telemetry?.appearance?.icon) {
+                        iconName = telemetry.appearance.icon;
+                    }
+                }
+                
+                // Aggiorna marker con icona MDI
                 mapMarker.setLatLng([lat, lon]);
                 mapMarker.setOpacity(1);
+                
+                // 🔥 USA LA CLASSE MDI PER L'ICONA (proprio come nella telemetry dashboard)
+                mapMarker.setIcon(L.divIcon({
+                    className: 'custom-marker',
+                    html: `<span class="mdi mdi-${iconName}" style="font-size:24px; color:#88ff88;"></span>`,
+                    iconSize: [30, 30],
+                    popupAnchor: [0, -15]
+                }));
                 
                 mapMarker.bindPopup(`
                     <div style="color: #000; font-family: monospace;">
                         <strong>📍 ${escapeHtml(currentPeer?.display_name || 'Peer')}</strong><br>
+                        <span class="mdi mdi-${iconName}" style="font-size:16px;"></span> ${iconName}<br>
                         Lat: ${lat.toFixed(6)}°<br>
                         Lon: ${lon.toFixed(6)}°
                     </div>
                 `).openPopup();
                 
-                debugLog('Mappa aggiornata', { lat, lon });
+                debugLog('Mappa aggiornata', { lat, lon, icon: iconName });
             }
         }
 
@@ -741,11 +764,7 @@
 
         function renderTelemetryDashboard() {
             const dashboard = document.getElementById('telemetryDashboard');
-            const mapPlaceholder = document.getElementById('mapPlaceholder');
-            const mapContainer = document.getElementById('mapContainer');
-            
             if (!dashboard) return;
-            
             if (!currentPeer) {
                 dashboard.innerHTML = '<div class="telemetry-empty">👈 Seleziona un peer</div>';
                 return;
@@ -755,76 +774,73 @@
             const telemetry = getTelemetryFromDatabase(peerHash);
             
             if (!telemetry.battery && !telemetry.location && !telemetry.appearance && !telemetry.information) {
-                dashboard.innerHTML = '<div class="telemetry-empty">📡 Nessun dato telemetria disponibile per questo peer</div>';
-                
-                if (mapContainer) mapContainer.style.display = 'none';
-                if (mapPlaceholder) {
-                    mapPlaceholder.style.display = 'flex';
-                    mapPlaceholder.innerHTML = '<span>🗺️ Nessuna posizione</span>';
-                }
+                dashboard.innerHTML = '<div class="telemetry-empty">📡 Nessun dato telemetria</div>';
                 return;
             }
             
-            // Costruisci la dashboard migliorata
             let html = '<div class="telemetry-dashboard">';
             
-            // Header con icona MDI
+            // PEER MINI HEADER
             const iconName = telemetry.appearance?.icon || 'account';
-            html += `<div class="telemetry-peer-header">`;
-            html += `<div class="telemetry-peer-icon"><span class="mdi mdi-${iconName}"></span></div>`;
-            html += `<div class="telemetry-peer-info">`;
-            html += `<div class="telemetry-peer-name">${escapeHtml(cleanDisplayName(currentPeer.display_name))}</div>`;
-            html += `<div class="telemetry-peer-hash">${peerHash.substring(0, 16)}...</div>`;
-            html += `</div></div>`;
+            html += `<div class="telemetry-peer-mini">`;
+            html += `<div class="peer-mini-icon"><span class="mdi mdi-${iconName}"></span></div>`;
+            html += `<div class="peer-mini-name">${escapeHtml(cleanDisplayName(currentPeer.display_name))}</div>`;
+            html += `<div class="peer-mini-hash">${peerHash.substring(0, 8)}</div>`;
+            html += `</div>`;
             
-            // Griglia telemetria
-            html += `<div class="telemetry-grid">`;
-            
-            // Batteria
+            // BATTERIA (se presente)
             if (telemetry.battery) {
                 const battery = telemetry.battery;
                 const chargePercent = battery.charge_percent || battery.charge || 0;
                 const isCharging = battery.charging || false;
-                const batteryIcon = isCharging ? 'mdi-lightning-bolt' : (chargePercent > 20 ? 'mdi-battery' : 'mdi-battery-outline');
                 
-                html += `<div class="telemetry-card">`;
-                html += `<div class="telemetry-card-title"><span class="mdi ${batteryIcon}"></span> BATTERIA</div>`;
-                html += `<div class="telemetry-card-content">`;
-                html += `<div class="battery-level">`;
-                html += `<div class="battery-bar"><div class="battery-fill" style="width: ${chargePercent}%;"></div></div>`;
-                html += `<span class="battery-text">${chargePercent}%</span>`;
-                html += `</div>`;
-                if (battery.temperature) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Temperatura</span><span class="telemetry-data-value">${battery.temperature}°C</span></div>`;
-                }
-                if (battery.voltage) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Tensione</span><span class="telemetry-data-value">${battery.voltage}V</span></div>`;
-                }
-                html += `</div></div>`;
+                html += `<div class="telemetry-grid">`;
+                html += `<div class="telemetry-cell battery-cell">`;
+                html += `<div class="telemetry-cell-title">🔋 BATTERIA</div>`;
+                html += `<div class="battery-compact">`;
+                html += `<span class="battery-icon">${isCharging ? '⚡' : '🔋'}</span>`;
+                html += `<div class="battery-level-compact"><div class="battery-fill-compact" style="width:${chargePercent}%"></div></div>`;
+                html += `<span class="battery-percent">${chargePercent}%</span>`;
+                if (battery.temperature) html += `<span style="color:#ffaa00; margin-left:4px;">${battery.temperature}°C</span>`;
+                html += `</div></div></div>`;
             }
             
-            // Posizione
+            // POSIZIONE + MOVIMENTO (LAT, LON, ALT, VEL, DIR) - TUTTI IN UNA RIGA 5 COLONNE
             if (telemetry.location) {
                 const loc = telemetry.location;
-                html += `<div class="telemetry-card">`;
-                html += `<div class="telemetry-card-title"><span class="mdi mdi-map-marker"></span> POSIZIONE</div>`;
-                html += `<div class="telemetry-card-content">`;
-                html += `<div class="location-badge">`;
-                html += `<div class="location-coord"><span>Lat:</span><span class="telemetry-data-value">${loc.latitude?.toFixed(6) || '?'}</span></div>`;
-                html += `<div class="location-coord"><span>Lon:</span><span class="telemetry-data-value">${loc.longitude?.toFixed(6) || '?'}</span></div>`;
-                if (loc.altitude) {
-                    html += `<div class="location-coord"><span>Alt:</span><span class="telemetry-data-value">${loc.altitude.toFixed(1)}m</span></div>`;
-                }
-                if (loc.accuracy) {
-                    html += `<div class="location-coord"><span>Acc:</span><span class="telemetry-data-value">±${loc.accuracy.toFixed(1)}m</span></div>`;
-                }
-                if (loc.speed !== undefined && !isNaN(loc.speed)) {
-                    html += `<div class="location-coord"><span>Vel:</span><span class="telemetry-data-value">${(loc.speed * 3.6).toFixed(1)} km/h</span></div>`;
-                }
-                if (loc.bearing !== undefined && !isNaN(loc.bearing)) {
-                    html += `<div class="location-coord"><span>Dir:</span><span class="telemetry-data-value">${loc.bearing.toFixed(0)}°</span></div>`;
-                }
-                html += `</div></div></div>`;
+                html += `<div class="position-movement-row">`;
+                
+                // LAT
+                html += `<div class="position-movement-box">`;
+                html += `<div class="position-movement-label">LAT</div>`;
+                html += `<div class="position-movement-value">${loc.latitude ? loc.latitude.toFixed(6) : '?'}</div>`;
+                html += `</div>`;
+                
+                // LON
+                html += `<div class="position-movement-box">`;
+                html += `<div class="position-movement-label">LON</div>`;
+                html += `<div class="position-movement-value">${loc.longitude ? loc.longitude.toFixed(6) : '?'}</div>`;
+                html += `</div>`;
+                
+                // ALT
+                html += `<div class="position-movement-box">`;
+                html += `<div class="position-movement-label">ALT</div>`;
+                html += `<div class="position-movement-value">${loc.altitude ? loc.altitude.toFixed(1) + 'm' : '?'}</div>`;
+                html += `</div>`;
+                
+                // VEL
+                html += `<div class="position-movement-box velocity">`;
+                html += `<div class="position-movement-label">VEL</div>`;
+                html += `<div class="position-movement-value">${(loc.speed !== undefined && !isNaN(loc.speed)) ? (loc.speed * 3.6).toFixed(1) + 'km/h' : '?'}</div>`;
+                html += `</div>`;
+                
+                // DIR
+                html += `<div class="position-movement-box direction">`;
+                html += `<div class="position-movement-label">DIR</div>`;
+                html += `<div class="position-movement-value">${(loc.bearing !== undefined && !isNaN(loc.bearing)) ? loc.bearing.toFixed(0) + '°' : '?'}</div>`;
+                html += `</div>`;
+                
+                html += `</div>`;
                 
                 // Aggiorna mappa
                 if (loc.latitude && loc.longitude) {
@@ -832,86 +848,106 @@
                 }
             }
             
-            // Informazioni di sistema
-            if (telemetry.information || telemetry.pressure || telemetry.temperature || telemetry.humidity) {
-                html += `<div class="telemetry-card">`;
-                html += `<div class="telemetry-card-title"><span class="mdi mdi-information"></span> SISTEMA</div>`;
-                html += `<div class="telemetry-card-content">`;
+            // SENSORI (temperatura, umidità, pressione) - RIEMPIONO LE 5 COLONNE
+            if (telemetry.temperature || telemetry.humidity || telemetry.pressure || 
+                telemetry.information?.cpu || telemetry.information?.ram || telemetry.information?.disk) {
                 
-                if (telemetry.temperature) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Temperatura</span><span class="telemetry-data-value">${telemetry.temperature}°C</span></div>`;
+                html += `<div class="sensor-row">`;
+                
+                // Temperatura
+                if (telemetry.temperature || telemetry.battery?.temperature) {
+                    const temp = telemetry.temperature || telemetry.battery?.temperature;
+                    html += `<div class="sensor-item">`;
+                    html += `<span class="sensor-icon">🌡️</span>`;
+                    html += `<span class="sensor-label">TEMP</span>`;
+                    html += `<span class="sensor-value">${temp}°C</span>`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
+                
+                // Umidità
                 if (telemetry.humidity) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Umidità</span><span class="telemetry-data-value">${telemetry.humidity}%</span></div>`;
+                    html += `<div class="sensor-item">`;
+                    html += `<span class="sensor-icon">💧</span>`;
+                    html += `<span class="sensor-label">HUM</span>`;
+                    html += `<span class="sensor-value">${telemetry.humidity}%</span>`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
+                
+                // Pressione
                 if (telemetry.pressure) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Pressione</span><span class="telemetry-data-value">${telemetry.pressure} hPa</span></div>`;
+                    html += `<div class="sensor-item">`;
+                    html += `<span class="sensor-icon">🔄</span>`;
+                    html += `<span class="sensor-label">PRESS</span>`;
+                    html += `<span class="sensor-value">${telemetry.pressure}hPa</span>`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
-                if (telemetry.information?.uptime) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Uptime</span><span class="telemetry-data-value">${telemetry.information.uptime}</span></div>`;
-                }
+                
+                // CPU
                 if (telemetry.information?.cpu) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">CPU</span><span class="telemetry-data-value">${telemetry.information.cpu}</span></div>`;
+                    html += `<div class="sensor-item">`;
+                    html += `<span class="sensor-icon">⚙️</span>`;
+                    html += `<span class="sensor-label">CPU</span>`;
+                    html += `<span class="sensor-value">${telemetry.information.cpu}</span>`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
+                
+                // RAM
                 if (telemetry.information?.ram) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">RAM</span><span class="telemetry-data-value">${telemetry.information.ram}</span></div>`;
+                    html += `<div class="sensor-item">`;
+                    html += `<span class="sensor-icon">📊</span>`;
+                    html += `<span class="sensor-label">RAM</span>`;
+                    html += `<span class="sensor-value">${telemetry.information.ram}</span>`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
+                
+                html += `</div>`;
+                
+                // SECONDA RIGA SENSORI (DISK, UPTIME, ecc)
+                html += `<div class="sensor-row">`;
+                
+                // Disk
                 if (telemetry.information?.disk) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Disk</span><span class="telemetry-data-value">${telemetry.information.disk}</span></div>`;
+                    html += `<div class="sensor-item">`;
+                    html += `<span class="sensor-icon">💾</span>`;
+                    html += `<span class="sensor-label">DISK</span>`;
+                    html += `<span class="sensor-value">${telemetry.information.disk}</span>`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
                 
-                html += `</div></div>`;
+                // Uptime
+                if (telemetry.information?.uptime) {
+                    html += `<div class="sensor-item" style="grid-column: span 4;">`;
+                    html += `<span class="sensor-icon">⏱️</span>`;
+                    html += `<span class="sensor-label">UPTIME</span>`;
+                    html += `<span class="sensor-value">${telemetry.information.uptime}</span>`;
+                    html += `</div>`;
+                } else {
+                    html += `<div class="sensor-item" style="grid-column: span 4;"><span class="sensor-label">-</span></div>`;
+                }
+                
+                html += `</div>`;
             }
             
-            // Aspetto/Icona
-            if (telemetry.appearance) {
-                html += `<div class="telemetry-card">`;
-                html += `<div class="telemetry-card-title"><span class="mdi mdi-palette"></span> ASPETTO</div>`;
-                html += `<div class="telemetry-card-content">`;
-                
-                if (telemetry.appearance.icon) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Icona</span><span class="telemetry-data-value"><span class="mdi mdi-${telemetry.appearance.icon}"></span> ${telemetry.appearance.icon}</span></div>`;
-                }
-                if (telemetry.appearance.color) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Colore</span><span class="telemetry-data-value" style="color:${telemetry.appearance.color};">${telemetry.appearance.color}</span></div>`;
-                }
-                if (telemetry.appearance.name) {
-                    html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Nome</span><span class="telemetry-data-value">${escapeHtml(telemetry.appearance.name)}</span></div>`;
-                }
-                
-                html += `</div></div>`;
-            }
-            
-            // Ultimo aggiornamento
+            // TIMESTAMP
             if (telemetry.lastUpdate) {
                 const date = new Date(telemetry.lastUpdate * 1000);
-                html += `<div class="telemetry-card">`;
-                html += `<div class="telemetry-card-title"><span class="mdi mdi-clock-outline"></span> ULTIMO AGGIORNAMENTO</div>`;
-                html += `<div class="telemetry-card-content">`;
-                html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Data</span><span class="telemetry-data-value">${date.toLocaleDateString()}</span></div>`;
-                html += `<div class="telemetry-data-row"><span class="telemetry-data-label">Ora</span><span class="telemetry-data-value">${date.toLocaleTimeString()}</span></div>`;
-                html += `</div></div>`;
-            }
-            
-            html += `</div>`; // Chiudi griglia
-            
-            // Storico batteria (se disponibile)
-            if (telemetry.history && telemetry.history.length > 1) {
-                html += `<div class="telemetry-divider"></div>`;
-                html += `<div class="telemetry-card-title"><span class="mdi mdi-chart-line"></span> STORICO BATTERIA</div>`;
-                html += `<div class="info-grid">`;
-                
-                // Mostra ultimi 4 valori
-                telemetry.history.slice(0, 4).forEach((entry, index) => {
-                    if (entry.battery) {
-                        const entryDate = new Date(entry.timestamp * 1000);
-                        html += `<div class="info-item">`;
-                        html += `<div class="info-label">${entryDate.toLocaleTimeString()}</div>`;
-                        html += `<div class="info-value">${entry.battery}%</div>`;
-                        html += `</div>`;
-                    }
-                });
-                
+                html += `<div class="timestamp-row">`;
+                html += `<div class="timestamp-cell">`;
+                html += `<span>🕒</span>`;
+                html += `<span>${date.toLocaleDateString()} ${date.toLocaleTimeString()}</span>`;
+                html += `</div>`;
                 html += `</div>`;
             }
             
@@ -1062,24 +1098,48 @@
                 const time = new Date(pkt.timestamp * 1000).toLocaleTimeString();
                 const date = new Date(pkt.timestamp * 1000).toLocaleDateString();
                 
-                html += `<div style="border-bottom:1px solid #333; padding:6px; font-size:10px;">`;
-                html += `<div style="color:#888;">${date} ${time} 📥</div>`;
+                html += `<div style="border-bottom:1px solid #333; padding:8px; font-size:10px;">`;
+                html += `<div style="color:#888; margin-bottom:4px;">${date} ${time} 📥</div>`;
                 
                 if (pkt.content) {
                     const short = pkt.content.length > 50 ? pkt.content.substring(0,50) + '...' : pkt.content;
-                    html += `<div style="color:#88ff88;">${escapeHtml(short)}</div>`;
+                    html += `<div style="color:#88ff88; margin-bottom:4px;">${escapeHtml(short)}</div>`;
                 }
                 
-                // Mostra RAW HEX e ASCII se disponibili (questa parte era stata tagliata!)
+                // 🔥 HEX SEMPRE VISIBILE (con toggle per espandere)
                 if (pkt.raw_hex) {
-                    html += `<div style="color:#88f; font-size:8px; margin-top:2px;">HEX: ${pkt.raw_hex.substring(0, 100)}${pkt.raw_hex.length > 100 ? '...' : ''}</div>`;
+                    const hexId = `hex-${pkt.timestamp}-${Math.random()}`;
+                    const hexPreview = pkt.raw_hex.substring(0, 128);
+                    const hexFull = pkt.raw_hex;
+                    
+                    html += `<div style="margin:4px 0;">`;
+                    html += `<div style="display:flex; align-items:center; gap:4px;">`;
+                    html += `<span style="color:#88f; font-size:9px;">🔹 HEX (${pkt.raw_size || '?'} bytes):</span>`;
+                    html += `<button onclick="toggleHex('${hexId}')" style="background:#1a1a1a; color:#88f; border:1px solid #88f; font-size:8px; padding:2px 5px; cursor:pointer;">mostra/nascondi</button>`;
+                    html += `</div>`;
+                    html += `<div id="${hexId}" style="display:none; color:#88f; font-size:8px; word-break:break-all; background:#1a1a1a; padding:4px; margin-top:2px; max-height:200px; overflow-y:auto;">${escapeHtml(hexFull)}</div>`;
+                    html += `<div style="color:#88f; font-size:8px; word-break:break-all;">${escapeHtml(hexPreview)}${pkt.raw_hex.length > 128 ? '...' : ''}</div>`;
+                    html += `</div>`;
                 }
+                
+                // 🔥 ASCII SEMPRE VISIBILE
                 if (pkt.raw_ascii) {
-                    html += `<div style="color:#ff8; font-size:8px;">ASCII: ${escapeHtml(pkt.raw_ascii.substring(0, 100))}${pkt.raw_ascii.length > 100 ? '...' : ''}</div>`;
+                    const asciiId = `ascii-${pkt.timestamp}-${Math.random()}`;
+                    const asciiPreview = pkt.raw_ascii.substring(0, 128);
+                    const asciiFull = pkt.raw_ascii;
+                    
+                    html += `<div style="margin:4px 0;">`;
+                    html += `<div style="display:flex; align-items:center; gap:4px;">`;
+                    html += `<span style="color:#ff8; font-size:9px;">🔸 ASCII:</span>`;
+                    html += `<button onclick="toggleAscii('${asciiId}')" style="background:#1a1a1a; color:#ff8; border:1px solid #ff8; font-size:8px; padding:2px 5px; cursor:pointer;">mostra/nascondi</button>`;
+                    html += `</div>`;
+                    html += `<div id="${asciiId}" style="display:none; color:#ff8; font-size:8px; word-break:break-all; background:#1a1a1a; padding:4px; margin-top:2px; max-height:200px; overflow-y:auto;">${escapeHtml(asciiFull)}</div>`;
+                    html += `<div style="color:#ff8; font-size:8px; word-break:break-all;">${escapeHtml(asciiPreview)}${pkt.raw_ascii.length > 128 ? '...' : ''}</div>`;
+                    html += `</div>`;
                 }
                 
                 if (pkt.rssi || pkt.snr) {
-                    html += `<div style="display:flex; gap:8px; margin-top:2px;">`;
+                    html += `<div style="display:flex; gap:8px; margin-top:4px;">`;
                     if (pkt.rssi) html += `<span>📶 ${pkt.rssi.toFixed(1)}</span>`;
                     if (pkt.snr) html += `<span>📊 ${pkt.snr.toFixed(1)}</span>`;
                     html += `</div>`;
@@ -1097,6 +1157,315 @@
             });
             
             list.innerHTML = html;
+        }
+
+        // 🔥 FUNZIONI PER TOGGLE HEX/ASCII
+        function toggleHex(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = el.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        function toggleAscii(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = el.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        // ============================================
+        // REGISTRAZIONE VOCALE (OGG OPUS PER SIDEBAND ANDROID)
+        // ============================================
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let recordingStartTime = null;
+        let recordingTimer = null;
+        let audioStream = null;
+
+        async function toggleVoiceRecording() {
+            if (!currentPeer) {
+                alert("Seleziona un peer prima");
+                return;
+            }
+            
+            const voiceBtn = document.getElementById('voiceBtn');
+            
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                stopVoiceRecording();
+                return;
+            }
+            
+            // 🔥 CHIEDI ALL'UTENTE CHE CODEC USARE
+            const codecChoice = prompt(
+                "Scegli il codec audio:\n" +
+                "1 = Opus (qualità alta, ~24kbps)\n" +
+                "2 = Codec2 1200bps (voce, 1.2kbps)\n" +
+                "3 = Codec2 2400bps (voce migliore, 2.4kbps)\n" +
+                "4 = Codec2 3200bps (voce ottima, 3.2kbps)\n" +
+                "5 = Codec2 700bps (massima compressione)",
+                "1"
+            );
+            
+            // Se l'utente cancella o non sceglie, esci
+            if (codecChoice === null) return;
+            
+            let audioCodec = 'opus';
+            let audioMode = 16;
+            let bitrate = 24000;
+            let mimeType = 'audio/ogg;codecs=opus';
+            
+            switch(codecChoice) {
+                case '2': 
+                    audioCodec = 'c2_1200';
+                    audioMode = 4;      // mode 4 per 1200bps
+                    bitrate = 1200;
+                    break;
+                case '3': 
+                    audioCodec = 'c2_2400';
+                    audioMode = 8;      // mode 8 per 2400bps
+                    bitrate = 2400;
+                    break;
+                case '4': 
+                    audioCodec = 'c2_3200';
+                    audioMode = 9;      // mode 9 per 3200bps
+                    bitrate = 3200;
+                    break;
+                case '5': 
+                    audioCodec = 'c2_700';
+                    audioMode = 3;      // mode 3 per 700bps
+                    bitrate = 700;
+                    break;
+                default: 
+                    audioCodec = 'opus';
+                    audioMode = 16;     // mode 16 per Opus
+                    bitrate = 24000;
+            }
+            
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                // Configura OpusMediaRecorder
+                window.MediaRecorder = window.OpusMediaRecorder;
+                
+                const workerOptions = {
+                    encoderWorkerFactory: function () {
+                        return new Worker('/static/opus-media-recorder/encoderWorker.umd.js');
+                    },
+                    OggOpusEncoderWasmPath: '/static/opus-media-recorder/OggOpusEncoder.wasm',
+                    WebMOpusEncoderWasmPath: '/static/opus-media-recorder/WebMOpusEncoder.wasm'
+                };
+                
+                const options = { 
+                    mimeType: mimeType,
+                    audioBitsPerSecond: bitrate
+                };
+                
+                mediaRecorder = new MediaRecorder(audioStream, options, workerOptions);
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    if (audioStream) {
+                        audioStream.getTracks().forEach(track => track.stop());
+                    }
+                    
+                    if (audioChunks.length === 0) {
+                        console.error("Nessun dato audio");
+                        resetVoiceUI(voiceBtn);
+                        return;
+                    }
+                    
+                    // Crea blob
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/ogg' });
+                    
+                    console.log(`🎵 Audio registrato: ${formatBytes(audioBlob.size)}`);
+                    
+                    document.getElementById('voiceRecordingIndicator').style.display = 'block';
+                    document.getElementById('voiceRecordingIndicator').innerHTML = '<span>🔄 PREPARAZIONE...</span>';
+                    
+                    // 🔥 🔥 🔥 CORREZIONE: ESTENSIONE BASATA SUL MODE, NON SUL NOME!
+                    let ext;
+                    if (audioMode >= 16) {
+                        ext = 'opus';           // Opus modes (16+)
+                    } else {
+                        ext = `c2_${audioMode}`; // Codec2 modes: .c2_4, .c2_8, .c2_9, .c2_3
+                    }
+                    
+                    const fileName = `voice_${Date.now()}.${ext}`;
+                    const file = new File([audioBlob], fileName, { type: 'audio/ogg' });
+                    
+                    // 🔥 SALVA I METADATI NEL FILE
+                    file.audioCodec = audioCodec;
+                    file.audioMode = audioMode;
+                    
+                    selectedFiles = [file];
+                    
+                    document.getElementById('filePreview').innerHTML = `
+                        <div class="lxmf-file-tag">
+                            <span>${audioCodec.includes('opus') ? '🎵' : '🎤'} ${fileName} (${formatBytes(audioBlob.size)})</span>
+                            <span class="remove" onclick="removeFile(0)">✕</span>
+                        </div>
+                    `;
+                    
+                    // 🔥 INVIA AUTOMATICAMENTE
+                    if (confirm("Inviare messaggio vocale ora?")) {
+                        await sendVoiceMessage(file, audioCodec);
+                    }
+                    
+                    resetVoiceUI(voiceBtn);
+                };
+                
+                mediaRecorder.onerror = (event) => {
+                    console.error("Errore MediaRecorder:", event.error);
+                    alert("Errore registrazione: " + event.error);
+                    stopVoiceRecording();
+                };
+                
+                mediaRecorder.start(1000);
+                recordingStartTime = Date.now();
+                voiceBtn.classList.add('recording');
+                voiceBtn.innerHTML = '⏹️';
+                
+                document.getElementById('voiceRecordingIndicator').style.display = 'block';
+                document.getElementById('voiceRecordingIndicator').innerHTML = '<span>🔴 REGISTRAZIONE... <span id="voiceTimer">0s</span></span>';
+                
+                if (recordingTimer) clearInterval(recordingTimer);
+                recordingTimer = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+                    document.getElementById('voiceTimer').textContent = `${elapsed}s`;
+                }, 100);
+                
+            } catch (e) {
+                console.error("Errore:", e);
+                alert("Errore microfono: " + e.message);
+                resetVoiceUI(voiceBtn);
+            }
+        }
+
+        // Utility per leggere header
+        function readBlobHeader(blob) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = function(e) {
+                    const arr = new Uint8Array(e.target.result);
+                    const header = Array.from(arr.slice(0, 4))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
+                    resolve(header);
+                };
+                reader.readAsArrayBuffer(blob.slice(0, 4));
+            });
+        }
+
+        function resetVoiceUI(voiceBtn) {
+            document.getElementById('voiceRecordingIndicator').style.display = 'none';
+            if (voiceBtn) {
+                voiceBtn.classList.remove('recording');
+                voiceBtn.innerHTML = '🎤';
+            }
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+            }
+        }
+
+        function stopVoiceRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+        }
+
+        async function sendVoiceMessage(file, codec) {
+            if (!currentPeer) return;
+            
+            const formData = new FormData();
+            formData.append('destination', currentPeer.hash);
+            formData.append('file', file);
+            formData.append('audio_codec', codec);
+            formData.append('audio_mode', file.audioMode || 16);
+            formData.append('description', `🎤 Messaggio vocale`);
+            
+            document.getElementById('sendButton').disabled = true;
+            document.getElementById('voiceBtn').disabled = true;
+            
+            try {
+                const response = await fetch('/api/chat/send-file', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert(`❌ Errore: ${data.error}`);
+                } else if (data.success) {
+                    selectedFiles = [];
+                    document.getElementById('filePreview').innerHTML = '';
+                    document.getElementById('fileInput').value = '';
+                    lastMessagesJson = '';
+                    setTimeout(() => pollMessages(), 500);
+                    debugLog('Messaggio vocale inviato', { codec: codec, mode: file.audioMode });
+                }
+            } catch (e) {
+                alert(`❌ Errore: ${e.message}`);
+            } finally {
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('voiceBtn').disabled = false;
+            }
+        }
+
+
+        // Modifica la funzione handleFileSelect per supportare audio
+        function handleFileSelect() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files) return;
+            
+            selectedFiles = Array.from(fileInput.files);
+            
+            let previewHtml = '';
+            selectedFiles.forEach((file, index) => {
+                let icon = '📎';
+                if (file.type.startsWith('image/')) icon = '🖼️';
+                else if (file.type.startsWith('audio/')) icon = '🎵';
+                else if (file.type.startsWith('video/')) icon = '🎬';
+                
+                // Se è WAV, offri scelta codec
+                let codecSelector = '';
+                if (file.name.endsWith('.wav')) {
+                    codecSelector = `
+                        <select onchange="setAudioCodec(${index}, this.value)" style="background: #1a1a1a; color: #ffaa00; border: 1px solid #ffaa00; margin-left: 5px; font-size: 9px;">
+                            <option value="opus">Opus</option>
+                            <option value="c2_1200">Codec2 1200</option>
+                            <option value="c2_2400">Codec2 2400</option>
+                        </select>
+                    `;
+                }
+                
+                previewHtml += `
+                    <div class="lxmf-file-tag">
+                        <span>${icon} ${escapeHtml(file.name)} (${formatBytes(file.size)})</span>
+                        ${codecSelector}
+                        <span class="remove" onclick="removeFile(${index})">✕</span>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('filePreview').innerHTML = previewHtml;
+            debugLog('File selezionati', selectedFiles.length);
+        }
+
+        function setAudioCodec(index, codec) {
+            if (selectedFiles[index]) {
+                selectedFiles[index].audioCodec = codec;
+                debugLog(`Audio codec set for file ${index}: ${codec}`);
+            }
         }
 
         // ============================================
@@ -1497,6 +1866,9 @@
             }
         }
 
+        // ============================================
+        // FUNZIONE SELEZIONE PEER (UNA SOLA VERSIONE)
+        // ============================================
         async function selectPeer(hash) {
             if (!hash) return;
             
@@ -1533,9 +1905,12 @@
                 }
                 document.getElementById('selectedPeerSignal').innerHTML = signalHtml;
                 
+                // 🔥 ABILITA TUTTI I PULSANTI
                 document.getElementById('messageInput').disabled = false;
                 document.getElementById('sendButton').disabled = false;
                 document.getElementById('fileBtn').disabled = false;
+                document.getElementById('voiceBtn').disabled = false;
+                
                 document.getElementById('messageInput').focus();
                 
                 // Resetta lastMessagesJson per forzare il refresh
@@ -1566,6 +1941,7 @@
             
             input.disabled = true;
             document.getElementById('sendButton').disabled = true;
+            document.getElementById('voiceBtn').disabled = true;
             
             try {
                 debugLog('Invio messaggio', { content: content.substring(0,30), files: selectedFiles.length });
@@ -1578,6 +1954,11 @@
                     formData.append('destination', currentPeer.hash);
                     formData.append('file', file);
                     if (content) formData.append('description', content);
+                    
+                    // Aggiungi audio_codec se presente
+                    if (file.audioCodec) {
+                        formData.append('audio_codec', file.audioCodec);
+                    }
                     
                     response = await fetch('/api/chat/send-file', {
                         method: 'POST',
@@ -1615,39 +1996,46 @@
             } finally {
                 input.disabled = false;
                 document.getElementById('sendButton').disabled = false;
+                document.getElementById('voiceBtn').disabled = false;
                 input.focus();
             }
         }
 
         // ============================================
-        // FUNZIONE RIPROVA MESSAGGIO FALLITO
+        // FUNZIONE RIPROVA MESSAGGIO FALLITO (USANDO TIMESTAMP)
         // ============================================
-        async function retryMessage(msg) {
-            if (!currentPeer || !msg) return;
+        async function retryMessage(timestamp) {
+            if (!currentPeer) return;
             
-            debugLog('Riprova messaggio', msg);
+            // Trova il messaggio fallito per timestamp
+            const failedMsg = messages.find(m => 
+                m.timestamp === timestamp && 
+                m.direction === 'outgoing' && 
+                m.status === 'failed'
+            );
+            
+            if (!failedMsg || !failedMsg.content) {
+                debugLog('Messaggio fallito non trovato per timestamp', timestamp);
+                return;
+            }
+            
+            debugLog('Riprova messaggio', { timestamp, content: failedMsg.content.substring(0,30) });
             
             const input = document.getElementById('messageInput');
             const sendBtn = document.getElementById('sendButton');
+            
             input.disabled = true;
             sendBtn.disabled = true;
             
             try {
-                let response;
-                
-                if (msg.has_attachments) {
-                    alert("Riprova per allegati non supportato. Invia nuovo messaggio.");
-                    return;
-                } else {
-                    response = await fetch('/api/chat/send', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            destination: currentPeer.hash,
-                            content: msg.content || ''
-                        })
-                    });
-                }
+                const response = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        destination: currentPeer.hash,
+                        content: failedMsg.content
+                    })
+                });
                 
                 const data = await response.json();
                 
@@ -1706,6 +2094,9 @@
             }, 3000);
         }
 
+        // ============================================
+        // FUNZIONI PER FILE
+        // ============================================
         function handleFileSelect() {
             const fileInput = document.getElementById('fileInput');
             if (!fileInput.files) return;
@@ -1759,7 +2150,74 @@
         }
 
         // ============================================
-        // RENDERING MESSAGGI - CON SUPPORTO RAW ON-DEMAND
+        // FUNZIONI RAW INDIVIDUALI
+        // ============================================
+        async function showMessageRaw(peerHash, filename, timestamp) {
+            try {
+                debugLog('Caricamento raw per', { peer: peerHash.substring(0,8), file: filename });
+                
+                const response = await fetch(`/api/chat/raw/${peerHash}/${filename}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert(`❌ Errore: ${data.error}`);
+                    return;
+                }
+                
+                // Crea modal per visualizzare RAW
+                const modalHtml = `
+                    <div id="rawModal-${timestamp}" class="raw-modal" onclick="closeRawModal(${timestamp})">
+                        <div class="raw-modal-content" onclick="event.stopPropagation()">
+                            <div class="raw-modal-header">
+                                <span>📦 RAW COMPLETO - ${new Date(timestamp*1000).toLocaleString()}</span>
+                                <button onclick="closeRawModal(${timestamp})">✕</button>
+                            </div>
+                            <div class="raw-modal-body">
+                                <div class="raw-section">
+                                    <div class="raw-label">📏 SIZE: ${data.raw_size} bytes</div>
+                                </div>
+                                <div class="raw-section">
+                                    <div class="raw-label">🔹 HEX (primi 2048 bytes):</div>
+                                    <div class="raw-hex">${escapeHtml(data.raw_hex.substring(0, 2048))}${data.raw_hex.length > 2048 ? '...' : ''}</div>
+                                    <button class="raw-copy-btn" onclick="copyToClipboard('${data.raw_hex}')">📋 COPIA TUTTO HEX</button>
+                                </div>
+                                <div class="raw-section">
+                                    <div class="raw-label">🔸 ASCII:</div>
+                                    <div class="raw-ascii">${escapeHtml(data.raw_ascii.substring(0, 2048))}${data.raw_ascii.length > 2048 ? '...' : ''}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Rimuovi modal precedente se esiste
+                const oldModal = document.getElementById(`rawModal-${timestamp}`);
+                if (oldModal) oldModal.remove();
+                
+                // Aggiungi al DOM
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                
+            } catch (e) {
+                console.error('Errore caricamento raw:', e);
+                alert(`❌ Errore: ${e.message}`);
+            }
+        }
+
+        function closeRawModal(timestamp) {
+            const modal = document.getElementById(`rawModal-${timestamp}`);
+            if (modal) modal.remove();
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ Copiato!');
+            }).catch(() => {
+                alert('❌ Errore copia');
+            });
+        }
+
+        // ============================================
+        // RENDERING MESSAGGI - CON PULSANTI RAW INDIVIDUALI
         // ============================================
         function renderMessages() {
             if (!currentPeer) {
@@ -1798,23 +2256,23 @@
                 
                 let statusIcon = '';
                 let retryButton = '';
+                let rawButton = '';
                 
                 if (msg.direction === 'outgoing') {
                     if (msg.status === 'delivered') {
                         statusIcon = '<span class="lxmf-message-status delivered" title="Consegnato">✓✓</span>';
                     } else if (msg.status === 'failed') {
                         statusIcon = '<span class="lxmf-message-status failed" title="Fallito">✗</span>';
-                        const safeMsg = {
-                            content: msg.content || '',
-                            timestamp: msg.timestamp,
-                            has_attachments: !!(msg.attachments && msg.attachments.length > 0)
-                        };
-                        retryButton = `<button class="retry-button" onclick="retryMessage(${JSON.stringify(safeMsg).replace(/"/g, '&quot;')})" title="Riprova invio">
-                            <span style="font-size: 14px;">↻</span> RIPROVA
-                        </button>`;
+                        // 🔥 PULSANTE RIPROVA CON TIMESTAMP
+                        retryButton = `<button class="retry-button" onclick="retryMessage(${msg.timestamp})" title="Riprova invio">↻</button>`;
                     } else if (msg.status === 'sending') {
                         statusIcon = '<span class="lxmf-message-status sending" title="Invio in corso">⋯</span>';
                     }
+                }
+                
+                // 🔥 PULSANTE RAW INDIVIDUALE PER OGNI MESSAGGIO CON LXMF_FILE
+                if (msg.lxmf_file) {
+                    rawButton = `<button class="msg-raw-btn" onclick="showMessageRaw('${peerHash}', '${msg.lxmf_file}', ${msg.timestamp})" title="Mostra RAW completo">🔬</button>`;
                 }
                 
                 let radioInfo = '';
@@ -1906,11 +2364,43 @@
                                          style="max-width: 200px; max-height: 200px; margin-top: 10px; border-radius: 4px; cursor: pointer;">
                                 </div>
                             `;
-                        } else if (att.type === 'audio' && fileUrl) {
+                        } else if (att.type && att.type.startsWith('audio') && fileUrl) {
+                            // 🔥 DETERMINA ICONA E INFO CODEC
+                            const audioMode = att.audio_mode || 0;
+                            const audioCodec = att.audio_codec || 'audio';
+                            
+                            let icon = "🎵";
+                            let codecLabel = "Opus";
+                            
+                            // Codec2 modes (1-9)
+                            if (audioMode >= 1 && audioMode <= 9) {
+                                icon = "🎤";
+                                const bitrate = {
+                                    1: "450PWB", 2: "450", 3: "700", 4: "1200",
+                                    5: "1300", 6: "1400", 7: "1600", 8: "2400", 9: "3200"
+                                }[audioMode] || audioMode;
+                                codecLabel = `Codec2 ${bitrate}bps`;
+                            }
+                            // Opus modes (16-25)
+                            else if (audioMode >= 16) {
+                                const opusQuality = {
+                                    16: "Ogg", 17: "LBW", 18: "MBW", 19: "PTT",
+                                    20: "RT HDX", 21: "RT FDX", 22: "Standard",
+                                    23: "HQ", 24: "Broadcast", 25: "Lossless"
+                                }[audioMode] || "Opus";
+                                codecLabel = `Opus ${opusQuality}`;
+                            }
+                            
                             mediaPreview += `
                                 <div class="lxmf-attachment">
-                                    <audio controls style="width: 100%; margin-top: 10px;">
-                                        <source src="${fileUrl}">
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                        <span style="font-size: 16px;">${icon}</span>
+                                        <span style="color: #888; font-size: 11px;">${codecLabel} (${formatBytes(att.size || 0)})</span>
+                                    </div>
+                                    <audio controls style="width: 100%; margin-top: 5px; margin-bottom: 10px;">
+                                        <source src="${fileUrl}" type="audio/ogg">
+                                        <source src="${fileUrl}" type="audio/webm">
+                                        Il tuo browser non supporta la riproduzione audio
                                     </audio>
                                 </div>
                             `;
@@ -1929,7 +2419,7 @@
                     });
                 }
                 
-                // RAW VIEW - Carica on-demand
+                // RAW VIEW - Carica on-demand (view generale)
                 let rawHtml = '';
                 if (rawViewActive && msg.lxmf_file) {
                     const rawId = `raw-${msg.timestamp}-${Date.now()}`;
@@ -1956,6 +2446,7 @@
                         <div class="lxmf-message-time">
                             ${time}
                             ${statusIcon}
+                            ${rawButton}
                             ${retryButton}
                         </div>
                     </div>
@@ -1966,7 +2457,7 @@
             document.getElementById('messageList').scrollTop = document.getElementById('messageList').scrollHeight;
         }
 
-        // Funzione per caricare i dati raw dal file .lxb
+        // Funzione per caricare i dati raw dal file .lxb (per view generale)
         async function loadRawData(msg, peerHash, rawId) {
             if (!msg.lxmf_file) return;
             
@@ -2166,6 +2657,9 @@
         window.closeModal = closeModal;
         window.retryMessage = retryMessage;
         window.setMapStyle = setMapStyle;
+        window.showMessageRaw = showMessageRaw;
+        window.closeRawModal = closeRawModal;
+        window.copyToClipboard = copyToClipboard;
         window.debugRaw = function() {
             debugLog('DEBUG RAW:', {
                 currentPeer: currentPeer?.hash?.substring(0,16),
