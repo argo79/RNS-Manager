@@ -4,6 +4,7 @@
     <title>RNS MeshChat - LXMF Client Completo</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="{{ url_for('static', filename='rns_lxmf.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -46,7 +47,7 @@
                 <div id="identityHash" class="identity-hash"></div>
                 <div id="connectionStatus" class="status offline"></div>
                 <div class="stats-badge" id="identityStats"></div>
-                <a href="/" class="back-button">← TORNA</a>
+                <a href="/" class="back-button">← ESCI</a>
             </div>
         </div>
 
@@ -1576,10 +1577,32 @@
                 debugLog('Peer caricati', peers.length);
                 
                 const online = peers.filter(p => p.online).length;
-                const avgHops = peers.reduce((acc, p) => acc + (p.hops || 0), 0) / (peers.length || 1);
+                
+                // 🔥 CALCOLO CON LIMITE MASSIMO
+                let totalHops = 0;
+                let validHopsCount = 0;
+                const MAX_HOPS = 32; // Massimo realistico per Reticulum
+                
+                peers.forEach(p => {
+                    if (p.hops !== undefined && p.hops !== null) {
+                        const hopsNum = Number(p.hops);
+                        // Verifica che sia un numero valido e nel range realistico
+                        if (!isNaN(hopsNum) && isFinite(hopsNum) && hopsNum >= 0 && hopsNum <= MAX_HOPS) {
+                            totalHops += hopsNum;
+                            validHopsCount++;
+                        } else {
+                            debugLog(`Hops non valido per peer ${p.display_name}:`, p.hops);
+                        }
+                    }
+                });
+                
+                const avgHops = validHopsCount > 0 ? totalHops / validHopsCount : 0;
                 
                 document.getElementById('onlineCount').textContent = online;
                 document.getElementById('avgHops').textContent = avgHops.toFixed(1);
+                
+                // 🔥 DEBUG: mostra conteggi
+                debugLog('Statistiche hops', { totalHops, validHopsCount, avgHops: avgHops.toFixed(1) });
                 
                 sortPeers();
                 renderPeerList();
@@ -1885,7 +1908,16 @@
                     displayName = displayName.substring(0, 17) + '...';
                 }
                 
-                document.getElementById('selectedPeerDisplay').innerHTML = `📨 ${escapeHtml(displayName)}`;
+                // 🔥 AGGIUNGI HOP DOPO IL NOME
+                let hopsDisplay = '';
+                if (currentPeer.hops !== undefined && currentPeer.hops !== null) {
+                    const hopsNum = Number(currentPeer.hops);
+                    if (!isNaN(hopsNum) && isFinite(hopsNum) && hopsNum >= 0 && hopsNum < 100) {
+                        hopsDisplay = ` <span style="color:#888; font-size:0.9em;">| 🏓 ${hopsNum} hop</span>`;
+                    }
+                }
+                
+                document.getElementById('selectedPeerDisplay').innerHTML = `📨 ${escapeHtml(displayName)}${hopsDisplay}`;
                 
                 let signalHtml = '';
                 if (currentPeer.rssi !== undefined || currentPeer.snr !== undefined || currentPeer.quality !== undefined) {
@@ -1905,7 +1937,7 @@
                 }
                 document.getElementById('selectedPeerSignal').innerHTML = signalHtml;
                 
-                // 🔥 ABILITA TUTTI I PULSANTI
+                // ABILITA TUTTI I PULSANTI
                 document.getElementById('messageInput').disabled = false;
                 document.getElementById('sendButton').disabled = false;
                 document.getElementById('fileBtn').disabled = false;

@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>RNS • monitor</title>
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/rns_monitor.css">
     <style>
         /* Stili aggiuntivi per i dati radio */
@@ -850,6 +850,7 @@
         function getAspectCounts() {
             const counts = new Map();
             
+            // Inizializza i contatori
             counts.set('all', 0);
             counts.set('known', 0);
             counts.set('unknown', 0);
@@ -858,32 +859,50 @@
             if (state.cacheSource === 'cache') {
                 console.log('📁 Calcolo conteggi dalla cache...');
                 
-                fetch('/api/monitor/cache/stats')
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success && data.stats && data.stats.aspects) {
-                            console.log('📊 Conteggi cache:', data.stats.aspects);
-                            
-                            Object.entries(data.stats.aspects).forEach(([asp, cnt]) => {
-                                if (ASPECTS.includes(asp)) {
-                                    counts.set(asp, cnt);
-                                    counts.set('known', (counts.get('known') || 0) + cnt);
-                                    counts.set('all', (counts.get('all') || 0) + cnt);
-                                } else {
-                                    counts.set('unknown', (counts.get('unknown') || 0) + cnt);
-                                    counts.set('all', (counts.get('all') || 0) + cnt);
-                                }
-                            });
-                            
-                            if (window.updateAspectTabs) {
-                                window.updateAspectTabs();
-                            }
-                        }
-                    })
-                    .catch(err => console.error('Errore caricamento stats cache:', err));
+                // MODALITÀ CACHE: USA I DATI GIÀ CARICATI in window._allAnnounces
+                // Invece di fare una fetch che causa discrepanze
+                if (window._allAnnounces && window._allAnnounces.length > 0) {
+                    console.log(`📊 Calcolo conteggi da ${window._allAnnounces.length} annunci caricati`);
                     
+                    // Resetta i contatori
+                    counts.set('all', 0);
+                    counts.set('known', 0);
+                    counts.set('unknown', 0);
+                    ASPECTS.forEach(a => counts.set(a, 0));
+                    
+                    // Conta gli annunci effettivamente caricati
+                    window._allAnnounces.forEach(ann => {
+                        const asp = ann.aspect || 'unknown';
+                        
+                        // Incrementa il contatore specifico dell'aspect
+                        if (ASPECTS.includes(asp)) {
+                            counts.set(asp, (counts.get(asp) || 0) + 1);
+                            counts.set('known', (counts.get('known') || 0) + 1);
+                        } else {
+                            counts.set('unknown', (counts.get('unknown') || 0) + 1);
+                        }
+                        
+                        // Incrementa il contatore totale
+                        counts.set('all', (counts.get('all') || 0) + 1);
+                    });
+                    
+                    console.log('📊 Conteggi calcolati:', Object.fromEntries(counts));
+                } else {
+                    console.log('⚠️ Nessun annuncio caricato in window._allAnnounces');
+                    
+                    // Se non ci sono annunci, prova a caricarli
+                    setTimeout(() => {
+                        if (window.updateAspectTabs) {
+                            window.updateAspectTabs();
+                        }
+                    }, 500);
+                }
+                
                 return counts;
             }
+            
+            // MODALITÀ MEMORY: usa state.identities
+            console.log('📊 Calcolo conteggi da state.identities...');
             
             state.identities.forEach(id => {
                 id.aspects.forEach((data, asp) => {
@@ -900,43 +919,13 @@
                 });
             });
             
+            console.log('📊 Conteggi memory:', Object.fromEntries(counts));
             return counts;
         }
 
         // ============================================
         // === UPDATE TABS FROM CACHE - CORRETTA ===
         // ============================================
-
-        function updateTabsFromCache() {
-            console.log('🔄 Aggiornamento dalla cache...');
-            
-            // Pulisci le identità
-            state.identities.clear();
-            
-            // Carica le stats della cache
-            fetch('/api/monitor/cache/stats')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success && data.stats) {
-                        window._cacheAspectCounts = data.stats.aspects || {};
-                        
-                        // Dopo aver caricato le stats, carica la history
-                        return loadHistory();
-                    }
-                })
-                .then(() => {
-                    // Ora che abbiamo la history, possiamo aggiornare i tab
-                    if (window.updateAspectTabs) {
-                        window.updateAspectTabs();
-                    }
-                    // Forza il refresh delle statistiche
-                    if (state.view === 'stats') renderStats();
-                })
-                .catch(err => {
-                    console.error('Errore stats cache:', err);
-                    loadHistory();
-                });
-        }
 
         function initAspectTabs() {
             const row1 = document.getElementById('aspect-row-1');
@@ -1674,11 +1663,13 @@
         // === LOAD HISTORY - CORRETTA ===
         // ============================================
 
+        // MODIFICARE loadHistory() per usare l'aspect corrente
         function loadHistory() {
             return new Promise((resolve, reject) => {
+                // Usa state.aspect invece di 'all' fisso
                 const params = new URLSearchParams({
-                    aspect: 'all',
-                    search: '',
+                    aspect: state.aspect,  // <-- MODIFICATO: usa aspect corrente
+                    search: state.search,
                     limit: 1000,
                     offset: 0,
                     sort: 'time_desc',
@@ -1695,7 +1686,7 @@
                             
                             window._allAnnounces = data.announces || [];
                             
-                            console.log(`📊 Caricati ${window._allAnnounces.length} annunci da ${state.cacheSource}`);
+                            console.log(`📊 Caricati ${window._allAnnounces.length} annunci da ${state.cacheSource} per aspect: ${state.aspect}`);
                             
                             rebuildIdentitiesFromAnnounces();
                             
@@ -1717,6 +1708,60 @@
             });
         }
 
+        // MODIFICARE updateTabsFromCache() per evitare doppie chiamate
+        function updateTabsFromCache() {
+            console.log('🔄 Aggiornamento dalla cache...');
+            
+            // Carica prima le stats per aggiornare i tab
+            fetch('/api/monitor/cache/stats')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.stats) {
+                        window._cacheAspectCounts = data.stats.aspects || {};
+                        
+                        // Aggiorna i tab SUBITO con le stats
+                        if (window.updateAspectTabs) {
+                            window.updateAspectTabs();
+                        }
+                        
+                        // POI carica la history per l'aspect corrente
+                        return loadHistory();
+                    }
+                })
+                .then(() => {
+                    if (state.view === 'stats') renderStats();
+                })
+                .catch(err => {
+                    console.error('Errore stats cache:', err);
+                    loadHistory();
+                });
+        }
+
+        // AGGIUNGERE una funzione per sincronizzare i conteggi
+        function syncAspectCounts() {
+            if (state.cacheSource === 'cache' && window._cacheAspectCounts && window._allAnnounces) {
+                // Verifica discrepanze
+                const actualCounts = {};
+                window._allAnnounces.forEach(ann => {
+                    const asp = ann.aspect || 'unknown';
+                    actualCounts[asp] = (actualCounts[asp] || 0) + 1;
+                });
+                
+                console.log('📊 Confronto conteggi:');
+                console.log('- Stats cache:', window._cacheAspectCounts);
+                console.log('- Annunci effettivi:', actualCounts);
+                
+                // Se c'è discrepanza, forse dobbiamo ricaricare
+                const totalFromCache = Object.values(window._cacheAspectCounts).reduce((a, b) => a + b, 0);
+                const totalFromActual = window._allAnnounces.length;
+                
+                if (totalFromCache !== totalFromActual) {
+                    console.log(`⚠️ Discrepanza: cache=${totalFromCache}, actual=${totalFromActual}`);
+                }
+            }
+        }
+
+        
         // ============================================
         // === CONNESSIONE SSE - CORRETTA ===
         // ============================================
@@ -2039,21 +2084,20 @@
                 renderIdentities();
             });
 
+            // MODIFICARE il change handler del select cache
             document.getElementById('cache-source-select').addEventListener('change', function() {
                 const newSource = this.value;
                 console.log(`🔄 Cambio sorgente: ${state.cacheSource} -> ${newSource}`);
                 
-                // Se è lo stesso, non fare nulla (evita doppie chiamate)
                 if (newSource === state.cacheSource) return;
                 
                 state.cacheSource = newSource;
                 state.page = 1;
                 
                 if (newSource === 'cache') {
-                    // Una sola chiamata per aggiornare tab E history
-                    updateTabsFromCache(); // Questa già chiama loadHistory() internamente
+                    // Una sola chiamata orchestrata
+                    updateTabsFromCache();
                 } else {
-                    // Una sola chiamata per memory
                     loadHistory();
                     if (window.updateAspectTabs) {
                         window.updateAspectTabs();

@@ -11,7 +11,7 @@
     --error: #ff6666;
     --warning: #ffff88;
     --identity: #8888ff;
-    --telemetry-blue: #7ec8e0;
+    --telemetry-blue: #7FFF00;
     --telemetry-label: #6b7f8f;
 }
 
@@ -1005,77 +1005,281 @@ body {
 /* ============================================
    TELEMETRIA DASHBOARD MIGLIORATA - STILE MINIMAL
    ============================================ */
+/* ============================================
+   TELEMETRIA DASHBOARD - MATRICE 5xN
+   ============================================ */
 .telemetry-fixed-area {
-    flex: 0 0 55%;
+    flex: 0 0 60%;
     overflow-y: auto;
     background: var(--bg);
     border-bottom: 1px solid var(--border);
-    padding: 5px 0;
+    padding: 4px;
 }
 
 .peer-telemetry {
-    padding: 12px;
-    background: #1a1a1a;
-    border: 1px solid var(--border);
-    margin: 10px;
-    border-radius: 4px;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    margin: 0;
 }
 
-/* TELEMETRIA DASHBOARD - STILE MINIMAL */
+/* DASHBOARD A CASELLE */
 .telemetry-dashboard {
-    background: #0f0f0f;
-    border: 1px solid #2a2a2a;
-    border-radius: 4px;
-    padding: 12px;
-    margin-bottom: 12px;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-.telemetry-row {
+    background: #0a0a0a;
+    padding: 4px;
     display: flex;
-    flex-wrap: wrap;
-    gap: 16px 24px;
-    margin-bottom: 8px;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.telemetry-item {
+/* PEER HEADER MINI */
+.telemetry-peer-mini {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
-    font-size: 12px;
+    align-items: center;
+    gap: 4px;
+    background: #0a0a0a;
+    border: 1px solid #1a2a3a;
+    padding: 3px;
+    margin-bottom: 2px;
 }
 
-.telemetry-label {
-    color: var(--telemetry-label);
-    font-weight: 400;
-    letter-spacing: 0.3px;
+.peer-mini-icon {
+    font-size: 16px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a2a3a;
+    border: 1px solid #7ec8e0;
+    border-radius: 2px;
+}
+
+.peer-mini-name {
+    font-size: 11px;
+    font-weight: bold;
+    color: #7ec8e0;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.peer-mini-hash {
+    font-size: 11px;
+    color: #5f7f8f;
+    font-family: monospace;
+}
+
+/* GRIGLIA 5xN - PER TUTTI I DATI */
+.telemetry-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    margin-bottom: 2px;
+}
+
+/* CASELLA BASE */
+.telemetry-cell {
+    background: #0a0a0a;
+    border: 1px solid #1a2a3a;
+    padding: 3px;
+    font-size: 8px;
+    line-height: 1.2;
+}
+
+.telemetry-cell-title {
+    color: #5f7f8f;
+    font-size: 6px;
     text-transform: uppercase;
-    font-size: 10px;
+    letter-spacing: 0.3px;
+    margin-bottom: 1px;
 }
 
-.telemetry-value {
-    color: var(--telemetry-blue);
-    font-weight: 500;
+.telemetry-cell-value {
+    color: #7ec8e0;
+    font-weight: bold;
+    font-size: 11px;
+    font-family: monospace;
+}
+
+/* BATTERIA - OCCUPA 5 COLONNE SE DA SOLA, O MENO SE CI SONO ALTRI DATI */
+.telemetry-cell.battery-cell {
+    grid-column: span 5;
+}
+
+.battery-compact {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.battery-icon {
+    font-size: 12px;
+    line-height: 1;
+    color: #7ec8e0;
+}
+
+.battery-level-compact {
+    flex: 1;
+    height: 6px;
+    background: #1a2a3a;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.battery-fill-compact {
+    height: 100%;
+    background: linear-gradient(90deg, #7ec8e0, #a0e0ff);
+    width: 0%;
+    transition: width 0.3s;
+}
+
+.battery-percent {
+    font-size: 13px;
+    font-weight: bold;
+    color: #7ec8e0;
+    min-width: 28px;
+    text-align: right;
+}
+
+/* DATI POSIZIONE E MOVIMENTO - STESSA RIGA 5 COLONNE */
+.position-movement-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    margin: 2px 0;
+}
+
+.position-movement-box {
+    background: #0a0a0a;
+    border: 1px solid #1a2a3a;
+    padding: 2px;
+    text-align: center;
+}
+
+.position-movement-label {
+    color: #5f7f8f;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.position-movement-value {
+    color: #a0e0ff;
+    font-size: 15px;
+    font-family: monospace;
+    font-weight: bold;
+}
+
+/* VELOCITÀ E DIREZIONE CON COLORI ARANCIONE */
+.position-movement-box.velocity,
+.position-movement-box.direction {
+    background: #0a0a0a;
+}
+
+.position-movement-box.velocity .position-movement-value,
+.position-movement-box.direction .position-movement-value {
+    color: #ffaa00;
+}
+
+/* SENSORI (temp, umidità, pressione) IN 5 COLONNE */
+.sensor-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    margin: 2px 0;
+}
+
+.sensor-item {
+    background: #0a0a0a;
+    border: 1px solid #1a2a3a;
+    padding: 2px;
+    text-align: center;
+}
+
+.sensor-icon {
+    font-size: 8px;
+    color: #ffaa00;
+    margin-right: 2px;
+}
+
+.sensor-label {
+    color: #5f7f8f;
+    font-size: 9px;
+    text-transform: uppercase;
+    display: block;
+}
+
+.sensor-value {
+    color: #ffaa00;
+    font-size: 13px;
+    font-weight: bold;
+    font-family: monospace;
+}
+
+/* SISTEMA (CPU/RAM/DISK/UPTIME) IN 5 COLONNE */
+.system-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    margin: 2px 0;
+}
+
+.system-item {
+    background: #0a0a0a;
+    border: 1px solid #1a2a3a;
+    padding: 2px;
+    text-align: center;
+}
+
+.system-label {
+    color: #5f7f8f;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.system-value {
+    color: #7ec8e0;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+/* TIMESTAMP - OCCUPA TUTTE LE 5 COLONNE */
+.timestamp-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    margin-top: 2px;
+}
+
+.timestamp-cell {
+    grid-column: span 5;
+    background: #0a0a0a;
+    border: 1px solid #1a2a3a;
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #5f7f8f;
     font-size: 13px;
 }
 
-.telemetry-value.highlight {
-    color: #a0e0ff;
-    text-shadow: 0 0 5px rgba(126, 200, 224, 0.3);
+/* TELEMETRY EMPTY STATE */
+.telemetry-empty {
+    color: #888;
+    text-align: center;
+    padding: 15px;
+    font-style: italic;
+    background: #0a0a0a;
+    border: 1px solid #333;
+    font-size: 11px;
+    margin: 5px;
+    border-radius: 2px;
 }
 
-.telemetry-unit {
-    color: #4a5a68;
-    font-size: 9px;
-    margin-left: 2px;
-}
 
-/* Separatore sottile */
-.telemetry-divider {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, #2a3a44, #4a6a7a, #2a3a44, transparent);
-    margin: 12px 0;
-}
+/* MAPPA */
+
 
 /* Griglia posizione */
 .position-grid {
@@ -1266,7 +1470,7 @@ body {
 }
 
 .leaflet-popup-content-wrapper {
-    background: #1a1a1a !important;
+    background: #9ACD32 !important;
     color: var(--telemetry-blue) !important;
     border: 2px solid var(--telemetry-blue) !important;
     border-radius: 6px !important;
@@ -1333,7 +1537,7 @@ body {
    LISTA PACCHETTI RAW - 45% RESTO
    ============================================ */
 .lxmf-raw-list {
-    flex: 1 1 45%;
+    flex: 1 1 40%;
     overflow-y: auto;
     padding: 8px;
     display: flex;
@@ -1574,4 +1778,153 @@ body {
         align-items: flex-start;
         gap: 8px;
     }
+}
+
+/* AGGIUNGI DOPO .lxmf-file-btn */
+.lxmf-voice-btn {
+    background: #5a2e00;
+    color: #ffaa00;
+    border: 1px solid #ffaa00;
+    padding: 8px 12px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lxmf-voice-btn:hover:not(:disabled) {
+    background: #7a3e00;
+    border-color: #ffcc00;
+    color: #ffcc00;
+}
+
+.lxmf-voice-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.lxmf-voice-btn.recording {
+    background: #ff0000;
+    color: white;
+    border-color: #ff0000;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Stili per pulsanti RAW individuali e modale */
+.msg-raw-btn {
+    background: transparent;
+    border: 1px solid #444;
+    color: #8888ff;
+    padding: 2px 5px;
+    margin-left: 5px;
+    cursor: pointer;
+    font-size: 10px;
+    border-radius: 3px;
+}
+.msg-raw-btn:hover {
+    background: #8888ff;
+    color: #000;
+}
+.raw-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.95);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+.raw-modal-content {
+    background: #111;
+    border: 2px solid #88ff88;
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    color: #88ff88;
+    font-family: monospace;
+}
+.raw-modal-header {
+    background: #1a1a1a;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #88ff88;
+}
+.raw-modal-header button {
+    background: #330000;
+    color: #ff8888;
+    border: 1px solid #ff8888;
+    padding: 2px 10px;
+    cursor: pointer;
+}
+.raw-modal-body {
+    padding: 15px;
+    overflow-y: auto;
+    max-height: calc(90vh - 60px);
+}
+.raw-section {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 15px;
+}
+.raw-label {
+    color: #8888ff;
+    margin-bottom: 8px;
+    font-weight: bold;
+    font-size: 12px;
+}
+.raw-hex {
+    color: #88ff88;
+    word-break: break-all;
+    font-size: 11px;
+    background: #1a1a1a;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.raw-ascii {
+    color: #ffff88;
+    word-break: break-all;
+    font-size: 11px;
+    background: #1a1a1a;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.raw-copy-btn {
+    background: #1a3a1a;
+    color: #88ff88;
+    border: 1px solid #88ff88;
+    padding: 5px 10px;
+    margin-top: 8px;
+    cursor: pointer;
+    font-size: 10px;
+}
+.raw-copy-btn:hover {
+    background: #88ff88;
+    color: #000;
+}
+.raw-size {
+    color: #ffaa00;
+    font-size: 11px;
+    margin-bottom: 5px;
 }
