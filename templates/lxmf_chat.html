@@ -12,7 +12,66 @@
     <script src="https://cdn.jsdelivr.net/npm/opus-media-recorder@latest/OpusMediaRecorder.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/opus-media-recorder@latest/encoderWorker.umd.js"></script>
     <style>
-        
+        /* ========== PREFERITI TABS ========== */
+        .lxmf-peer-tabs {
+            display: flex;
+            gap: 5px;
+            margin: 10px 0;
+            padding: 5px;
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+
+        .lxmf-tab {
+            flex: 1;
+            padding: 8px;
+            background: #2a2a2a;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-family: inherit;
+            border-radius: 3px;
+            transition: all 0.2s;
+            font-size: 12px;
+        }
+
+        .lxmf-tab:hover {
+            background: #3a3a3a;
+            color: #fff;
+        }
+
+        .lxmf-tab.active {
+            background: #00ff00;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .star-icon {
+            cursor: pointer;
+            font-size: 16px;
+            opacity: 0.5;
+            transition: all 0.2s;
+            margin-right: 5px;
+            display: inline-block;
+        }
+
+        .star-icon:hover {
+            transform: scale(1.2);
+            opacity: 1;
+        }
+
+        .star-icon.active {
+            opacity: 1;
+            color: #ffaa00;
+            text-shadow: 0 0 5px #ffaa00;
+        }
+
+        .lxmf-peer-header {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 4px;
+        }
     </style>
 </head>
 <body>
@@ -47,7 +106,7 @@
                 <div id="identityHash" class="identity-hash"></div>
                 <div id="connectionStatus" class="status offline"></div>
                 <div class="stats-badge" id="identityStats"></div>
-                <a href="/" class="back-button">← ESCI</a>
+                <a href="/" class="back-button">← TORNA</a>
             </div>
         </div>
 
@@ -80,6 +139,16 @@
                     <div class="aspect-badge-sidebar" id="sidebarAspect">lxmf.delivery</div>
                     <div class="delivery-hash-box" id="sidebarDeliveryHash"></div>
                     <div class="identity-hash-small" id="sidebarIdentityHash"></div>
+                </div>
+                
+                <!-- TABS MULTIPLI PER GRUPPI -->
+                <div class="lxmf-peer-tabs">
+                    <button class="lxmf-tab active" onclick="showPeerTab('all')" id="tabAll">📋 TUTTI</button>
+                    <button class="lxmf-tab" onclick="showPeerTab('favorites')" id="tabFav">⭐ Preferiti</button>
+                    <button class="lxmf-tab" onclick="showPeerTab('home')" id="tabHome">🏠 Casa</button>
+                    <button class="lxmf-tab" onclick="showPeerTab('mountain')" id="tabMountain">🏔️ Montagna</button>
+                    <button class="lxmf-tab" onclick="showPeerTab('world')" id="tabWorld">🌍 Mondo</button>
+                    <button class="lxmf-tab" onclick="showPeerTab('work')" id="tabWork">🔧 Lavoro</button>
                 </div>
                 
                 <!-- Controlli ordinamento -->
@@ -248,6 +317,9 @@
         // Cache messaggi per debug
         let messageCache = new Map();
         let debugLogs = [];
+
+        // 🔥 NUOVO: Variabile per il tab corrente
+        let currentPeerTab = 'all';
 
         // ============================================
         // FUNZIONI DI DEBUG
@@ -1568,30 +1640,55 @@
         // ============================================
         // API: GESTIONE PEER
         // ============================================
+
+        // 🔥 Funzione showPeerTab (già presente ma verifichiamo)
+        async function showPeerTab(tab) {
+            currentPeerTab = tab;
+            
+            // Aggiorna classe active su tutti i tabs
+            const tabs = ['all', 'favorites', 'home', 'mountain', 'world', 'work'];
+            tabs.forEach(t => {
+                const el = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                if (el) {
+                    if (t === tab) {
+                        el.classList.add('active');
+                    } else {
+                        el.classList.remove('active');
+                    }
+                }
+            });
+            
+            await loadPeers();
+        }
+
+        // 🔥 Modifica loadPeers per supportare i gruppi
         async function loadPeers() {
             try {
-                const r = await fetch('/api/chat/peers');
+                let url;
+                if (currentPeerTab === 'all') {
+                    url = '/api/chat/peers';
+                } else if (currentPeerTab === 'favorites') {
+                    url = '/api/chat/peers/favorites';
+                } else {
+                    url = `/api/chat/peers/group/${currentPeerTab}`;
+                }
+                
+                const r = await fetch(url);
                 const data = await r.json();
                 peers = Array.isArray(data) ? data : (data.peers || []);
                 
-                debugLog('Peer caricati', peers.length);
+                debugLog('Peer caricati', { count: peers.length, tab: currentPeerTab });
                 
                 const online = peers.filter(p => p.online).length;
-                
-                // 🔥 CALCOLO CON LIMITE MASSIMO
                 let totalHops = 0;
                 let validHopsCount = 0;
-                const MAX_HOPS = 32; // Massimo realistico per Reticulum
                 
                 peers.forEach(p => {
                     if (p.hops !== undefined && p.hops !== null) {
                         const hopsNum = Number(p.hops);
-                        // Verifica che sia un numero valido e nel range realistico
-                        if (!isNaN(hopsNum) && isFinite(hopsNum) && hopsNum >= 0 && hopsNum <= MAX_HOPS) {
+                        if (!isNaN(hopsNum) && isFinite(hopsNum) && hopsNum >= 0 && hopsNum < 100) {
                             totalHops += hopsNum;
                             validHopsCount++;
-                        } else {
-                            debugLog(`Hops non valido per peer ${p.display_name}:`, p.hops);
                         }
                     }
                 });
@@ -1600,9 +1697,6 @@
                 
                 document.getElementById('onlineCount').textContent = online;
                 document.getElementById('avgHops').textContent = avgHops.toFixed(1);
-                
-                // 🔥 DEBUG: mostra conteggi
-                debugLog('Statistiche hops', { totalHops, validHopsCount, avgHops: avgHops.toFixed(1) });
                 
                 sortPeers();
                 renderPeerList();
@@ -1626,6 +1720,12 @@
                 debugLog('Errore peers', e.message);
             }
         }
+
+        // 🔥 Esponi nuove funzioni
+        window.toggleGroup = toggleGroup;
+        window.showPeerTab = showPeerTab;
+
+
 
         function sortPeers() {
             if (sortMode === 'time') {
@@ -1714,10 +1814,59 @@
             debugLog('Ordinamento', { mode: sortMode, timeOrder, hopsOrder, signalOrder });
         }
 
+
+        // 🔥 NUOVA: Funzione toggle favorite
+        async function toggleFavorite(identityHash, event) {
+            event.stopPropagation(); // Evita selezione peer
+            
+            try {
+                const r = await fetch(`/api/identities/${identityHash}/favorite`, {
+                    method: 'POST'
+                });
+                const data = await r.json();
+                
+                if (data.success) {
+                    // Se siamo nel tab preferiti e abbiamo rimosso il preferito, ricarica
+                    if (currentPeerTab === 'favorites' && !data.favorite) {
+                        loadPeers();
+                    } else {
+                        // Altrimenti aggiorna solo lo stato visivo
+                        peers = peers.map(p => {
+                            if (p.identity_hash === identityHash) {
+                                p.favorite = data.favorite;
+                            }
+                            return p;
+                        });
+                        renderPeerList();
+                    }
+                    
+                    showNotification(data.favorite ? '⭐ Aggiunto ai preferiti' : '📋 Rimosso dai preferiti', 'success');
+                }
+            } catch (e) {
+                debugLog('Errore toggle favorite', e);
+            }
+        }
+
+        // 🔥 Dizionario gruppi
+        const GROUP_ICONS = {
+            'home': '🏠',
+            'mountain': '🏔️',
+            'world': '🌍',
+            'work': '🔧'
+        };
+
+        const GROUP_COLORS = {
+            'home': '#88ff88',
+            'mountain': '#88aaff',
+            'world': '#88ccff',
+            'work': '#ffaa88'
+        };
+
+        
         function renderPeerList() {
             const search = document.getElementById('peerSearch').value.toLowerCase();
             let filtered = peers.filter(p => 
-                (p.display_name && cleanDisplayName(p.display_name).toLowerCase().includes(search)) ||
+                (p.display_name && p.display_name.toLowerCase().includes(search)) ||
                 (p.hash && p.hash.toLowerCase().includes(search))
             );
             
@@ -1738,12 +1887,53 @@
                 const hasUnread = unreadPeers.has(peerHash);
                 
                 let displayName = cleanDisplayName(peer.display_name || 'Anonimo');
-                if (displayName.length > 30) {
-                    displayName = displayName.substring(0, 27) + '...';
-                }
+                if (displayName.length > 30) displayName = displayName.substring(0, 27) + '...';
                 
                 const hashDisplay = peer.hash ? peer.hash.substring(0, 24) + '...' : 'Hash non disponibile';
                 
+                // 🔥 Stellina preferiti
+                const starClass = peer.favorite ? 'star-icon active' : 'star-icon';
+                const starHtml = `<span class="${starClass}" onclick="toggleFavorite('${peer.identity_hash || peer.hash}', event)">⭐</span>`;
+                
+                // 🔥 Icone gruppi attivi (con colori)
+                const groupsActive = (peer.groups || []).map(g => 
+                    `<span class="group-indicator ${g}" title="${g}">${GROUP_ICONS[g] || ''}</span>`
+                ).join('');
+                
+                // 🔥 Determina classi attive per i pulsanti gruppo
+                const isHomeActive = peer.groups?.includes('home') ? 'active-home' : '';
+                const isMountainActive = peer.groups?.includes('mountain') ? 'active-mountain' : '';
+                const isWorldActive = peer.groups?.includes('world') ? 'active-world' : '';
+                const isWorkActive = peer.groups?.includes('work') ? 'active-work' : '';
+                
+                // 🔥 Stili per i pulsanti (colore se attivo)
+                const homeStyle = peer.groups?.includes('home') ? `color: ${GROUP_COLORS.home};` : '';
+                const mountainStyle = peer.groups?.includes('mountain') ? `color: ${GROUP_COLORS.mountain};` : '';
+                const worldStyle = peer.groups?.includes('world') ? `color: ${GROUP_COLORS.world};` : '';
+                const workStyle = peer.groups?.includes('work') ? `color: ${GROUP_COLORS.work};` : '';
+                
+                // 🔥 Menu gruppi con classi condizionali
+                const groupsMenu = `
+                    <div class="peer-groups-menu" onclick="event.stopPropagation()">
+                        <button class="group-btn ${isHomeActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'home', event)" 
+                            title="Casa" style="${homeStyle}">🏠</button>
+                        <button class="group-btn ${isMountainActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'mountain', event)" 
+                            title="Montagna" style="${mountainStyle}">🏔️</button>
+                        <button class="group-btn ${isWorldActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'world', event)" 
+                            title="Mondo" style="${worldStyle}">🌍</button>
+                        <button class="group-btn ${isWorkActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'work', event)" 
+                            title="Lavoro" style="${workStyle}">🔧</button>
+                    </div>
+                `;
+                
+                // Icona aspetto
+                const appearanceIcon = peer.telemetry?.appearance?.icon || 'account';
+                
+                // Signal HTML
                 let signalHtml = '';
                 if (peer.rssi !== undefined || peer.snr !== undefined || peer.quality !== undefined) {
                     let parts = [];
@@ -1762,19 +1952,21 @@
                 }
                 
                 const hopsHtml = peer.hops ? 
-                    `<span class="lxmf-peer-hops">${peer.hops} hop</span>` : 
-                    '<span class="lxmf-peer-hops">? hop</span>';
-                
-                const unreadBadge = hasUnread ? '<span class="lxmf-peer-unread">●</span>' : '';
+                    `<span class="lxmf-peer-hops">🏓 ${peer.hops} hop</span>` : 
+                    '<span class="lxmf-peer-hops">🏓 ? hop</span>';
                 
                 html += `
                     <div class="lxmf-peer-item ${onlineClass} ${isSelected ? 'selected' : ''} ${hasUnread ? 'unread' : ''}" 
                          onclick="selectPeer('${peer.hash || ''}')">
-                        <div class="lxmf-peer-hash">
-                            <span class="lxmf-delivery-hash">${hashDisplay}</span>
-                            <span class="lxmf-peer-unread">${unreadBadge}</span>
+                        <div class="lxmf-peer-header">
+                            ${starHtml}
+                            <span class="mdi mdi-${appearanceIcon}"></span>
+                            <span class="lxmf-peer-name">${escapeHtml(displayName)}</span>
+                            <span class="peer-groups-active">${groupsActive}</span>
+                            ${hasUnread ? '<span class="lxmf-peer-unread">●</span>' : ''}
                         </div>
-                        <div class="lxmf-peer-data">${escapeHtml(displayName)}</div>
+                        ${groupsMenu}
+                        <div class="lxmf-peer-hash">${hashDisplay}</div>
                         ${signalHtml}
                         <div class="lxmf-peer-footer">
                             <span class="lxmf-peer-time">${timeAgo}</span>
@@ -1787,6 +1979,53 @@
             
             document.getElementById('peerList').innerHTML = html;
         }
+
+        // 🔥 Funzione toggle gruppo CORRETTA
+        async function toggleGroup(identityHash, group, event) {
+            event.stopPropagation();
+            
+            try {
+                const r = await fetch(`/api/identities/${identityHash}/group/${group}`, {
+                    method: 'POST'
+                });
+                const data = await r.json();
+                
+                if (data.success) {
+                    // Aggiorna i peer in memoria
+                    peers = peers.map(p => {
+                        if (p.identity_hash === identityHash) {
+                            p.groups = data.groups;
+                        }
+                        return p;
+                    });
+                    
+                    // Se c'è il peer corrente, aggiorna anche quello
+                    if (currentPeer && currentPeer.identity_hash === identityHash) {
+                        currentPeer.groups = data.groups;
+                    }
+                    
+                    // 🔥 FORZA IL RE-RENDER IMMEDIATO
+                    renderPeerList();
+                    
+                    // 🔥 Se siamo nel tab del gruppo che abbiamo appena modificato, 
+                    //    dobbiamo ricaricare i peer perché la lista potrebbe essere cambiata
+                    if (currentPeerTab === group) {
+                        await loadPeers(); // Ricarica dal server
+                    } else {
+                        // Altrimenti aggiorna solo la visuale
+                        renderPeerList();
+                    }
+                    
+                    showNotification(
+                        data.added ? `✅ Aggiunto a ${GROUP_ICONS[group]}` : `❌ Rimosso da ${GROUP_ICONS[group]}`, 
+                        'success'
+                    );
+                }
+            } catch (e) {
+                debugLog('Errore toggle group', e);
+            }
+        }
+
 
         function clearSearch() {
             document.getElementById('peerSearch').value = '';
@@ -1908,7 +2147,7 @@
                     displayName = displayName.substring(0, 17) + '...';
                 }
                 
-                // 🔥 AGGIUNGI HOP DOPO IL NOME
+                // 🔥 Aggiungi hops dopo il nome
                 let hopsDisplay = '';
                 if (currentPeer.hops !== undefined && currentPeer.hops !== null) {
                     const hopsNum = Number(currentPeer.hops);
@@ -1937,7 +2176,7 @@
                 }
                 document.getElementById('selectedPeerSignal').innerHTML = signalHtml;
                 
-                // ABILITA TUTTI I PULSANTI
+                // 🔥 ABILITA TUTTI I PULSANTI
                 document.getElementById('messageInput').disabled = false;
                 document.getElementById('sendButton').disabled = false;
                 document.getElementById('fileBtn').disabled = false;
@@ -2703,6 +2942,9 @@
         window.debugTelemetry = function() {
             console.log("📊 DATABASE TELEMETRIA:", telemetryDatabase);
         };
+        // 🔥 Esponi nuove funzioni
+        window.showPeerTab = showPeerTab;
+        window.toggleFavorite = toggleFavorite;
     </script>
 </body>
 </html>

@@ -14,7 +14,7 @@ import multiprocessing
 from datetime import datetime, timedelta
 
 # Costanti
-SOCKET_PATH = "/tmp/rns_monitor.sock"
+SOCKET_PATH = os.path.expanduser("~/.rns_manager/rns_monitor.sock")
 
 # Aspect uguali all'originale
 RNS_ASPECTS = [
@@ -391,14 +391,18 @@ def run_rns_monitor(socket_path, aspects):
             
             return "unknown"
     
-    # Setup socket
     try:
         os.unlink(socket_path)
     except OSError:
         pass
-    
+
+    socket_dir = os.path.dirname(socket_path)
+    if socket_dir and not os.path.exists(socket_dir):
+        os.makedirs(socket_dir, exist_ok=True)
+
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(socket_path)
+
     server.listen(1)
     os.chmod(socket_path, 0o666)
     
@@ -749,17 +753,6 @@ class RNSMonitorManager:
         
         print("[MonitorManager] Monitor fermato")
 
-# ============================================
-# === BLUEPRINT PER FLASK ===
-# ============================================
-
-# ============================================
-# === BLUEPRINT PER FLASK (CORRETTO) ===
-# ============================================
-
-# ============================================
-# === BLUEPRINT PER FLASK (CORRETTO) ===
-# ============================================
 
 def create_monitor_blueprint(monitor_manager):
     """Crea un blueprint Flask con le route del monitor - ORA CON DATI RADIO"""
