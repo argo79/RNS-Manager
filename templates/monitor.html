@@ -453,10 +453,43 @@
 
         function decodeUTF8(str) {
             if (!str) return '';
+            
             try {
-                return decodeURIComponent(escape(str));
+                // Prova a decodificare se è già encoded
+                let decoded = str;
+                try {
+                    decoded = decodeURIComponent(escape(str));
+                } catch(e) {
+                    decoded = str;
+                }
+                
+                // Rimuove caratteri di controllo ANSI/terminal (come \u0008 backspace)
+                decoded = decoded.replace(/[\u0000-\u001F\u007F-\u009F\u2000-\u200F\u2028-\u202F]/g, '');
+                
+                // Rimuove sequenze di escape comuni
+                decoded = decoded.replace(/\x08/g, '')      // backspace
+                                .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '') // sequenze ANSI
+                                .replace(/\x9B/g, '')      // CSI
+                                .replace(/\x1B/g, '')      // ESC
+                                .replace(/[\u2800-\u28FF]/g, '') // caratteri braille
+                                .replace(/\u0007/g, '');    // BEL
+                
+                // Rimuove spazi multipli e trim
+                decoded = decoded.replace(/\s+/g, ' ').trim();
+                
+                // Se dopo la pulizia è vuoto, mostra un placeholder
+                if (!decoded) return '—';
+                
+                // Limita la lunghezza per evitare overflow visivo
+                if (decoded.length > 100) {
+                    decoded = decoded.substring(0, 100) + '…';
+                }
+                
+                return decoded;
+                
             } catch(e) {
-                return str;
+                console.warn('Errore decodifica:', e);
+                return String(str).replace(/[^\x20-\x7E]/g, '').trim() || '—';
             }
         }
 
@@ -1029,6 +1062,8 @@
         function createAnnounceRow(a) {
             const idShort = a.identity_hash?.slice(0, 32) || '?';
             const destShort = a.dest_hash?.slice(0, 32) || '-';
+            
+            // APPLICA decodeUTF8 AI DATI PRIMA DI USARLI
             const decodedData = decodeUTF8(a.data || '');
             
             const rssiClass = getRSSIClass(a.rssi);
@@ -1068,7 +1103,10 @@
             row += `<td class="${snrClass} radio-data">${snrDisplay}</td>`;
             row += `<td class="${qClass} radio-data">${qDisplay}</td>`;
             row += `<td class="iface">${a.interface?.split('[')[0] || '?'}</td>`;
-            row += `<td class="data" style="font-family: monospace;">${decodedData || ''}</td>`;
+            
+            // USA decodedData CHE È GIÀ PULITO
+            row += `<td class="data" style="font-family: monospace;" title="${decodedData}">${decodedData || ''}</td>`;
+            
             row += '</tr>';
             
             return row;
@@ -1368,8 +1406,8 @@
                 html += `<div class="identity-group" data-identity-hash="${id.hash}">`;
                 html += `<div class="identity-header ${isExpanded ? 'expanded' : ''}" onclick="toggleIdentity('${id.hash}', this)">`;
                 html += `<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">`;
-                html += `<span class="identity-hash" title="${id.hash}"> ${id.hash.slice(0,32)} </span>`;
-                html += `<span style="color:var(--fg);"> ${id.count} annunci</span>`;
+                html += `<span class="identity-hash" title="${id.hash}">${id.hash.slice(0,32)}</span>`;
+                html += `<span style="color:var(--fg);">${id.count} annunci</span>`;
                 
                 if (active) {
                     html += `<span style="color:#ffff88; font-size:10px;" title="frequenza: ${rateFormatted}">⚡ ${rateFormatted}</span>`;
@@ -1384,6 +1422,8 @@
                 html += `</div>`;
                 html += `<span style="color:var(--dim);">${id.aspects.size} aspect</span>`;
                 html += `</div>`;
+                
+                // ASPECT LIST CON FREQUENZE E PERIODI DETTAGLIATI
                 html += `<div class="aspect-list ${isExpanded ? 'expanded' : ''}">`;
                 
                 const aspects = [...id.aspects.entries()].sort((a,b) => b[1].count - a[1].count);
@@ -1402,6 +1442,7 @@
                     
                     const destShort = data.dest ? `${data.dest.slice(0,32)}` : '-';
                     const aspData = decodeUTF8(data.data);
+                    const aspLastActiveAgo = aspActive ? '' : `💤 ${Math.round((now - data.last) / 60)} min`;
                     
                     html += `<div class="aspect-item">`;
                     html += `<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">`;
@@ -1413,10 +1454,18 @@
                         html += `<span style="color:#88ff88; font-size:10px;">📋 ${aspData.slice(0,25)}</span>`;
                     }
                     html += `</div>`;
-                    html += `<div style="display: flex; gap: 10px;">`;
-                    html += `<span style="color:var(--fg);">${data.count} ann.</span>`;
-                    html += `<span class="rate" title="frequenza">${aspRateFormatted}</span>`;
-                    html += `<span class="period" title="periodo">${aspPeriodFormatted}</span>`;
+                    
+                    // DETTAGLI CON FREQUENZA E PERIODO PER OGNI ASPECT
+                    html += `<div style="display: flex; gap: 15px; align-items: center; margin-top: 4px;">`;
+                    html += `<span style="color:var(--fg); font-size:11px;">${data.count} ann.</span>`;
+                    
+                    if (aspActive && aspRateHz > 0) {
+                        html += `<span style="color:#ffff88; font-size:11px;" title="frequenza aspect">⚡ ${aspRateFormatted}</span>`;
+                        html += `<span style="color:#88ffff; font-size:11px;" title="periodo aspect">⏱️ ${aspPeriodFormatted}</span>`;
+                    } else if (!aspActive && data.count > 0) {
+                        html += `<span style="color:#ff8888; font-size:11px;">${aspLastActiveAgo}</span>`;
+                    }
+                    
                     html += `</div>`;
                     html += `</div>`;
                 });
