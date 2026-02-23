@@ -195,6 +195,33 @@ RNS Commands
 
     POST /api/rns/probe - rnprobe
 
+<h3>📱 Android via Termux</h3>
+<p>
+    Usable on Android through Termux.
+    Open Termux and clone the repository:
+</p>
+
+<pre><code class="language-bash">
+git clone https://github.com/argo79/RNS-Manager.git
+
+cd RNS-Manager/
+
+pip install -r requirements.txt --break-system-packages
+
+python3 rns_manager.py
+</code></pre>
+
+<p>
+    Then open your browser on Android and navigate to:
+</p>
+
+<pre><code>
+http://127.0.0.1:5000
+</code></pre>
+
+![RNID_GUI](img/arab-RNID.jpg)
+![RNID_GUI](img/aspect.jpg)
+![RNID_GUI](img/monitorID.jpg)
 
 <h3>🤝 Contributing</h3>
 
