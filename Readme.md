@@ -204,6 +204,9 @@ Comandi RNS
 
 
 h3>📱 Android via Termux </h3>
+
+![RNID_GUI](img/monitor-ID.jpg)
+
 <p>
     Utilizzabile su Android via termux.
     Entrare su Termux e scaricare il repo!
@@ -228,7 +231,6 @@ http://127.0.0.1:5000
 
 ![RNID_GUI](img/arab-RNID.jpg)
 ![RNID_GUI](img/aspect.jpg)
-![RNID_GUI](img/monitorID.jpg)
 
 <h3>🤝 Contribuire</h3>
 <p>
