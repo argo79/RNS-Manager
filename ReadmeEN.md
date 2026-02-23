@@ -208,18 +208,13 @@ RNS Commands
 
 <pre><code class="language-bash">
 git clone https://github.com/argo79/RNS-Manager.git
-
 cd RNS-Manager/
-
 pip install -r requirements.txt --break-system-packages
-
 python3 rns_manager.py
 </code></pre>
-
 <p>
     Then open your browser on Android and navigate to:
 </p>
-
 <pre><code>
 http://127.0.0.1:5000
 </code></pre>

@@ -209,22 +209,18 @@ Comandi RNS
 
 <p>
     Utilizzabile su Android via termux.
+
     Entrare su Termux e scaricare il repo!
 </p>
 <pre><code class="language-bash">
 git clone https://github.com/argo79/RNS-Manager.git
-
 cd RNS-Manager/
-
 pip install -r requirements.txt --break-system-packages
-
 python3 rns_manager.py
 </code></pre>
-
 <p>
     Aprire il browser su Android e puntare su
 </p>
-
 <pre><code>
 http://127.0.0.1:5000
 </code></pre>
