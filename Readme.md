@@ -203,7 +203,7 @@ Comandi RNS
     POST /api/rns/probe - rnprobe
 
 
-h3>📱 Android via Termux </h3>
+<h3>📱 Android via Termux </h3>
 
 ![RNID_GUI](img/monitor-ID.jpg)
 
