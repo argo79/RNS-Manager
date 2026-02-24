@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>RNS MeshChat - LXMF Client Completo</title>
+    <title>RNS ARGO KIT - LXMF Client Completo</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -13,64 +13,59 @@
     <script src="https://cdn.jsdelivr.net/npm/opus-media-recorder@latest/encoderWorker.umd.js"></script>
     <style>
         /* ========== PREFERITI TABS ========== */
-        .lxmf-peer-tabs {
-            display: flex;
-            gap: 5px;
-            margin: 10px 0;
-            padding: 5px;
-            background: #1a1a1a;
-            border-radius: 4px;
-        }
-
-        .lxmf-tab {
-            flex: 1;
-            padding: 8px;
-            background: #2a2a2a;
-            border: none;
-            color: #888;
-            cursor: pointer;
-            font-family: inherit;
-            border-radius: 3px;
-            transition: all 0.2s;
-            font-size: 12px;
-        }
-
-        .lxmf-tab:hover {
-            background: #3a3a3a;
-            color: #fff;
-        }
-
-        .lxmf-tab.active {
-            background: #00ff00;
-            color: #000;
-            font-weight: bold;
-        }
-
         .star-icon {
             cursor: pointer;
-            font-size: 16px;
             opacity: 0.5;
             transition: all 0.2s;
             margin-right: 5px;
-            display: inline-block;
         }
-
-        .star-icon:hover {
-            transform: scale(1.2);
-            opacity: 1;
-        }
-
         .star-icon.active {
             opacity: 1;
             color: #ffaa00;
-            text-shadow: 0 0 5px #ffaa00;
+            text-shadow: 0 0 10px #ffaa00;
         }
-
-        .lxmf-peer-header {
+        .star-icon:hover {
+            opacity: 1;
+            transform: scale(1.2);
+        }
+        
+        /* Gruppi */
+        .peer-groups-menu {
             display: flex;
-            align-items: center;
-            gap: 5px;
-            margin-bottom: 4px;
+            gap: 4px;
+            margin: 4px 0;
+            padding: 4px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 4px;
+        }
+        .group-btn {
+            background: transparent;
+            border: 1px solid #333;
+            color: #888;
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .group-btn:hover {
+            background: #333;
+            transform: scale(1.1);
+        }
+        .group-btn.active-home { color: #88ff88; border-color: #88ff88; }
+        .group-btn.active-mountain { color: #88aaff; border-color: #88aaff; }
+        .group-btn.active-world { color: #88ccff; border-color: #88ccff; }
+        .group-btn.active-work { color: #ffaa88; border-color: #ffaa88; }
+        .group-btn.active-bot-echo { color: #ff9900; border-color: #ff9900; }
+        .group-btn.active-lente { color: #aa88ff; border-color: #aa88ff; }
+        
+        .peer-groups-active {
+            display: inline-flex;
+            gap: 2px;
+            margin-left: 4px;
+        }
+        .group-indicator {
+            font-size: 12px;
         }
     </style>
 </head>
@@ -106,6 +101,13 @@
                 <div id="identityHash" class="identity-hash"></div>
                 <div id="connectionStatus" class="status offline"></div>
                 <div class="stats-badge" id="identityStats"></div>
+                <div class="lxmf-message-actions">
+                    <button onclick="clearMessages()" title="Pulisci chat">🗑️</button>
+                    <button onclick="toggleRawView()" id="rawViewBtn" class="lxmf-raw-toggle" title="Mostra HEX/ASCII messaggi">🔬 RAW</button>
+                    <button onclick="exportConversation()" title="Esporta conversazione">📥</button>
+                    <button onclick="syncPropagationNode()" id="propSyncBtn" class="lxmf-raw-toggle" title="Sincronizza con propagation node">🛰️ SYNC</button>
+                    <div id="syncProgress" class="sync-progress" style="display: none; padding: 5px; background: #1a1a1a; border-top: 1px solid #333; font-size: 10px; color: #ffaa00;"></div>
+                </div>
                 <a href="/" class="back-button">← TORNA</a>
             </div>
         </div>
@@ -149,6 +151,8 @@
                     <button class="lxmf-tab" onclick="showPeerTab('mountain')" id="tabMountain">🏔️ Montagna</button>
                     <button class="lxmf-tab" onclick="showPeerTab('world')" id="tabWorld">🌍 Mondo</button>
                     <button class="lxmf-tab" onclick="showPeerTab('work')" id="tabWork">🔧 Lavoro</button>
+                    <button class="lxmf-tab" onclick="showPeerTab('bot-echo')" id="tabBotEcho">🤖 Bot Echo</button>
+                    <button class="lxmf-tab" onclick="showPeerTab('lente')" id="tabLente">🔍 Lente</button>
                 </div>
                 
                 <!-- Controlli ordinamento -->
@@ -236,20 +240,20 @@
 
             <!-- COLONNA 3 - MONITOR PACCHETTI (30% quando attivo) -->
             <div class="lxmf-raw-monitor" id="rawMonitor">
-                <!-- Header fisso con titolo e pulsante -->
+                <!-- Header fisso con titolo e pulsante (sempre visibile) -->
                 <div class="lxmf-raw-header">
                     <h3>📡 TELEMETRIA & MAPPA</h3>
                     <button onclick="clearMonitorLog()" class="lxmf-raw-clear">Pulisci</button>
                 </div>
                 
-                <!-- AREA FISSA 60% - TELEMETRIA + MAPPA -->
+                <!-- AREA FISSA 60% - TELEMETRIA + MAPPA (sempre visibile) -->
                 <div class="telemetry-fixed-area" id="telemetryFixedArea">
                     <!-- DASHBOARD TELEMETRIA MIGLIORATA -->
                     <div class="peer-telemetry" id="telemetryDashboard">
                         <div class="telemetry-empty">👈 Seleziona un peer per vedere i dati</div>
                     </div>
                     
-                    <!-- MAPPA INTEGRATA CON CONTROLLI - QUESTI RIMANGONO INTATTI! -->
+                    <!-- MAPPA INTEGRATA CON CONTROLLI -->
                     <div class="telemetry-map" id="telemetryMap">
                         <div class="map-controls">
                             <button class="map-style-btn active" onclick="setMapStyle('topo')" id="mapStyleTopo">🗺️ Rilievi</button>
@@ -263,15 +267,128 @@
                     </div>
                 </div>
                 
-                <!-- Header per pacchetti raw -->
-                <div class="lxmf-raw-header" style="border-top: 1px solid #444;">
-                    <h3>📦 PACCHETTI RAW</h3>
-                    <span id="packetCount">0</span>
+                <!-- TABS per la parte inferiore (40%) -->
+                <div class="lxmf-raw-tabs">
+                    <button class="lxmf-raw-tab active" onclick="switchRawTab('packets')" id="tabPackets">📦 PACCHETTI RAW</button>
+                    <button class="lxmf-raw-tab" onclick="switchRawTab('history')" id="tabHistory">📊 STORICO TELEMETRIA</button>
+                    <button class="lxmf-raw-tab" onclick="switchRawTab('config')" id="tabConfig">⚙️ CONFIGURAZIONE</button>
                 </div>
                 
-                <!-- LISTA PACCHETTI SCORREVOLE - 40% RESTO -->
+                <!-- CONTENUTO DEI TAB (40% restante) -->
+                
+                <!-- TAB 1: LISTA PACCHETTI RAW -->
                 <div class="lxmf-raw-list" id="rawContent">
                     <div style="color: #888; text-align: center; margin-top: 20px;">Nessun pacchetto ricevuto</div>
+                </div>
+                
+                <!-- TAB 2: STORICO TELEMETRIA -->
+                <div class="lxmf-history-panel" id="historyContent" style="display: none;">
+                    <h3>📊 STORICO TELEMETRIA</h3>
+                    <div class="history-controls" style="display: flex; justify-content: space-between; margin-bottom: 10px; padding: 5px; background: #1a1a1a; border-radius: 4px;">
+                        <div class="history-legend">
+                            <span style="color: #00ff00; margin-right: 10px;">● SNR > 15</span>
+                            <span style="color: #ffff00; margin-right: 10px;">● SNR 8-15</span>
+                            <span style="color: #ff8800; margin-right: 10px;">● SNR 3-7</span>
+                            <span style="color: #ff0000; margin-right: 10px;">● SNR < 3</span>
+                        </div>
+                        <select id="historyTimeRange" style="background: #0a0a0a; color: #88ff88; border: 1px solid #333; padding: 2px;">
+                            <option value="24h">Ultime 24 ore</option>
+                            <option value="7d">Ultimi 7 giorni</option>
+                            <option value="30d">Ultimi 30 giorni</option>
+                            <option value="all">Tutta la storia</option>
+                        </select>
+                    </div>
+                    <div class="history-map-container" id="historyMapContainer" style="height: 200px; background: #1a1a1a; margin-bottom: 10px; border: 1px solid #333;"></div>
+                    <div class="history-timeline" id="historyTimeline" style="max-height: 150px; overflow-y: auto;"></div>
+                </div>
+                
+                <!-- TAB 3: PANNELLO CONFIGURAZIONE -->
+                <div class="lxmf-config-panel" id="configContent" style="display: none;">
+                    <h3>⚙️ CONFIGURAZIONE INVIO</h3>
+                    
+                    <div class="config-section">
+                        <label>📡 NODO PROPAGATION</label>
+                        <input type="text" id="propagationNode" placeholder="Hash del propagation node" class="config-input">
+                        <small>Es: 3f2a1b8c7d9e5f4a6b3c2d1e0f9a8b7c</small>
+                    </div>
+                    
+                    <div class="config-section">
+                        <label>📤 MODALITÀ INVIO</label>
+                        <select id="deliveryMode" class="config-select" onchange="toggleRetriesSection()">
+                            <option value="direct">🔵 Solo diretto</option>
+                            <option value="propagation">🟣 Solo propagation</option>
+                            <option value="hybrid">🟡 Ibrido (diretto + fallback)</option>
+                            <option value="auto">🔀 Auto (fallback automatico LXMF)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="config-section" id="retriesSection">
+                        <label>🔄 TENTATIVI MASSIMI</label>
+                        <input type="number" id="maxRetries" min="1" max="10" value="3" class="config-input">
+                        <small>Prima di passare a propagation (solo modalità ibrida)</small>
+                    </div>
+                    
+                    <!-- SEZIONE STAMP COST -->
+                    <h4 style="margin-top: 15px; margin-bottom: 5px; color: #ffaa00;">🔏 STAMP COST</h4>
+                    
+                    <div class="config-section">
+                        <label>📥 STAMP COST (mittente → te)</label>
+                        <input type="number" id="stampCost" min="0" max="255" placeholder="0 = nessun requisito" class="config-input">
+                        <small>Difficoltà stamp richiesta per chi ti scrive (0-255)</small>
+                    </div>
+                    
+                    <div class="config-section">
+                        <label>📤 PROPAGATION STAMP COST (tu → propagation node)</label>
+                        <input type="number" id="propagationStampCost" min="0" max="255" value="16" class="config-input">
+                        <small>Costo stamp per inviare a propagation node (default 16)</small>
+                    </div>
+                    
+                    <div class="config-section checkbox">
+                        <label>
+                            <input type="checkbox" id="acceptInvalidStamps"> ✅ Accetta stamp non validi
+                        </label>
+                        <small>Se attivo, accetta messaggi anche se lo stamp è sbagliato</small>
+                    </div>
+                    
+                    <div class="config-section">
+                        <label>🔄 MAX STAMP RETRIES</label>
+                        <input type="number" id="maxStampRetries" min="1" max="10" value="3" class="config-input">
+                        <small>Tentativi generazione stamp (se fallisce)</small>
+                    </div>
+                    
+                    <h4 style="margin-top: 15px; margin-bottom: 5px; color: #88ff88;">🎵 AUDIO</h4>
+                    
+                    <div class="config-section">
+                        <label>🎵 CODEC AUDIO PREFERITO</label>
+                        <select id="preferredAudio" class="config-select">
+                            <option value="opus">🎵 Opus (alta qualità)</option>
+                            <option value="c2_3200">🎤 Codec2 3200bps</option>
+                            <option value="c2_2400">🎤 Codec2 2400bps</option>
+                            <option value="c2_1200">🎤 Codec2 1200bps</option>
+                            <option value="c2_700">🎤 Codec2 700bps (max compressione)</option>
+                        </select>
+                    </div>
+                    
+                    <h4 style="margin-top: 15px; margin-bottom: 5px; color: #8888ff;">💾 SALVATAGGIO</h4>
+                    
+                    <div class="config-section checkbox">
+                        <label>
+                            <input type="checkbox" id="saveSent" checked> 💾 Salva messaggi inviati
+                        </label>
+                    </div>
+                    
+                    <div class="config-section checkbox">
+                        <label>
+                            <input type="checkbox" id="autoRetry" checked> 🔄 Ritenta automaticamente
+                        </label>
+                    </div>
+                    
+                    <div class="config-actions">
+                        <button onclick="saveConfig()" class="config-btn save">💾 SALVA</button>
+                        <button onclick="loadConfig()" class="config-btn reset">↻ RESET</button>
+                    </div>
+                    
+                    <div id="configStatus" class="config-status"></div>
                 </div>
             </div>
         </div>
@@ -318,8 +435,15 @@
         let messageCache = new Map();
         let debugLogs = [];
 
-        // 🔥 NUOVO: Variabile per il tab corrente
+        // Variabile per il tab corrente
         let currentPeerTab = 'all';
+        
+        // Stato sincronizzazione
+        let isSyncing = false;
+        let syncInterval = null;
+
+        // Variabili configurazione
+        let currentConfig = {};
 
         // ============================================
         // FUNZIONI DI DEBUG
@@ -351,11 +475,9 @@
             
             debugLog('Parsing messaggio:', text.substring(0, 100));
             
-            // Parsing messaggi Arg0net TelemetryBot
             if (text.includes('Uptime:') && text.includes('CPU:') && text.includes('RAM:')) {
                 debugLog('Rilevato messaggio TelemetryBot');
                 
-                // Estrai valori con regex
                 const uptimeMatch = text.match(/Uptime:\s*([^ ]+\s+[^ ]+)/);
                 const cpuMatch = text.match(/CPU:\s*([0-9.]+%)/);
                 const ramMatch = text.match(/RAM:\s*([0-9.]+%)/);
@@ -375,7 +497,6 @@
                 return { type: 'telemetry', data, raw: text };
             }
             
-            // Parsing messaggi con valori chiave: valore
             if (text.includes(':')) {
                 const lines = text.split('\n');
                 const data = {};
@@ -399,7 +520,6 @@
                 }
             }
             
-            // Se contiene molti spazi, formatta su più righe
             if (text.split(' ').length > 10 && text.length > 80) {
                 const words = text.split(' ');
                 const lines = [];
@@ -483,13 +603,10 @@
             if (currentIdentity) {
                 console.log("🆔 Aggiorno display identità:", currentIdentity);
                 
-                // Header (in alto a destra) - Nome
                 document.getElementById('identityStatus').innerHTML = '✅';
                 document.getElementById('identityName').innerHTML = currentIdentity.name || 'Sconosciuto';
                 
-                // IDENTITY HASH in alto a destra
                 if (currentIdentity.identity_hash) {
-                    // Pulisci solo caratteri problematici, NON TAGLIARE
                     let identityHash = currentIdentity.identity_hash;
                     identityHash = identityHash.replace(/[<>:\s]/g, '');
                     document.getElementById('identityHash').innerHTML = identityHash.substring(0, 32);
@@ -498,13 +615,10 @@
                     document.getElementById('identityHash').innerHTML = '';
                 }
                 
-                // Sidebar (sopra lista peer) - Nome
                 document.getElementById('sidebarIdentityName').innerHTML = currentIdentity.name || '-';
                 document.getElementById('sidebarAspect').innerHTML = '🔗 lxmf.delivery';
 
-                // DELIVERY HASH nella sidebar (campo nero)
                 if (currentIdentity.delivery_hash) {
-                    // Pulisci solo caratteri problematici
                     let deliveryHash = currentIdentity.delivery_hash;
                     deliveryHash = deliveryHash.replace(/[<>:\s]/g, '');
                     document.getElementById('sidebarDeliveryHash').innerHTML = deliveryHash.substring(0, 32);
@@ -513,7 +627,6 @@
                     document.getElementById('sidebarDeliveryHash').innerHTML = '';
                     console.log("⚠️ Nessun delivery_hash in currentIdentity");
                     
-                    // Fallback: prova a usare address
                     if (currentIdentity.address) {
                         let address = currentIdentity.address.replace(/[<>:\s]/g, '');
                         document.getElementById('sidebarDeliveryHash').innerHTML = address.substring(0, 32);
@@ -521,7 +634,6 @@
                     }
                 }
                 
-                // Identity hash piccolo sotto
                 if (currentIdentity.identity_hash) {
                     let identityHash = currentIdentity.identity_hash.replace(/[<>:\s]/g, '');
                     document.getElementById('sidebarIdentityHash').innerHTML = identityHash.substring(0, 32);
@@ -624,7 +736,6 @@
                     maxZoom: 17
                 }).addTo(mapInstance);
                 
-                // 🔥 Icona predefinita usando MDI
                 mapMarker = L.marker([41.9028, 12.4964], {
                     icon: L.divIcon({
                         className: 'custom-marker',
@@ -642,7 +753,6 @@
         function setMapStyle(style) {
             currentMapStyle = style;
             
-            // Aggiorna pulsanti
             document.getElementById('mapStyleTopo').classList.toggle('active', style === 'topo');
             document.getElementById('mapStyleSatellite').classList.toggle('active', style === 'satellite');
             document.getElementById('mapStyleStreet').classList.toggle('active', style === 'street');
@@ -652,13 +762,9 @@
                 return;
             }
             
-            // 🔥 SALVA TUTTO
             const center = mapInstance.getCenter();
             const zoom = mapInstance.getZoom();
-            const markerLatLng = mapMarker ? mapMarker.getLatLng() : null;
-            const markerVisible = mapMarker ? mapMarker.isPopupOpen() : false;
             
-            // 🔥 RIMUOVI SOLO I TILE LAYER
             const layersToRemove = [];
             mapInstance.eachLayer(layer => {
                 if (layer instanceof L.TileLayer) {
@@ -668,7 +774,6 @@
             
             layersToRemove.forEach(layer => mapInstance.removeLayer(layer));
             
-            // Aggiungi il nuovo layer
             let tileLayer;
             switch(style) {
                 case 'satellite':
@@ -693,20 +798,7 @@
             }
             
             tileLayer.addTo(mapInstance);
-            
-            // 🔥 RIPRISTINA TUTTO
             mapInstance.setView(center, zoom);
-            
-            // 🔥 ASSICURA CHE IL MARKER SIA PRESENTE
-            if (mapMarker) {
-                if (!mapInstance.hasLayer(mapMarker)) {
-                    mapMarker.addTo(mapInstance);
-                }
-                if (markerLatLng) {
-                    mapMarker.setLatLng(markerLatLng);
-                }
-                mapMarker.setOpacity(markerVisible ? 1 : 0);
-            }
             
             debugLog('Stile mappa cambiato:', style);
         }
@@ -734,43 +826,69 @@
             if (mapInstance && mapMarker) {
                 mapInstance.setView([lat, lon], 13);
                 
-                // 🔥 RECUPERA L'ICONA DALLA TELEMETRIA (GIÀ IN `telemetryDatabase`)
-                let iconName = 'antenna'; // icona predefinita
+                let iconName = 'antenna';
+                let fgColor = '#88ff88';
+                let bgColor = '#000000';
+                
                 if (currentPeer) {
                     const peerHash = cleanHash(currentPeer.hash);
                     const telemetry = getTelemetryFromDatabase(peerHash);
+                    
                     if (telemetry?.appearance?.icon) {
                         iconName = telemetry.appearance.icon;
                     }
+                    
+                    if (telemetry?.appearance?.foreground) {
+                        const [r, g, b] = telemetry.appearance.foreground;
+                        fgColor = `rgb(${r}, ${g}, ${b})`;
+                    }
+                    
+                    if (telemetry?.appearance?.background) {
+                        const [r, g, b] = telemetry.appearance.background;
+                        bgColor = `rgb(${r}, ${g}, ${b})`;
+                    }
                 }
                 
-                // Aggiorna marker con icona MDI
                 mapMarker.setLatLng([lat, lon]);
                 mapMarker.setOpacity(1);
                 
-                // 🔥 USA LA CLASSE MDI PER L'ICONA (proprio come nella telemetry dashboard)
+                const iconSize = 32;
+                
                 mapMarker.setIcon(L.divIcon({
                     className: 'custom-marker',
-                    html: `<span class="mdi mdi-${iconName}" style="font-size:24px; color:#88ff88;"></span>`,
-                    iconSize: [30, 30],
-                    popupAnchor: [0, -15]
+                    html: `
+                        <div style="
+                            background-color: ${bgColor};
+                            border-radius: 50%;
+                            width: ${iconSize}px;
+                            height: ${iconSize}px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                        ">
+                            <span class="mdi mdi-${iconName}" style="font-size:${iconSize-8}px; color:${fgColor};"></span>
+                        </div>
+                    `,
+                    iconSize: [iconSize, iconSize],
+                    popupAnchor: [0, -iconSize/2]
                 }));
                 
-                mapMarker.bindPopup(`
-                    <div style="color: #000; font-family: monospace;">
-                        <strong>📍 ${escapeHtml(currentPeer?.display_name || 'Peer')}</strong><br>
-                        <span class="mdi mdi-${iconName}" style="font-size:16px;"></span> ${iconName}<br>
-                        Lat: ${lat.toFixed(6)}°<br>
-                        Lon: ${lon.toFixed(6)}°
-                    </div>
-                `).openPopup();
+                if (mapMarker._popup) {
+                    mapMarker.unbindPopup();
+                }
                 
-                debugLog('Mappa aggiornata', { lat, lon, icon: iconName });
+                debugLog('Mappa aggiornata', { 
+                    lat, lon, 
+                    icon: iconName, 
+                    fg: fgColor,
+                    bg: bgColor
+                });
             }
         }
 
         // ============================================
-        // TELEMETRIA DASHBOARD MIGLIORATA
+        // TELEMETRIA DASHBOARD
         // ============================================
         function saveTelemetryToDatabase(peerHash, telemetryData) {
             if (!peerHash || !telemetryData) return;
@@ -789,7 +907,6 @@
                 };
             }
             
-            // Aggiorna i dati
             if (telemetryData.battery) telemetryDatabase[peerHash].battery = telemetryData.battery;
             if (telemetryData.location) telemetryDatabase[peerHash].location = telemetryData.location;
             if (telemetryData.appearance) telemetryDatabase[peerHash].appearance = telemetryData.appearance;
@@ -800,7 +917,6 @@
             
             telemetryDatabase[peerHash].lastUpdate = telemetryData.timestamp || Math.floor(Date.now() / 1000);
             
-            // Salva nello storico (max 100 entry)
             if (!telemetryDatabase[peerHash].history) {
                 telemetryDatabase[peerHash].history = [];
             }
@@ -853,7 +969,6 @@
             
             let html = '<div class="telemetry-dashboard">';
             
-            // PEER MINI HEADER
             const iconName = telemetry.appearance?.icon || 'account';
             html += `<div class="telemetry-peer-mini">`;
             html += `<div class="peer-mini-icon"><span class="mdi mdi-${iconName}"></span></div>`;
@@ -861,7 +976,6 @@
             html += `<div class="peer-mini-hash">${peerHash.substring(0, 8)}</div>`;
             html += `</div>`;
             
-            // BATTERIA (se presente)
             if (telemetry.battery) {
                 const battery = telemetry.battery;
                 const chargePercent = battery.charge_percent || battery.charge || 0;
@@ -878,36 +992,30 @@
                 html += `</div></div></div>`;
             }
             
-            // POSIZIONE + MOVIMENTO (LAT, LON, ALT, VEL, DIR) - TUTTI IN UNA RIGA 5 COLONNE
             if (telemetry.location) {
                 const loc = telemetry.location;
                 html += `<div class="position-movement-row">`;
                 
-                // LAT
                 html += `<div class="position-movement-box">`;
                 html += `<div class="position-movement-label">LAT</div>`;
                 html += `<div class="position-movement-value">${loc.latitude ? loc.latitude.toFixed(6) : '?'}</div>`;
                 html += `</div>`;
                 
-                // LON
                 html += `<div class="position-movement-box">`;
                 html += `<div class="position-movement-label">LON</div>`;
                 html += `<div class="position-movement-value">${loc.longitude ? loc.longitude.toFixed(6) : '?'}</div>`;
                 html += `</div>`;
                 
-                // ALT
                 html += `<div class="position-movement-box">`;
                 html += `<div class="position-movement-label">ALT</div>`;
                 html += `<div class="position-movement-value">${loc.altitude ? loc.altitude.toFixed(1) + 'm' : '?'}</div>`;
                 html += `</div>`;
                 
-                // VEL
                 html += `<div class="position-movement-box velocity">`;
                 html += `<div class="position-movement-label">VEL</div>`;
                 html += `<div class="position-movement-value">${(loc.speed !== undefined && !isNaN(loc.speed)) ? (loc.speed * 3.6).toFixed(1) + 'km/h' : '?'}</div>`;
                 html += `</div>`;
                 
-                // DIR
                 html += `<div class="position-movement-box direction">`;
                 html += `<div class="position-movement-label">DIR</div>`;
                 html += `<div class="position-movement-value">${(loc.bearing !== undefined && !isNaN(loc.bearing)) ? loc.bearing.toFixed(0) + '°' : '?'}</div>`;
@@ -915,19 +1023,16 @@
                 
                 html += `</div>`;
                 
-                // Aggiorna mappa
                 if (loc.latitude && loc.longitude) {
                     updateMap(loc.latitude, loc.longitude);
                 }
             }
             
-            // SENSORI (temperatura, umidità, pressione) - RIEMPIONO LE 5 COLONNE
             if (telemetry.temperature || telemetry.humidity || telemetry.pressure || 
                 telemetry.information?.cpu || telemetry.information?.ram || telemetry.information?.disk) {
                 
                 html += `<div class="sensor-row">`;
                 
-                // Temperatura
                 if (telemetry.temperature || telemetry.battery?.temperature) {
                     const temp = telemetry.temperature || telemetry.battery?.temperature;
                     html += `<div class="sensor-item">`;
@@ -939,7 +1044,6 @@
                     html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
                 
-                // Umidità
                 if (telemetry.humidity) {
                     html += `<div class="sensor-item">`;
                     html += `<span class="sensor-icon">💧</span>`;
@@ -950,7 +1054,6 @@
                     html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
                 
-                // Pressione
                 if (telemetry.pressure) {
                     html += `<div class="sensor-item">`;
                     html += `<span class="sensor-icon">🔄</span>`;
@@ -961,7 +1064,6 @@
                     html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
                 
-                // CPU
                 if (telemetry.information?.cpu) {
                     html += `<div class="sensor-item">`;
                     html += `<span class="sensor-icon">⚙️</span>`;
@@ -972,7 +1074,6 @@
                     html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
                 
-                // RAM
                 if (telemetry.information?.ram) {
                     html += `<div class="sensor-item">`;
                     html += `<span class="sensor-icon">📊</span>`;
@@ -985,10 +1086,8 @@
                 
                 html += `</div>`;
                 
-                // SECONDA RIGA SENSORI (DISK, UPTIME, ecc)
                 html += `<div class="sensor-row">`;
                 
-                // Disk
                 if (telemetry.information?.disk) {
                     html += `<div class="sensor-item">`;
                     html += `<span class="sensor-icon">💾</span>`;
@@ -999,7 +1098,6 @@
                     html += `<div class="sensor-item"><span class="sensor-label">-</span></div>`;
                 }
                 
-                // Uptime
                 if (telemetry.information?.uptime) {
                     html += `<div class="sensor-item" style="grid-column: span 4;">`;
                     html += `<span class="sensor-icon">⏱️</span>`;
@@ -1013,7 +1111,6 @@
                 html += `</div>`;
             }
             
-            // TIMESTAMP
             if (telemetry.lastUpdate) {
                 const date = new Date(telemetry.lastUpdate * 1000);
                 html += `<div class="timestamp-row">`;
@@ -1029,7 +1126,7 @@
         }
 
         // ============================================
-        // PULSANTI
+        // FUNZIONI MONITOR
         // ============================================
         function toggleRawView() {
             rawViewActive = !rawViewActive;
@@ -1071,9 +1168,22 @@
             debugLog('Monitor', monitorActive);
         }
 
-        // ============================================
-        // FUNZIONI MONITOR
-        // ============================================
+        function switchRawTab(tab) {
+            document.getElementById('tabPackets').classList.toggle('active', tab === 'packets');
+            document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
+            document.getElementById('tabConfig').classList.toggle('active', tab === 'config');
+            
+            document.getElementById('rawContent').style.display = tab === 'packets' ? 'block' : 'none';
+            document.getElementById('historyContent').style.display = tab === 'history' ? 'block' : 'none';
+            document.getElementById('configContent').style.display = tab === 'config' ? 'block' : 'none';
+            
+            if (tab === 'history') {
+                loadTelemetryHistory();
+            } else if (tab === 'config') {
+                loadConfig();
+            }
+        }
+
         function addMonitorPacket(packet) {
             if (!packet.peer) return;
             
@@ -1105,7 +1215,6 @@
                 incomingPackets[packetPeer].pop();
             }
             
-            // Estrai dati telemetria dal pacchetto
             const telemetryData = {
                 timestamp: packet.timestamp,
                 battery: packet.battery,
@@ -1117,7 +1226,6 @@
                 humidity: packet.humidity
             };
             
-            // Se ci sono dati nel pacchetto, aggiungili
             if (packet.telemetry) {
                 if (packet.telemetry.battery) telemetryData.battery = packet.telemetry.battery;
                 if (packet.telemetry.location) telemetryData.location = packet.telemetry.location;
@@ -1125,14 +1233,12 @@
                 if (packet.telemetry.information) telemetryData.information = packet.telemetry.information;
             }
             
-            // Salva nel database
             saveTelemetryToDatabase(packetPeer, telemetryData);
             
             if (currentPeerHash && packetPeer === currentPeerHash) {
                 if (monitorActive) {
                     renderTelemetryDashboard();
                     renderMonitorPackets();
-                    document.getElementById('packetCount').textContent = incomingPackets[packetPeer].length;
                 }
             }
             
@@ -1147,7 +1253,6 @@
             const peerHash = cleanHash(currentPeer.hash);
             incomingPackets[peerHash] = [];
             
-            document.getElementById('packetCount').textContent = '0';
             if (monitorActive) {
                 renderMonitorPackets();
             }
@@ -1179,34 +1284,30 @@
                     html += `<div style="color:#88ff88; margin-bottom:4px;">${escapeHtml(short)}</div>`;
                 }
                 
-                // 🔥 HEX SEMPRE VISIBILE (con toggle per espandere)
                 if (pkt.raw_hex) {
                     const hexId = `hex-${pkt.timestamp}-${Math.random()}`;
                     const hexPreview = pkt.raw_hex.substring(0, 128);
-                    const hexFull = pkt.raw_hex;
                     
                     html += `<div style="margin:4px 0;">`;
                     html += `<div style="display:flex; align-items:center; gap:4px;">`;
                     html += `<span style="color:#88f; font-size:9px;">🔹 HEX (${pkt.raw_size || '?'} bytes):</span>`;
                     html += `<button onclick="toggleHex('${hexId}')" style="background:#1a1a1a; color:#88f; border:1px solid #88f; font-size:8px; padding:2px 5px; cursor:pointer;">mostra/nascondi</button>`;
                     html += `</div>`;
-                    html += `<div id="${hexId}" style="display:none; color:#88f; font-size:8px; word-break:break-all; background:#1a1a1a; padding:4px; margin-top:2px; max-height:200px; overflow-y:auto;">${escapeHtml(hexFull)}</div>`;
+                    html += `<div id="${hexId}" style="display:none; color:#88f; font-size:8px; word-break:break-all; background:#1a1a1a; padding:4px; margin-top:2px; max-height:200px; overflow-y:auto;">${escapeHtml(pkt.raw_hex)}</div>`;
                     html += `<div style="color:#88f; font-size:8px; word-break:break-all;">${escapeHtml(hexPreview)}${pkt.raw_hex.length > 128 ? '...' : ''}</div>`;
                     html += `</div>`;
                 }
                 
-                // 🔥 ASCII SEMPRE VISIBILE
                 if (pkt.raw_ascii) {
                     const asciiId = `ascii-${pkt.timestamp}-${Math.random()}`;
                     const asciiPreview = pkt.raw_ascii.substring(0, 128);
-                    const asciiFull = pkt.raw_ascii;
                     
                     html += `<div style="margin:4px 0;">`;
                     html += `<div style="display:flex; align-items:center; gap:4px;">`;
                     html += `<span style="color:#ff8; font-size:9px;">🔸 ASCII:</span>`;
                     html += `<button onclick="toggleAscii('${asciiId}')" style="background:#1a1a1a; color:#ff8; border:1px solid #ff8; font-size:8px; padding:2px 5px; cursor:pointer;">mostra/nascondi</button>`;
                     html += `</div>`;
-                    html += `<div id="${asciiId}" style="display:none; color:#ff8; font-size:8px; word-break:break-all; background:#1a1a1a; padding:4px; margin-top:2px; max-height:200px; overflow-y:auto;">${escapeHtml(asciiFull)}</div>`;
+                    html += `<div id="${asciiId}" style="display:none; color:#ff8; font-size:8px; word-break:break-all; background:#1a1a1a; padding:4px; margin-top:2px; max-height:200px; overflow-y:auto;">${escapeHtml(pkt.raw_ascii)}</div>`;
                     html += `<div style="color:#ff8; font-size:8px; word-break:break-all;">${escapeHtml(asciiPreview)}${pkt.raw_ascii.length > 128 ? '...' : ''}</div>`;
                     html += `</div>`;
                 }
@@ -1218,7 +1319,6 @@
                     html += `</div>`;
                 }
                 
-                // Mostra badge se ci sono dati telemetria
                 if (pkt.battery || pkt.location) {
                     html += `<div style="display:flex; gap:4px; margin-top:2px;">`;
                     if (pkt.battery) html += `<span style="color:#7ec8e0;">🔋 ${pkt.battery.charge_percent || pkt.battery.charge || '?'}%</span>`;
@@ -1232,7 +1332,6 @@
             list.innerHTML = html;
         }
 
-        // 🔥 FUNZIONI PER TOGGLE HEX/ASCII
         function toggleHex(id) {
             const el = document.getElementById(id);
             if (el) {
@@ -1248,7 +1347,230 @@
         }
 
         // ============================================
-        // REGISTRAZIONE VOCALE (OGG OPUS PER SIDEBAND ANDROID)
+        // FUNZIONI STORICO TELEMETRIA
+        // ============================================
+        let historyMap = null;
+        let historyMarkers = [];
+
+        function initHistoryMap() {
+            const container = document.getElementById('historyMapContainer');
+            if (!container) return;
+            
+            if (historyMap) {
+                historyMap.remove();
+                historyMarkers = [];
+            }
+            
+            historyMap = L.map('historyMapContainer').setView([41.9028, 12.4964], 4);
+            
+            L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenTopoMap',
+                maxZoom: 17
+            }).addTo(historyMap);
+        }
+
+        function getPointColor(entry) {
+            const signal = entry.signal || {};
+            
+            if (signal.snr !== undefined && signal.snr !== null) {
+                if (signal.snr > 15) return '#00ff00';
+                if (signal.snr > 8) return '#ffff00';
+                if (signal.snr > 3) return '#ff8800';
+                return '#ff0000';
+            }
+            
+            if (signal.rssi !== undefined && signal.rssi !== null) {
+                if (signal.rssi > -70) return '#00ff00';
+                if (signal.rssi > -85) return '#ffff00';
+                if (signal.rssi > -100) return '#ff8800';
+                return '#ff0000';
+            }
+            
+            if (signal.quality !== undefined && signal.quality !== null) {
+                const q = Number(signal.quality);
+                if (q > 0.8) return '#00ff00';
+                if (q > 0.5) return '#ffff00';
+                if (q > 0.2) return '#ff8800';
+                return '#ff0000';
+            }
+            
+            if (signal.hops !== undefined && signal.hops !== null) {
+                if (signal.hops <= 1) return '#00ff00';
+                if (signal.hops <= 3) return '#ffff00';
+                if (signal.hops <= 5) return '#ff8800';
+                return '#ff0000';
+            }
+            
+            return '#888888';
+        }
+
+        function addHistoryMarker(entry, index) {
+            if (!entry.location || !historyMap) return;
+            
+            const lat = entry.location.latitude;
+            const lon = entry.location.longitude;
+            const color = getPointColor(entry);
+            
+            const date = new Date(entry.timestamp * 1000);
+            const dateStr = date.toLocaleDateString();
+            const timeStr = date.toLocaleTimeString();
+            
+            let popupHtml = `<b>${dateStr} ${timeStr}</b><br>`;
+            
+            if (entry.signal) {
+                if (entry.signal.snr) popupHtml += `SNR: ${entry.signal.snr.toFixed(1)}<br>`;
+                if (entry.signal.rssi) popupHtml += `RSSI: ${entry.signal.rssi.toFixed(1)}<br>`;
+                if (entry.signal.quality) popupHtml += `Quality: ${entry.signal.quality.toFixed(2)}<br>`;
+                if (entry.signal.hops !== undefined) popupHtml += `Hops: ${entry.signal.hops}<br>`;
+            }
+            
+            if (entry.location.altitude) popupHtml += `Alt: ${entry.location.altitude.toFixed(1)}m<br>`;
+            if (entry.location.speed) popupHtml += `Vel: ${(entry.location.speed * 3.6).toFixed(1)}km/h<br>`;
+            if (entry.location.bearing) popupHtml += `Dir: ${entry.location.bearing.toFixed(0)}°<br>`;
+            
+            if (entry.battery) {
+                popupHtml += `🔋 ${entry.battery.percent}%`;
+                if (entry.battery.charging) popupHtml += ` (⚡)`;
+                popupHtml += `<br>`;
+            }
+            
+            if (entry.environment) {
+                if (entry.environment.temperature) popupHtml += `🌡️ ${entry.environment.temperature}°C<br>`;
+                if (entry.environment.humidity) popupHtml += `💧 ${entry.environment.humidity}%<br>`;
+            }
+            
+            const marker = L.circleMarker([lat, lon], {
+                radius: 8,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.7,
+                weight: 2,
+                opacity: 0.9
+            }).bindPopup(popupHtml);
+            
+            if (index > 0 && historyMarkers.length > 0) {
+                const prevMarker = historyMarkers[index - 1];
+                if (prevMarker && prevMarker.getLatLng) {
+                    const prevLatLng = prevMarker.getLatLng();
+                    
+                    const line = L.polyline([
+                        [prevLatLng.lat, prevLatLng.lng],
+                        [lat, lon]
+                    ], {
+                        color: '#888888',
+                        weight: 1,
+                        opacity: 0.3,
+                        dashArray: '5, 5'
+                    }).addTo(historyMap);
+                    
+                    historyMarkers.push(line);
+                }
+            }
+            
+            marker.addTo(historyMap);
+            historyMarkers.push(marker);
+            
+            return marker;
+        }
+
+        function renderTimeline(history) {
+            const timelineEl = document.getElementById('historyTimeline');
+            if (!timelineEl) return;
+            
+            let html = '';
+            
+            history.forEach((entry, index) => {
+                const date = new Date(entry.timestamp * 1000);
+                const dateStr = date.toLocaleDateString();
+                const timeStr = date.toLocaleTimeString();
+                const color = getPointColor(entry);
+                
+                let entryHtml = `
+                    <div class="timeline-entry" onclick="focusHistoryMarker(${index})" style="cursor:pointer; padding:5px; border-bottom:1px solid #333; display:flex; align-items:center;">
+                        <div style="width:12px; height:12px; border-radius:50%; background-color:${color}; margin-right:8px;"></div>
+                        <div style="flex:1;">
+                            <div style="color:#88ff88; font-size:10px;">${dateStr} ${timeStr}</div>
+                `;
+                
+                if (entry.signal) {
+                    let signalParts = [];
+                    if (entry.signal.snr) signalParts.push(`SNR:${entry.signal.snr.toFixed(1)}`);
+                    if (entry.signal.rssi) signalParts.push(`RSSI:${entry.signal.rssi.toFixed(1)}`);
+                    if (entry.signal.hops !== undefined) signalParts.push(`H:${entry.signal.hops}`);
+                    if (signalParts.length > 0) {
+                        entryHtml += `<div style="color:#888; font-size:9px;">${signalParts.join(' ')}</div>`;
+                    }
+                }
+                
+                if (entry.location) {
+                    entryHtml += `<div style="color:#aaa; font-size:8px;">${entry.location.latitude.toFixed(4)}, ${entry.location.longitude.toFixed(4)}</div>`;
+                }
+                
+                entryHtml += `</div></div>`;
+                html += entryHtml;
+            });
+            
+            timelineEl.innerHTML = html || '<div style="color:#888; text-align:center; padding:10px;">Nessun dato storico</div>';
+        }
+
+        function focusHistoryMarker(index) {
+            if (!historyMap || !historyMarkers[index]) return;
+            
+            const marker = historyMarkers[index];
+            const latLng = marker.getLatLng ? marker.getLatLng() : marker;
+            
+            historyMap.setView(latLng, 13);
+            
+            if (marker.openPopup) {
+                marker.openPopup();
+            }
+        }
+
+        async function loadTelemetryHistory() {
+            if (!currentPeer) return;
+            
+            const peerHash = cleanHash(currentPeer.hash);
+            const range = document.getElementById('historyTimeRange')?.value || '24h';
+            
+            try {
+                const response = await fetch(`/api/telemetry/history/${peerHash}?range=${range}`);
+                const history = await response.json();
+                
+                if (!history || history.length === 0) {
+                    document.getElementById('historyMapContainer').innerHTML = '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:#888;">📊 Nessun dato storico disponibile</div>';
+                    document.getElementById('historyTimeline').innerHTML = '<div style="color:#888; text-align:center; padding:10px;">Nessun dato</div>';
+                    return;
+                }
+                
+                if (!historyMap) {
+                    initHistoryMap();
+                } else {
+                    historyMarkers.forEach(m => historyMap.removeLayer(m));
+                    historyMarkers = [];
+                }
+                
+                history.forEach((entry, index) => {
+                    if (entry.location) {
+                        addHistoryMarker(entry, index);
+                    }
+                });
+                
+                if (history[0].location && historyMap) {
+                    historyMap.setView([
+                        history[0].location.latitude,
+                        history[0].location.longitude
+                    ], 10);
+                }
+                
+                renderTimeline(history);
+                
+            } catch (e) {
+                console.error('Errore caricamento storico:', e);
+            }
+        }
+
+        // ============================================
+        // REGISTRAZIONE VOCALE
         // ============================================
         let mediaRecorder = null;
         let audioChunks = [];
@@ -1269,7 +1591,6 @@
                 return;
             }
             
-            // 🔥 CHIEDI ALL'UTENTE CHE CODEC USARE
             const codecChoice = prompt(
                 "Scegli il codec audio:\n" +
                 "1 = Opus (qualità alta, ~24kbps)\n" +
@@ -1280,7 +1601,6 @@
                 "1"
             );
             
-            // Se l'utente cancella o non sceglie, esci
             if (codecChoice === null) return;
             
             let audioCodec = 'opus';
@@ -1291,34 +1611,33 @@
             switch(codecChoice) {
                 case '2': 
                     audioCodec = 'c2_1200';
-                    audioMode = 4;      // mode 4 per 1200bps
+                    audioMode = 4;
                     bitrate = 1200;
                     break;
                 case '3': 
                     audioCodec = 'c2_2400';
-                    audioMode = 8;      // mode 8 per 2400bps
+                    audioMode = 8;
                     bitrate = 2400;
                     break;
                 case '4': 
                     audioCodec = 'c2_3200';
-                    audioMode = 9;      // mode 9 per 3200bps
+                    audioMode = 9;
                     bitrate = 3200;
                     break;
                 case '5': 
                     audioCodec = 'c2_700';
-                    audioMode = 3;      // mode 3 per 700bps
+                    audioMode = 3;
                     bitrate = 700;
                     break;
                 default: 
                     audioCodec = 'opus';
-                    audioMode = 16;     // mode 16 per Opus
+                    audioMode = 16;
                     bitrate = 24000;
             }
             
             try {
                 audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
-                // Configura OpusMediaRecorder
                 window.MediaRecorder = window.OpusMediaRecorder;
                 
                 const workerOptions = {
@@ -1355,7 +1674,6 @@
                         return;
                     }
                     
-                    // Crea blob
                     const audioBlob = new Blob(audioChunks, { type: 'audio/ogg' });
                     
                     console.log(`🎵 Audio registrato: ${formatBytes(audioBlob.size)}`);
@@ -1363,18 +1681,16 @@
                     document.getElementById('voiceRecordingIndicator').style.display = 'block';
                     document.getElementById('voiceRecordingIndicator').innerHTML = '<span>🔄 PREPARAZIONE...</span>';
                     
-                    // 🔥 🔥 🔥 CORREZIONE: ESTENSIONE BASATA SUL MODE, NON SUL NOME!
                     let ext;
                     if (audioMode >= 16) {
-                        ext = 'opus';           // Opus modes (16+)
+                        ext = 'opus';
                     } else {
-                        ext = `c2_${audioMode}`; // Codec2 modes: .c2_4, .c2_8, .c2_9, .c2_3
+                        ext = `c2_${audioMode}`;
                     }
                     
                     const fileName = `voice_${Date.now()}.${ext}`;
                     const file = new File([audioBlob], fileName, { type: 'audio/ogg' });
                     
-                    // 🔥 SALVA I METADATI NEL FILE
                     file.audioCodec = audioCodec;
                     file.audioMode = audioMode;
                     
@@ -1387,7 +1703,6 @@
                         </div>
                     `;
                     
-                    // 🔥 INVIA AUTOMATICAMENTE
                     if (confirm("Inviare messaggio vocale ora?")) {
                         await sendVoiceMessage(file, audioCodec);
                     }
@@ -1420,21 +1735,6 @@
                 alert("Errore microfono: " + e.message);
                 resetVoiceUI(voiceBtn);
             }
-        }
-
-        // Utility per leggere header
-        function readBlobHeader(blob) {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = function(e) {
-                    const arr = new Uint8Array(e.target.result);
-                    const header = Array.from(arr.slice(0, 4))
-                        .map(b => b.toString(16).padStart(2, '0'))
-                        .join(' ');
-                    resolve(header);
-                };
-                reader.readAsArrayBuffer(blob.slice(0, 4));
-            });
         }
 
         function resetVoiceUI(voiceBtn) {
@@ -1494,8 +1794,9 @@
             }
         }
 
-
-        // Modifica la funzione handleFileSelect per supportare audio
+        // ============================================
+        // FUNZIONI FILE
+        // ============================================
         function handleFileSelect() {
             const fileInput = document.getElementById('fileInput');
             if (!fileInput.files) return;
@@ -1509,7 +1810,6 @@
                 else if (file.type.startsWith('audio/')) icon = '🎵';
                 else if (file.type.startsWith('video/')) icon = '🎬';
                 
-                // Se è WAV, offri scelta codec
                 let codecSelector = '';
                 if (file.name.endsWith('.wav')) {
                     codecSelector = `
@@ -1539,858 +1839,6 @@
                 selectedFiles[index].audioCodec = codec;
                 debugLog(`Audio codec set for file ${index}: ${codec}`);
             }
-        }
-
-        // ============================================
-        // API: GESTIONE IDENTITÀ
-        // ============================================
-        async function loadIdentities() {
-            try {
-                debugLog('Caricamento identità...');
-                const r = await fetch('/api/chat/identities');
-                const identities = await r.json();
-                
-                debugLog('Identità ricevute', identities);
-                
-                const select = document.getElementById('identitySelect');
-                
-                if (!identities || identities.length === 0) {
-                    select.innerHTML = '<option value="">❌ Nessuna identità trovata</option>';
-                    return;
-                }
-                
-                let html = '<option value="">📁 Scegli identità...</option>';
-                identities.forEach(id => {
-                    let shortHash = id.hash ? id.hash.replace(/[<>]/g, '').substring(0, 8) : '';
-                    html += `<option value="${id.path}">${id.name} (${shortHash})</option>`;
-                });
-                select.innerHTML = html;
-                
-            } catch (e) {
-                debugLog('Errore caricamento identità', e.message);
-                document.getElementById('identitySelect').innerHTML = '<option value="">❌ Errore caricamento</option>';
-            }
-        }
-
-        async function selectIdentity() {
-            const path = document.getElementById('identitySelect').value;
-            if (!path) return;
-            
-            const btn = document.getElementById('initButton');
-            const status = document.getElementById('initStatus');
-            
-            btn.disabled = true;
-            status.innerHTML = '⏳ Inizializzazione...';
-            
-            try {
-                debugLog('Selezione identità', path);
-                
-                const r = await fetch('/api/chat/identities/select', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({path})
-                });
-                const data = await r.json();
-                
-                debugLog('Risposta select', data);
-                
-                if (data.error) throw new Error(data.error);
-                
-                // SALVA TUTTO, delivery_hash incluso!
-                currentIdentity = {
-                    name: data.identity.name,
-                    path: path,
-                    identity_hash: data.identity.identity_hash,
-                    delivery_hash: data.identity.delivery_hash,
-                    address: data.identity.address
-                };
-                
-                // Se manca delivery_hash, usa identity_hash come fallback
-                if (!currentIdentity.delivery_hash && currentIdentity.identity_hash) {
-                    console.log("⚠️ Delivery hash mancante, uso identity_hash come fallback");
-                    currentIdentity.delivery_hash = currentIdentity.identity_hash;
-                }
-                
-                console.log("✅ Identità caricata:", {
-                    name: currentIdentity.name,
-                    identity: currentIdentity.identity_hash?.substring(0, 16) + '...',
-                    delivery: currentIdentity.delivery_hash?.substring(0, 16) + '...'
-                });
-                
-                updateIdentityDisplay();
-                
-                document.getElementById('connectionStatus').className = 'status online';
-                document.getElementById('initPanel').style.display = 'none';
-                document.getElementById('chatContainer').style.display = 'flex';
-                
-                await loadPeers();
-                peerInterval = setInterval(loadPeers, 10000);
-                pollInterval = setInterval(pollMessages, 2000);
-                progressInterval = setInterval(updateTransferStats, 1000);
-                
-                debugLog('Client avviato', currentIdentity.name);
-                
-            } catch (e) {
-                status.innerHTML = `❌ Errore: ${e.message}`;
-                btn.disabled = false;
-                debugLog('Errore selectIdentity', e.message);
-            }
-        }
-
-        // ============================================
-        // API: GESTIONE PEER
-        // ============================================
-
-        // 🔥 Funzione showPeerTab (già presente ma verifichiamo)
-        async function showPeerTab(tab) {
-            currentPeerTab = tab;
-            
-            // Aggiorna classe active su tutti i tabs
-            const tabs = ['all', 'favorites', 'home', 'mountain', 'world', 'work'];
-            tabs.forEach(t => {
-                const el = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
-                if (el) {
-                    if (t === tab) {
-                        el.classList.add('active');
-                    } else {
-                        el.classList.remove('active');
-                    }
-                }
-            });
-            
-            await loadPeers();
-        }
-
-        // 🔥 Modifica loadPeers per supportare i gruppi
-        async function loadPeers() {
-            try {
-                let url;
-                if (currentPeerTab === 'all') {
-                    url = '/api/chat/peers';
-                } else if (currentPeerTab === 'favorites') {
-                    url = '/api/chat/peers/favorites';
-                } else {
-                    url = `/api/chat/peers/group/${currentPeerTab}`;
-                }
-                
-                const r = await fetch(url);
-                const data = await r.json();
-                peers = Array.isArray(data) ? data : (data.peers || []);
-                
-                debugLog('Peer caricati', { count: peers.length, tab: currentPeerTab });
-                
-                const online = peers.filter(p => p.online).length;
-                let totalHops = 0;
-                let validHopsCount = 0;
-                
-                peers.forEach(p => {
-                    if (p.hops !== undefined && p.hops !== null) {
-                        const hopsNum = Number(p.hops);
-                        if (!isNaN(hopsNum) && isFinite(hopsNum) && hopsNum >= 0 && hopsNum < 100) {
-                            totalHops += hopsNum;
-                            validHopsCount++;
-                        }
-                    }
-                });
-                
-                const avgHops = validHopsCount > 0 ? totalHops / validHopsCount : 0;
-                
-                document.getElementById('onlineCount').textContent = online;
-                document.getElementById('avgHops').textContent = avgHops.toFixed(1);
-                
-                sortPeers();
-                renderPeerList();
-                document.getElementById('peerCountDisplay').textContent = peers.length;
-                document.getElementById('peerCount').textContent = peers.length;
-                
-                if (peers.length > 0 && !currentPeer) {
-                    const defaultPeer = peers.find(p => p.hash && p.hash.includes('04511923b68ae34e'));
-                    if (defaultPeer) {
-                        await selectPeer(defaultPeer.hash);
-                    } else {
-                        const onlinePeer = peers.find(p => p.online);
-                        if (onlinePeer) {
-                            await selectPeer(onlinePeer.hash);
-                        } else {
-                            await selectPeer(peers[0].hash);
-                        }
-                    }
-                }
-            } catch (e) {
-                debugLog('Errore peers', e.message);
-            }
-        }
-
-        // 🔥 Esponi nuove funzioni
-        window.toggleGroup = toggleGroup;
-        window.showPeerTab = showPeerTab;
-
-
-
-        function sortPeers() {
-            if (sortMode === 'time') {
-                peers.sort((a, b) => {
-                    const timeA = a.last_seen || 0;
-                    const timeB = b.last_seen || 0;
-                    return timeOrder === 'desc' ? timeB - timeA : timeA - timeB;
-                });
-            } else if (sortMode === 'hops') {
-                peers.sort((a, b) => {
-                    const hopsA = a.hops !== undefined ? parseInt(a.hops) : 999;
-                    const hopsB = b.hops !== undefined ? parseInt(b.hops) : 999;
-                    return hopsOrder === 'asc' ? hopsA - hopsB : hopsB - hopsA;
-                });
-            } else if (sortMode === 'signal') {
-                peers.sort((a, b) => {
-                    let scoreA = 0, scoreB = 0, countA = 0, countB = 0;
-                    
-                    if (a.rssi !== undefined && !isNaN(a.rssi)) {
-                        scoreA += (a.rssi + 100) * 0.6;
-                        countA++;
-                    }
-                    if (a.snr !== undefined && !isNaN(a.snr)) {
-                        scoreA += a.snr * 0.4;
-                        countA++;
-                    }
-                    if (a.quality !== undefined && !isNaN(a.quality)) {
-                        scoreA += parseFloat(a.quality);
-                        countA++;
-                    }
-                    
-                    if (b.rssi !== undefined && !isNaN(b.rssi)) {
-                        scoreB += (b.rssi + 100) * 0.6;
-                        countB++;
-                    }
-                    if (b.snr !== undefined && !isNaN(b.snr)) {
-                        scoreB += b.snr * 0.4;
-                        countB++;
-                    }
-                    if (b.quality !== undefined && !isNaN(b.quality)) {
-                        scoreB += parseFloat(b.quality);
-                        countB++;
-                    }
-                    
-                    if (countA > 0) scoreA = scoreA / countA;
-                    if (countB > 0) scoreB = scoreB / countB;
-                    
-                    if (countA === 0) scoreA = -999;
-                    if (countB === 0) scoreB = -999;
-                    
-                    return signalOrder === 'desc' ? scoreB - scoreA : scoreA - scoreB;
-                });
-            }
-        }
-
-        function setSortMode(mode) {
-            if (mode === 'time') {
-                if (sortMode === 'time') {
-                    timeOrder = timeOrder === 'desc' ? 'asc' : 'desc';
-                } else {
-                    sortMode = 'time';
-                }
-                document.getElementById('timeIcon').textContent = timeOrder === 'desc' ? '⬇️' : '⬆️';
-            } else if (mode === 'hops') {
-                if (sortMode === 'hops') {
-                    hopsOrder = hopsOrder === 'asc' ? 'desc' : 'asc';
-                } else {
-                    sortMode = 'hops';
-                }
-                document.getElementById('hopsIcon').textContent = hopsOrder === 'asc' ? '⬆️' : '⬇️';
-            } else if (mode === 'signal') {
-                if (sortMode === 'signal') {
-                    signalOrder = signalOrder === 'desc' ? 'asc' : 'desc';
-                } else {
-                    sortMode = 'signal';
-                }
-                document.getElementById('signalIcon').textContent = signalOrder === 'desc' ? '⬇️' : '⬆️';
-            }
-            
-            document.getElementById('sortTimeBtn').classList.toggle('active', sortMode === 'time');
-            document.getElementById('sortHopsBtn').classList.toggle('active', sortMode === 'hops');
-            document.getElementById('sortSignalBtn').classList.toggle('active', sortMode === 'signal');
-            
-            sortPeers();
-            renderPeerList();
-            debugLog('Ordinamento', { mode: sortMode, timeOrder, hopsOrder, signalOrder });
-        }
-
-
-        // 🔥 NUOVA: Funzione toggle favorite
-        async function toggleFavorite(identityHash, event) {
-            event.stopPropagation(); // Evita selezione peer
-            
-            try {
-                const r = await fetch(`/api/identities/${identityHash}/favorite`, {
-                    method: 'POST'
-                });
-                const data = await r.json();
-                
-                if (data.success) {
-                    // Se siamo nel tab preferiti e abbiamo rimosso il preferito, ricarica
-                    if (currentPeerTab === 'favorites' && !data.favorite) {
-                        loadPeers();
-                    } else {
-                        // Altrimenti aggiorna solo lo stato visivo
-                        peers = peers.map(p => {
-                            if (p.identity_hash === identityHash) {
-                                p.favorite = data.favorite;
-                            }
-                            return p;
-                        });
-                        renderPeerList();
-                    }
-                    
-                    showNotification(data.favorite ? '⭐ Aggiunto ai preferiti' : '📋 Rimosso dai preferiti', 'success');
-                }
-            } catch (e) {
-                debugLog('Errore toggle favorite', e);
-            }
-        }
-
-        // 🔥 Dizionario gruppi
-        const GROUP_ICONS = {
-            'home': '🏠',
-            'mountain': '🏔️',
-            'world': '🌍',
-            'work': '🔧'
-        };
-
-        const GROUP_COLORS = {
-            'home': '#88ff88',
-            'mountain': '#88aaff',
-            'world': '#88ccff',
-            'work': '#ffaa88'
-        };
-
-        
-        function renderPeerList() {
-            const search = document.getElementById('peerSearch').value.toLowerCase();
-            let filtered = peers.filter(p => 
-                (p.display_name && p.display_name.toLowerCase().includes(search)) ||
-                (p.hash && p.hash.toLowerCase().includes(search))
-            );
-            
-            document.getElementById('peerCount').textContent = filtered.length;
-            
-            if (filtered.length === 0) {
-                document.getElementById('peerList').innerHTML = '<div class="lxmf-no-peer">Nessun peer trovato</div>';
-                return;
-            }
-            
-            let html = '';
-            filtered.forEach(peer => {
-                const peerHash = cleanHash(peer.hash);
-                const isSelected = currentPeer && currentPeer.hash && 
-                    cleanHash(currentPeer.hash) === peerHash;
-                const onlineClass = peer.online ? 'online' : 'offline';
-                const timeAgo = getTimeAgo(peer.last_seen);
-                const hasUnread = unreadPeers.has(peerHash);
-                
-                let displayName = cleanDisplayName(peer.display_name || 'Anonimo');
-                if (displayName.length > 30) displayName = displayName.substring(0, 27) + '...';
-                
-                const hashDisplay = peer.hash ? peer.hash.substring(0, 24) + '...' : 'Hash non disponibile';
-                
-                // 🔥 Stellina preferiti
-                const starClass = peer.favorite ? 'star-icon active' : 'star-icon';
-                const starHtml = `<span class="${starClass}" onclick="toggleFavorite('${peer.identity_hash || peer.hash}', event)">⭐</span>`;
-                
-                // 🔥 Icone gruppi attivi (con colori)
-                const groupsActive = (peer.groups || []).map(g => 
-                    `<span class="group-indicator ${g}" title="${g}">${GROUP_ICONS[g] || ''}</span>`
-                ).join('');
-                
-                // 🔥 Determina classi attive per i pulsanti gruppo
-                const isHomeActive = peer.groups?.includes('home') ? 'active-home' : '';
-                const isMountainActive = peer.groups?.includes('mountain') ? 'active-mountain' : '';
-                const isWorldActive = peer.groups?.includes('world') ? 'active-world' : '';
-                const isWorkActive = peer.groups?.includes('work') ? 'active-work' : '';
-                
-                // 🔥 Stili per i pulsanti (colore se attivo)
-                const homeStyle = peer.groups?.includes('home') ? `color: ${GROUP_COLORS.home};` : '';
-                const mountainStyle = peer.groups?.includes('mountain') ? `color: ${GROUP_COLORS.mountain};` : '';
-                const worldStyle = peer.groups?.includes('world') ? `color: ${GROUP_COLORS.world};` : '';
-                const workStyle = peer.groups?.includes('work') ? `color: ${GROUP_COLORS.work};` : '';
-                
-                // 🔥 Menu gruppi con classi condizionali
-                const groupsMenu = `
-                    <div class="peer-groups-menu" onclick="event.stopPropagation()">
-                        <button class="group-btn ${isHomeActive}" 
-                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'home', event)" 
-                            title="Casa" style="${homeStyle}">🏠</button>
-                        <button class="group-btn ${isMountainActive}" 
-                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'mountain', event)" 
-                            title="Montagna" style="${mountainStyle}">🏔️</button>
-                        <button class="group-btn ${isWorldActive}" 
-                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'world', event)" 
-                            title="Mondo" style="${worldStyle}">🌍</button>
-                        <button class="group-btn ${isWorkActive}" 
-                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'work', event)" 
-                            title="Lavoro" style="${workStyle}">🔧</button>
-                    </div>
-                `;
-                
-                // Icona aspetto
-                const appearanceIcon = peer.telemetry?.appearance?.icon || 'account';
-                
-                // Signal HTML
-                let signalHtml = '';
-                if (peer.rssi !== undefined || peer.snr !== undefined || peer.quality !== undefined) {
-                    let parts = [];
-                    if (peer.rssi !== undefined && !isNaN(peer.rssi)) {
-                        const rssiClass = getSignalClass(peer.rssi, 'rssi');
-                        parts.push(`<span class="${rssiClass}">📶 ${Number(peer.rssi).toFixed(1)}</span>`);
-                    }
-                    if (peer.snr !== undefined && !isNaN(peer.snr)) {
-                        const snrClass = getSignalClass(peer.snr, 'snr');
-                        parts.push(`<span class="${snrClass}">📊 ${Number(peer.snr).toFixed(1)}</span>`);
-                    }
-                    if (peer.quality !== undefined && !isNaN(peer.quality)) {
-                        parts.push(`⚡ ${Number(peer.quality).toFixed(1)}`);
-                    }
-                    signalHtml = `<div class="lxmf-peer-signal">${parts.join(' ')}</div>`;
-                }
-                
-                const hopsHtml = peer.hops ? 
-                    `<span class="lxmf-peer-hops">🏓 ${peer.hops} hop</span>` : 
-                    '<span class="lxmf-peer-hops">🏓 ? hop</span>';
-                
-                html += `
-                    <div class="lxmf-peer-item ${onlineClass} ${isSelected ? 'selected' : ''} ${hasUnread ? 'unread' : ''}" 
-                         onclick="selectPeer('${peer.hash || ''}')">
-                        <div class="lxmf-peer-header">
-                            ${starHtml}
-                            <span class="mdi mdi-${appearanceIcon}"></span>
-                            <span class="lxmf-peer-name">${escapeHtml(displayName)}</span>
-                            <span class="peer-groups-active">${groupsActive}</span>
-                            ${hasUnread ? '<span class="lxmf-peer-unread">●</span>' : ''}
-                        </div>
-                        ${groupsMenu}
-                        <div class="lxmf-peer-hash">${hashDisplay}</div>
-                        ${signalHtml}
-                        <div class="lxmf-peer-footer">
-                            <span class="lxmf-peer-time">${timeAgo}</span>
-                            <span class="lxmf-peer-status">${peer.online ? 'ONLINE' : 'OFFLINE'}</span>
-                            ${hopsHtml}
-                        </div>
-                    </div>
-                `;
-            });
-            
-            document.getElementById('peerList').innerHTML = html;
-        }
-
-        // 🔥 Funzione toggle gruppo CORRETTA
-        async function toggleGroup(identityHash, group, event) {
-            event.stopPropagation();
-            
-            try {
-                const r = await fetch(`/api/identities/${identityHash}/group/${group}`, {
-                    method: 'POST'
-                });
-                const data = await r.json();
-                
-                if (data.success) {
-                    // Aggiorna i peer in memoria
-                    peers = peers.map(p => {
-                        if (p.identity_hash === identityHash) {
-                            p.groups = data.groups;
-                        }
-                        return p;
-                    });
-                    
-                    // Se c'è il peer corrente, aggiorna anche quello
-                    if (currentPeer && currentPeer.identity_hash === identityHash) {
-                        currentPeer.groups = data.groups;
-                    }
-                    
-                    // 🔥 FORZA IL RE-RENDER IMMEDIATO
-                    renderPeerList();
-                    
-                    // 🔥 Se siamo nel tab del gruppo che abbiamo appena modificato, 
-                    //    dobbiamo ricaricare i peer perché la lista potrebbe essere cambiata
-                    if (currentPeerTab === group) {
-                        await loadPeers(); // Ricarica dal server
-                    } else {
-                        // Altrimenti aggiorna solo la visuale
-                        renderPeerList();
-                    }
-                    
-                    showNotification(
-                        data.added ? `✅ Aggiunto a ${GROUP_ICONS[group]}` : `❌ Rimosso da ${GROUP_ICONS[group]}`, 
-                        'success'
-                    );
-                }
-            } catch (e) {
-                debugLog('Errore toggle group', e);
-            }
-        }
-
-
-        function clearSearch() {
-            document.getElementById('peerSearch').value = '';
-            renderPeerList();
-        }
-
-        function refreshPeers() {
-            loadPeers();
-        }
-
-        // ============================================
-        // API: GESTIONE MESSAGGI
-        // ============================================
-        async function pollMessages() {
-            if (!currentPeer) return;
-            
-            try {
-                const peerHash = cleanHash(currentPeer.hash);
-                debugLog('Poll messaggi per', peerHash.substring(0,8));
-                
-                const r = await fetch(`/api/chat/messages?peer=${encodeURIComponent(peerHash)}`);
-                const newMessages = await r.json();
-                
-                debugLog('Ricevuti messaggi', { count: newMessages?.length, primo: newMessages?.[0]?.content?.substring(0,30) });
-                
-                // Usa JSON.stringify per il confronto
-                const newMessagesJson = JSON.stringify(newMessages);
-                
-                if (newMessagesJson !== lastMessagesJson) {
-                    lastMessagesJson = newMessagesJson;
-                    
-                    // Sostituisci completamente i messaggi
-                    messages = newMessages;
-                    
-                    messageCache.set(peerHash, messages.length);
-                    
-                    renderMessages();
-                    
-                    // Aggiungi al monitor e salva telemetria (senza duplicati)
-                    if (messages.length > 0) {
-                        messages.forEach(msg => {
-                            if (msg.direction === 'incoming') {
-                                const packet = {
-                                    timestamp: msg.timestamp,
-                                    direction: msg.direction,
-                                    peer: msg.from || msg.to,
-                                    content: msg.content,
-                                    rssi: msg.rssi,
-                                    snr: msg.snr,
-                                    q: msg.q,
-                                    battery: msg.battery,
-                                    location: msg.location,
-                                    appearance: msg.appearance,
-                                    telemetry: msg.telemetry,
-                                    raw_hex: msg.raw_hex,
-                                    raw_ascii: msg.raw_ascii,
-                                    raw_size: msg.raw_size
-                                };
-                                
-                                addMonitorPacket(packet);
-                                
-                                // Estrai e salva telemetria
-                                const telemetryData = {
-                                    timestamp: msg.timestamp,
-                                    battery: msg.battery,
-                                    location: msg.location,
-                                    appearance: msg.appearance,
-                                    information: msg.information
-                                };
-                                
-                                if (msg.telemetry) {
-                                    if (msg.telemetry.battery) telemetryData.battery = msg.telemetry.battery;
-                                    if (msg.telemetry.location) telemetryData.location = msg.telemetry.location;
-                                    if (msg.telemetry.appearance) telemetryData.appearance = msg.telemetry.appearance;
-                                    if (msg.telemetry.information) telemetryData.information = msg.telemetry.information;
-                                }
-                                
-                                saveTelemetryToDatabase(cleanHash(msg.from || msg.to), telemetryData);
-                            }
-                        });
-                    }
-                    
-                    activeTransfers.clear();
-                    messages.forEach(msg => {
-                        if (msg.direction === 'outgoing' && msg.status === 'sending' && msg.progress < 100) {
-                            activeTransfers.set(msg.id || msg.timestamp, msg);
-                        }
-                        if (msg.is_receiving) {
-                            activeTransfers.set(msg.id || msg.timestamp, msg);
-                        }
-                    });
-                    
-                    // Aggiorna dashboard se monitor attivo
-                    if (monitorActive) {
-                        renderTelemetryDashboard();
-                    }
-                }
-            } catch (e) {
-                debugLog('Errore poll', e.message);
-            }
-        }
-
-        // ============================================
-        // FUNZIONE SELEZIONE PEER (UNA SOLA VERSIONE)
-        // ============================================
-        async function selectPeer(hash) {
-            if (!hash) return;
-            
-            const peerHash = cleanHash(hash);
-            currentPeer = peers.find(p => p.hash && cleanHash(p.hash) === peerHash);
-            
-            if (currentPeer) {
-                unreadPeers.delete(peerHash);
-                
-                debugLog('Peer selezionato', { name: currentPeer.display_name, hash: peerHash.substring(0,8) });
-                
-                let displayName = cleanDisplayName(currentPeer.display_name || 'Anonimo');
-                if (displayName.length > 20) {
-                    displayName = displayName.substring(0, 17) + '...';
-                }
-                
-                // 🔥 Aggiungi hops dopo il nome
-                let hopsDisplay = '';
-                if (currentPeer.hops !== undefined && currentPeer.hops !== null) {
-                    const hopsNum = Number(currentPeer.hops);
-                    if (!isNaN(hopsNum) && isFinite(hopsNum) && hopsNum >= 0 && hopsNum < 100) {
-                        hopsDisplay = ` <span style="color:#888; font-size:0.9em;">| 🏓 ${hopsNum} hop</span>`;
-                    }
-                }
-                
-                document.getElementById('selectedPeerDisplay').innerHTML = `📨 ${escapeHtml(displayName)}${hopsDisplay}`;
-                
-                let signalHtml = '';
-                if (currentPeer.rssi !== undefined || currentPeer.snr !== undefined || currentPeer.quality !== undefined) {
-                    let parts = [];
-                    if (currentPeer.rssi !== undefined && !isNaN(currentPeer.rssi)) {
-                        const rssiClass = getSignalClass(currentPeer.rssi, 'rssi');
-                        parts.push(`<span class="${rssiClass}">RSSI: ${Number(currentPeer.rssi).toFixed(1)}</span>`);
-                    }
-                    if (currentPeer.snr !== undefined && !isNaN(currentPeer.snr)) {
-                        const snrClass = getSignalClass(currentPeer.snr, 'snr');
-                        parts.push(`<span class="${snrClass}">SNR: ${Number(currentPeer.snr).toFixed(1)}</span>`);
-                    }
-                    if (currentPeer.quality !== undefined && !isNaN(currentPeer.quality)) {
-                        parts.push(`Q: ${Number(currentPeer.quality).toFixed(1)}`);
-                    }
-                    signalHtml = parts.join(' | ');
-                }
-                document.getElementById('selectedPeerSignal').innerHTML = signalHtml;
-                
-                // 🔥 ABILITA TUTTI I PULSANTI
-                document.getElementById('messageInput').disabled = false;
-                document.getElementById('sendButton').disabled = false;
-                document.getElementById('fileBtn').disabled = false;
-                document.getElementById('voiceBtn').disabled = false;
-                
-                document.getElementById('messageInput').focus();
-                
-                // Resetta lastMessagesJson per forzare il refresh
-                lastMessagesJson = '';
-                
-                await pollMessages();
-                
-                if (monitorActive) {
-                    renderTelemetryDashboard();
-                    renderMonitorPackets();
-                    document.getElementById('packetCount').textContent = (incomingPackets[peerHash] || []).length;
-                }
-                
-                renderPeerList();
-            }
-        }
-
-        // ============================================
-        // API: INVIO MESSAGGI
-        // ============================================
-        async function sendMessage() {
-            if (!currentPeer) return;
-            
-            const input = document.getElementById('messageInput');
-            const content = input.value.trim();
-            
-            if (!content && selectedFiles.length === 0) return;
-            
-            input.disabled = true;
-            document.getElementById('sendButton').disabled = true;
-            document.getElementById('voiceBtn').disabled = true;
-            
-            try {
-                debugLog('Invio messaggio', { content: content.substring(0,30), files: selectedFiles.length });
-                
-                let response;
-                
-                if (selectedFiles.length > 0) {
-                    const file = selectedFiles[0];
-                    const formData = new FormData();
-                    formData.append('destination', currentPeer.hash);
-                    formData.append('file', file);
-                    if (content) formData.append('description', content);
-                    
-                    // Aggiungi audio_codec se presente
-                    if (file.audioCodec) {
-                        formData.append('audio_codec', file.audioCodec);
-                    }
-                    
-                    response = await fetch('/api/chat/send-file', {
-                        method: 'POST',
-                        body: formData
-                    });
-                } else {
-                    response = await fetch('/api/chat/send', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            destination: currentPeer.hash,
-                            content: content
-                        })
-                    });
-                }
-                
-                const data = await response.json();
-                debugLog('Risposta invio', data);
-                
-                if (data.error) {
-                    alert(`❌ Errore: ${data.error}`);
-                } else if (data.success) {
-                    input.value = '';
-                    selectedFiles = [];
-                    document.getElementById('filePreview').innerHTML = '';
-                    document.getElementById('fileInput').value = '';
-                    
-                    // Forza refresh immediato
-                    lastMessagesJson = '';
-                    setTimeout(() => pollMessages(), 500);
-                }
-            } catch (e) {
-                debugLog('Errore invio', e.message);
-                alert(`❌ Errore: ${e.message}`);
-            } finally {
-                input.disabled = false;
-                document.getElementById('sendButton').disabled = false;
-                document.getElementById('voiceBtn').disabled = false;
-                input.focus();
-            }
-        }
-
-        // ============================================
-        // FUNZIONE RIPROVA MESSAGGIO FALLITO (USANDO TIMESTAMP)
-        // ============================================
-        async function retryMessage(timestamp) {
-            if (!currentPeer) return;
-            
-            // Trova il messaggio fallito per timestamp
-            const failedMsg = messages.find(m => 
-                m.timestamp === timestamp && 
-                m.direction === 'outgoing' && 
-                m.status === 'failed'
-            );
-            
-            if (!failedMsg || !failedMsg.content) {
-                debugLog('Messaggio fallito non trovato per timestamp', timestamp);
-                return;
-            }
-            
-            debugLog('Riprova messaggio', { timestamp, content: failedMsg.content.substring(0,30) });
-            
-            const input = document.getElementById('messageInput');
-            const sendBtn = document.getElementById('sendButton');
-            
-            input.disabled = true;
-            sendBtn.disabled = true;
-            
-            try {
-                const response = await fetch('/api/chat/send', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        destination: currentPeer.hash,
-                        content: failedMsg.content
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.error) {
-                    alert(`❌ Errore: ${data.error}`);
-                } else if (data.success) {
-                    showNotification('✅ Messaggio reinviato!', 'success');
-                    // Forza refresh
-                    lastMessagesJson = '';
-                    setTimeout(() => pollMessages(), 500);
-                }
-            } catch (e) {
-                debugLog('Errore riprova', e.message);
-                alert(`❌ Errore: ${e.message}`);
-            } finally {
-                input.disabled = false;
-                sendBtn.disabled = false;
-                input.focus();
-            }
-        }
-
-        function showNotification(message, type = 'info') {
-            let notification = document.getElementById('tempNotification');
-            if (!notification) {
-                notification = document.createElement('div');
-                notification.id = 'tempNotification';
-                notification.style.cssText = `
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    padding: 12px 24px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    z-index: 9999;
-                    animation: slideIn 0.3s ease;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                `;
-                document.body.appendChild(notification);
-            }
-            
-            const colors = {
-                success: { bg: '#1e3a1e', border: '#88ff88', color: '#88ff88' },
-                error: { bg: '#3a1e1e', border: '#ff8888', color: '#ff8888' },
-                info: { bg: '#1e3a5f', border: '#88aaff', color: '#88aaff' }
-            };
-            
-            const style = colors[type] || colors.info;
-            notification.style.backgroundColor = style.bg;
-            notification.style.border = `1px solid ${style.border}`;
-            notification.style.color = style.color;
-            notification.innerHTML = message;
-            notification.style.display = 'block';
-            
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 3000);
-        }
-
-        // ============================================
-        // FUNZIONI PER FILE
-        // ============================================
-        function handleFileSelect() {
-            const fileInput = document.getElementById('fileInput');
-            if (!fileInput.files) return;
-            
-            selectedFiles = Array.from(fileInput.files);
-            
-            let previewHtml = '';
-            selectedFiles.forEach((file, index) => {
-                let icon = '📎';
-                if (file.type.startsWith('image/')) icon = '🖼️';
-                else if (file.type.startsWith('audio/')) icon = '🎵';
-                else if (file.type.startsWith('video/')) icon = '🎬';
-                
-                previewHtml += `
-                    <div class="lxmf-file-tag">
-                        <span>${icon} ${escapeHtml(file.name)} (${formatBytes(file.size)})</span>
-                        <span class="remove" onclick="removeFile(${index})">✕</span>
-                    </div>
-                `;
-            });
-            
-            document.getElementById('filePreview').innerHTML = previewHtml;
-            debugLog('File selezionati', selectedFiles.length);
         }
 
         function removeFile(index) {
@@ -2435,7 +1883,6 @@
                     return;
                 }
                 
-                // Crea modal per visualizzare RAW
                 const modalHtml = `
                     <div id="rawModal-${timestamp}" class="raw-modal" onclick="closeRawModal(${timestamp})">
                         <div class="raw-modal-content" onclick="event.stopPropagation()">
@@ -2461,11 +1908,9 @@
                     </div>
                 `;
                 
-                // Rimuovi modal precedente se esiste
                 const oldModal = document.getElementById(`rawModal-${timestamp}`);
                 if (oldModal) oldModal.remove();
                 
-                // Aggiungi al DOM
                 document.body.insertAdjacentHTML('beforeend', modalHtml);
                 
             } catch (e) {
@@ -2488,7 +1933,7 @@
         }
 
         // ============================================
-        // RENDERING MESSAGGI - CON PULSANTI RAW INDIVIDUALI
+        // RENDERING MESSAGGI
         // ============================================
         function renderMessages() {
             if (!currentPeer) {
@@ -2534,14 +1979,12 @@
                         statusIcon = '<span class="lxmf-message-status delivered" title="Consegnato">✓✓</span>';
                     } else if (msg.status === 'failed') {
                         statusIcon = '<span class="lxmf-message-status failed" title="Fallito">✗</span>';
-                        // 🔥 PULSANTE RIPROVA CON TIMESTAMP
                         retryButton = `<button class="retry-button" onclick="retryMessage(${msg.timestamp})" title="Riprova invio">↻</button>`;
                     } else if (msg.status === 'sending') {
                         statusIcon = '<span class="lxmf-message-status sending" title="Invio in corso">⋯</span>';
                     }
                 }
                 
-                // 🔥 PULSANTE RAW INDIVIDUALE PER OGNI MESSAGGIO CON LXMF_FILE
                 if (msg.lxmf_file) {
                     rawButton = `<button class="msg-raw-btn" onclick="showMessageRaw('${peerHash}', '${msg.lxmf_file}', ${msg.timestamp})" title="Mostra RAW completo">🔬</button>`;
                 }
@@ -2636,14 +2079,11 @@
                                 </div>
                             `;
                         } else if (att.type && att.type.startsWith('audio') && fileUrl) {
-                            // 🔥 DETERMINA ICONA E INFO CODEC
                             const audioMode = att.audio_mode || 0;
-                            const audioCodec = att.audio_codec || 'audio';
                             
                             let icon = "🎵";
                             let codecLabel = "Opus";
                             
-                            // Codec2 modes (1-9)
                             if (audioMode >= 1 && audioMode <= 9) {
                                 icon = "🎤";
                                 const bitrate = {
@@ -2651,9 +2091,7 @@
                                     5: "1300", 6: "1400", 7: "1600", 8: "2400", 9: "3200"
                                 }[audioMode] || audioMode;
                                 codecLabel = `Codec2 ${bitrate}bps`;
-                            }
-                            // Opus modes (16-25)
-                            else if (audioMode >= 16) {
+                            } else if (audioMode >= 16) {
                                 const opusQuality = {
                                     16: "Ogg", 17: "LBW", 18: "MBW", 19: "PTT",
                                     20: "RT HDX", 21: "RT FDX", 22: "Standard",
@@ -2690,7 +2128,6 @@
                     });
                 }
                 
-                // RAW VIEW - Carica on-demand (view generale)
                 let rawHtml = '';
                 if (rawViewActive && msg.lxmf_file) {
                     const rawId = `raw-${msg.timestamp}-${Date.now()}`;
@@ -2702,7 +2139,6 @@
                     setTimeout(() => loadRawData(msg, peerHash, rawId), 50);
                 }
                 
-                // Usa il formatter per il contenuto
                 const contentHtml = formatMessageContent(msg);
                 
                 html += `
@@ -2728,7 +2164,6 @@
             document.getElementById('messageList').scrollTop = document.getElementById('messageList').scrollHeight;
         }
 
-        // Funzione per caricare i dati raw dal file .lxb (per view generale)
         async function loadRawData(msg, peerHash, rawId) {
             if (!msg.lxmf_file) return;
             
@@ -2852,17 +2287,1015 @@
         }
 
         // ============================================
-        // FUNZIONE DEBUG IDENTITY
+        // FUNZIONI CONFIGURAZIONE
         // ============================================
-        function debugIdentity() {
-            console.log("🔍 DEBUG IDENTITY:", currentIdentity);
-            if (currentIdentity) {
-                console.log("   name:", currentIdentity.name);
-                console.log("   identity_hash:", currentIdentity.identity_hash);
-                console.log("   delivery_hash:", currentIdentity.delivery_hash);
-                console.log("   address:", currentIdentity.address);
+        async function loadConfig() {
+            try {
+                const r = await fetch('/api/config');
+                currentConfig = await r.json();
+                
+                document.getElementById('propagationNode').value = currentConfig.propagation_node || '';
+                document.getElementById('deliveryMode').value = currentConfig.delivery_mode || 'direct';
+                document.getElementById('maxRetries').value = currentConfig.max_retries || 3;
+                document.getElementById('preferredAudio').value = currentConfig.preferred_audio || 'opus';
+                document.getElementById('saveSent').checked = currentConfig.save_sent !== false;
+                document.getElementById('autoRetry').checked = currentConfig.auto_retry !== false;
+                document.getElementById('stampCost').value = currentConfig.stamp_cost === null ? '' : currentConfig.stamp_cost;
+                document.getElementById('propagationStampCost').value = currentConfig.propagation_stamp_cost || 16;
+                document.getElementById('acceptInvalidStamps').checked = currentConfig.accept_invalid_stamps || false;
+                document.getElementById('maxStampRetries').value = currentConfig.max_stamp_retries || 3;
+                
+                toggleRetriesSection();
+                
+                showConfigStatus('✅ Configurazione caricata', 'success');
+            } catch (e) {
+                showConfigStatus('❌ Errore caricamento', 'error');
+                debugLog('Errore loadConfig', e);
+            }
+        }
+
+        async function saveConfig() {
+            const config = {
+                propagation_node: document.getElementById('propagationNode').value.trim() || null,
+                delivery_mode: document.getElementById('deliveryMode').value,
+                max_retries: parseInt(document.getElementById('maxRetries').value),
+                preferred_audio: document.getElementById('preferredAudio').value,
+                save_sent: document.getElementById('saveSent').checked,
+                auto_retry: document.getElementById('autoRetry').checked,
+                stamp_cost: document.getElementById('stampCost').value === '' ? null : parseInt(document.getElementById('stampCost').value),
+                propagation_stamp_cost: parseInt(document.getElementById('propagationStampCost').value),
+                accept_invalid_stamps: document.getElementById('acceptInvalidStamps').checked,
+                max_stamp_retries: parseInt(document.getElementById('maxStampRetries').value)
+            };
+            
+            if (config.propagation_node && config.propagation_node.length !== 64 && config.propagation_node.length !== 32) {
+                showConfigStatus('⚠️ Hash propagation non valido (deve essere 32 o 64 caratteri)', 'warning');
+                return;
+            }
+            
+            try {
+                const r = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                const data = await r.json();
+                
+                if (data.success) {
+                    currentConfig = data.config;
+                    showConfigStatus('✅ Configurazione salvata!', 'success');
+                    toggleRetriesSection();
+                } else {
+                    showConfigStatus('❌ Errore salvataggio', 'error');
+                }
+            } catch (e) {
+                showConfigStatus('❌ Errore di connessione', 'error');
+                debugLog('Errore saveConfig', e);
+            }
+        }
+
+        function toggleRetriesSection() {
+            const mode = document.getElementById('deliveryMode').value;
+            const retriesSection = document.getElementById('retriesSection');
+            
+            if (mode === 'hybrid') {
+                retriesSection.style.display = 'block';
             } else {
-                console.log("   currentIdentity è NULL");
+                retriesSection.style.display = 'none';
+            }
+        }
+
+        function showConfigStatus(message, type) {
+            const status = document.getElementById('configStatus');
+            status.innerHTML = message;
+            status.style.color = type === 'success' ? '#88ff88' : (type === 'error' ? '#ff8888' : '#ffaa00');
+            setTimeout(() => {
+                status.innerHTML = '';
+            }, 3000);
+        }
+
+        // ============================================
+        // FUNZIONI PROPAGATION SYNC
+        // ============================================
+        async function syncPropagationNode() {
+            if (isSyncing) {
+                showNotification('Sincronizzazione già in corso...', 'info');
+                return;
+            }
+            
+            const btn = document.getElementById('propSyncBtn');
+            btn.classList.add('syncing');
+            btn.innerHTML = '🛰️ SYNC...';
+            isSyncing = true;
+            
+            try {
+                showNotification('📡 Richiesta sincronizzazione propagation node...', 'info');
+                
+                const r = await fetch('/api/lxmf/propagation/sync', {
+                    method: 'POST'
+                });
+                const data = await r.json();
+                
+                if (data.success) {
+                    showNotification('✅ Sincronizzazione avviata', 'success');
+                    startSyncProgressMonitoring();
+                } else {
+                    showNotification(`❌ Errore: ${data.error || 'Sconosciuto'}`, 'error');
+                    resetSyncButton();
+                }
+            } catch (e) {
+                showNotification('❌ Errore di connessione', 'error');
+                console.error('Sync error:', e);
+                resetSyncButton();
+            }
+        }
+
+        function startSyncProgressMonitoring() {
+            if (syncInterval) clearInterval(syncInterval);
+            
+            syncInterval = setInterval(async () => {
+                try {
+                    const r = await fetch('/api/lxmf/propagation/status');
+                    const data = await r.json();
+                    
+                    if (data.status) {
+                        updateSyncProgress(data.status);
+                        
+                        if (data.status.state === 'complete' || 
+                            data.status.state === 'failed' ||
+                            data.status.state === 'no_path') {
+                            
+                            clearInterval(syncInterval);
+                            syncInterval = null;
+                            resetSyncButton();
+                            
+                            if (data.status.state === 'complete') {
+                                showNotification(`✅ Ricevuti ${data.status.messages_received || 0} messaggi`, 'success');
+                                if (currentPeer) {
+                                    lastMessagesJson = '';
+                                    pollMessages();
+                                }
+                            } else if (data.status.state === 'failed') {
+                                showNotification('❌ Sincronizzazione fallita', 'error');
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Status error:', e);
+                }
+            }, 1000);
+        }
+
+        function updateSyncProgress(status) {
+            const btn = document.getElementById('propSyncBtn');
+            
+            const states = {
+                'idle': '🛰️ SYNC',
+                'path_requested': '🛰️ Cercando node...',
+                'link_establishing': '🛰️ Connessione...',
+                'link_established': '🛰️ Connesso',
+                'request_sent': '🛰️ Richiesta...',
+                'receiving': `🛰️ Ricevendo ${status.progress?.toFixed(0) || 0}%`,
+                'complete': '🛰️ COMPLETATO',
+                'failed': '🛰️ FALLITO'
+            };
+            
+            btn.innerHTML = states[status.state] || '🛰️ SYNC';
+            
+            const syncProgress = document.getElementById('syncProgress');
+            if (syncProgress) {
+                syncProgress.innerHTML = `📡 Propagation: ${status.state} ${status.progress ? `(${status.progress.toFixed(0)}%)` : ''}`;
+            }
+        }
+
+        function resetSyncButton() {
+            const btn = document.getElementById('propSyncBtn');
+            btn.classList.remove('syncing');
+            btn.innerHTML = '🛰️ SYNC';
+            isSyncing = false;
+        }
+
+        function showNotification(message, type = 'info') {
+            let notification = document.getElementById('tempNotification');
+            if (!notification) {
+                notification = document.createElement('div');
+                notification.id = 'tempNotification';
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    padding: 12px 24px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    z-index: 9999;
+                    animation: slideIn 0.3s ease;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                `;
+                document.body.appendChild(notification);
+            }
+            
+            const colors = {
+                success: { bg: '#1e3a1e', border: '#88ff88', color: '#88ff88' },
+                error: { bg: '#3a1e1e', border: '#ff8888', color: '#ff8888' },
+                info: { bg: '#1e3a5f', border: '#88aaff', color: '#88aaff' }
+            };
+            
+            const style = colors[type] || colors.info;
+            notification.style.backgroundColor = style.bg;
+            notification.style.border = `1px solid ${style.border}`;
+            notification.style.color = style.color;
+            notification.innerHTML = message;
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        // ============================================
+        // FUNZIONI PEER
+        // ============================================
+        async function showPeerTab(tab) {
+            currentPeerTab = tab;
+            
+            const tabs = ['all', 'favorites', 'home', 'mountain', 'world', 'work', 'bot-echo', 'lente'];
+            tabs.forEach(t => {
+                let idSuffix;
+                if (t === 'bot-echo') {
+                    idSuffix = 'BotEcho';
+                } else if (t === 'lente') {
+                    idSuffix = 'Lente';
+                } else if (t === 'favorites') {
+                    idSuffix = 'Fav';
+                } else {
+                    idSuffix = t.charAt(0).toUpperCase() + t.slice(1);
+                }
+                
+                const el = document.getElementById(`tab${idSuffix}`);
+                if (el) {
+                    if (t === tab) {
+                        el.classList.add('active');
+                    } else {
+                        el.classList.remove('active');
+                    }
+                }
+            });
+            
+            await loadPeers();
+        }
+
+        async function loadPeers() {
+            try {
+                let url;
+                if (currentPeerTab === 'all') {
+                    url = '/api/chat/peers';
+                } else if (currentPeerTab === 'favorites') {
+                    url = '/api/chat/peers/favorites';
+                } else {
+                    url = `/api/chat/peers/group/${currentPeerTab}`;
+                }
+                
+                const r = await fetch(url);
+                const data = await r.json();
+                peers = Array.isArray(data) ? data : (data.peers || []);
+                
+                debugLog('Peer caricati', { count: peers.length, tab: currentPeerTab });
+                
+                const online = peers.filter(p => p.online).length;
+                let totalHops = 0;
+                let validHopsCount = 0;
+                
+                peers.forEach(p => {
+                    if (p.hops !== undefined && p.hops !== null) {
+                        const hopsNum = Number(p.hops);
+                        if (!isNaN(hopsNum) && isFinite(hopsNum) && hopsNum >= 0 && hopsNum < 100) {
+                            totalHops += hopsNum;
+                            validHopsCount++;
+                        }
+                    }
+                });
+                
+                const avgHops = validHopsCount > 0 ? totalHops / validHopsCount : 0;
+                
+                document.getElementById('onlineCount').textContent = online;
+                document.getElementById('avgHops').textContent = avgHops.toFixed(1);
+                
+                sortPeers();
+                renderPeerList();
+                document.getElementById('peerCountDisplay').textContent = peers.length;
+                document.getElementById('peerCount').textContent = peers.length;
+                
+                if (currentPeer) {
+                    const peerStillExists = peers.some(p => p.identity_hash === currentPeer.identity_hash);
+                    if (!peerStillExists) {
+                        currentPeer = null;
+                        document.getElementById('selectedPeerDisplay').innerHTML = 'Nessun peer selezionato';
+                        document.getElementById('selectedPeerSignal').innerHTML = '';
+                        document.getElementById('messageList').innerHTML = '<div class="lxmf-no-peer">👈 Seleziona un peer</div>';
+                        
+                        document.getElementById('messageInput').disabled = true;
+                        document.getElementById('sendButton').disabled = true;
+                        document.getElementById('fileBtn').disabled = true;
+                        document.getElementById('voiceBtn').disabled = true;
+                    }
+                }
+                
+                if (!currentPeer && peers.length > 0) {
+                    await selectPeer(peers[0].hash);
+                }
+                
+            } catch (e) {
+                debugLog('Errore peers', e.message);
+            }
+        }
+
+        function sortPeers() {
+            if (sortMode === 'time') {
+                peers.sort((a, b) => {
+                    const timeA = a.last_seen || 0;
+                    const timeB = b.last_seen || 0;
+                    return timeOrder === 'desc' ? timeB - timeA : timeA - timeB;
+                });
+            } else if (sortMode === 'hops') {
+                peers.sort((a, b) => {
+                    const hopsA = a.hops !== undefined ? parseInt(a.hops) : 999;
+                    const hopsB = b.hops !== undefined ? parseInt(b.hops) : 999;
+                    return hopsOrder === 'asc' ? hopsA - hopsB : hopsB - hopsA;
+                });
+            } else if (sortMode === 'signal') {
+                peers.sort((a, b) => {
+                    let scoreA = 0, scoreB = 0, countA = 0, countB = 0;
+                    
+                    if (a.rssi !== undefined && !isNaN(a.rssi)) {
+                        scoreA += (a.rssi + 100) * 0.6;
+                        countA++;
+                    }
+                    if (a.snr !== undefined && !isNaN(a.snr)) {
+                        scoreA += a.snr * 0.4;
+                        countA++;
+                    }
+                    if (a.quality !== undefined && !isNaN(a.quality)) {
+                        scoreA += parseFloat(a.quality);
+                        countA++;
+                    }
+                    
+                    if (b.rssi !== undefined && !isNaN(b.rssi)) {
+                        scoreB += (b.rssi + 100) * 0.6;
+                        countB++;
+                    }
+                    if (b.snr !== undefined && !isNaN(b.snr)) {
+                        scoreB += b.snr * 0.4;
+                        countB++;
+                    }
+                    if (b.quality !== undefined && !isNaN(b.quality)) {
+                        scoreB += parseFloat(b.quality);
+                        countB++;
+                    }
+                    
+                    if (countA > 0) scoreA = scoreA / countA;
+                    if (countB > 0) scoreB = scoreB / countB;
+                    
+                    if (countA === 0) scoreA = -999;
+                    if (countB === 0) scoreB = -999;
+                    
+                    return signalOrder === 'desc' ? scoreB - scoreA : scoreA - scoreB;
+                });
+            }
+        }
+
+        function setSortMode(mode) {
+            if (mode === 'time') {
+                if (sortMode === 'time') {
+                    timeOrder = timeOrder === 'desc' ? 'asc' : 'desc';
+                } else {
+                    sortMode = 'time';
+                }
+                document.getElementById('timeIcon').textContent = timeOrder === 'desc' ? '⬇️' : '⬆️';
+            } else if (mode === 'hops') {
+                if (sortMode === 'hops') {
+                    hopsOrder = hopsOrder === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortMode = 'hops';
+                }
+                document.getElementById('hopsIcon').textContent = hopsOrder === 'asc' ? '⬆️' : '⬇️';
+            } else if (mode === 'signal') {
+                if (sortMode === 'signal') {
+                    signalOrder = signalOrder === 'desc' ? 'asc' : 'desc';
+                } else {
+                    sortMode = 'signal';
+                }
+                document.getElementById('signalIcon').textContent = signalOrder === 'desc' ? '⬇️' : '⬆️';
+            }
+            
+            document.getElementById('sortTimeBtn').classList.toggle('active', sortMode === 'time');
+            document.getElementById('sortHopsBtn').classList.toggle('active', sortMode === 'hops');
+            document.getElementById('sortSignalBtn').classList.toggle('active', sortMode === 'signal');
+            
+            sortPeers();
+            renderPeerList();
+            debugLog('Ordinamento', { mode: sortMode, timeOrder, hopsOrder, signalOrder });
+        }
+
+        async function toggleFavorite(identityHash, event) {
+            event.stopPropagation();
+            
+            try {
+                const r = await fetch(`/api/identities/${identityHash}/favorite`, {
+                    method: 'POST'
+                });
+                const data = await r.json();
+                
+                if (data.success) {
+                    let wasFavorite = false;
+                    peers = peers.map(p => {
+                        if (p.identity_hash === identityHash || p.hash === identityHash) {
+                            wasFavorite = p.favorite;
+                            p.favorite = data.favorite;
+                        }
+                        return p;
+                    });
+                    
+                    if (currentPeer && (currentPeer.identity_hash === identityHash || currentPeer.hash === identityHash)) {
+                        currentPeer.favorite = data.favorite;
+                    }
+                    
+                    renderPeerList();
+                    
+                    if (currentPeerTab === 'favorites' && wasFavorite && !data.favorite) {
+                        setTimeout(() => loadPeers(), 100);
+                    }
+                    
+                    showNotification(
+                        data.favorite ? '⭐ Aggiunto ai preferiti' : '📋 Rimosso dai preferiti', 
+                        'success'
+                    );
+                }
+            } catch (e) {
+                debugLog('Errore toggle favorite', e);
+            }
+        }
+
+        async function toggleGroup(identityHash, group, event) {
+            event.stopPropagation();
+            
+            try {
+                const r = await fetch(`/api/identities/${identityHash}/group/${group}`, {
+                    method: 'POST'
+                });
+                const data = await r.json();
+                
+                if (data.success) {
+                    peers = peers.map(p => {
+                        if (p.identity_hash === identityHash || p.hash === identityHash) {
+                            p.groups = data.groups;
+                        }
+                        return p;
+                    });
+                    
+                    if (currentPeer && (currentPeer.identity_hash === identityHash || currentPeer.hash === identityHash)) {
+                        currentPeer.groups = data.groups;
+                    }
+                    
+                    renderPeerList();
+                    
+                    if (currentPeerTab === group && !data.groups.includes(group)) {
+                        await loadPeers();
+                    } else if (currentPeerTab === group && data.groups.includes(group)) {
+                        await loadPeers();
+                    }
+                    
+                    const icon = {home:'🏠', mountain:'🏔️', world:'🌍', work:'🔧', 'bot-echo':'🤖', 'lente':'🔍'}[group] || group;
+                    showNotification(
+                        data.added ? `✅ Aggiunto a ${icon}` : `❌ Rimosso da ${icon}`, 
+                        'success'
+                    );
+                }
+            } catch (e) {
+                debugLog('Errore toggle group', e);
+            }
+        }
+
+        const GROUP_ICONS = {
+            'home': '🏠',
+            'mountain': '🏔️',
+            'world': '🌍',
+            'work': '🔧',
+            'bot-echo': '🤖',
+            'lente': '🔍'
+        };
+
+        const GROUP_COLORS = {
+            'home': '#88ff88',
+            'mountain': '#88aaff',
+            'world': '#88ccff',
+            'work': '#ffaa88',
+            'bot-echo': '#ff9900',
+            'lente': '#aa88ff'
+        };
+
+        function renderPeerList() {
+            const search = document.getElementById('peerSearch').value.toLowerCase();
+            let filtered = peers.filter(p => 
+                (p.display_name && p.display_name.toLowerCase().includes(search)) ||
+                (p.hash && p.hash.toLowerCase().includes(search))
+            );
+            
+            document.getElementById('peerCount').textContent = filtered.length;
+            
+            if (filtered.length === 0) {
+                document.getElementById('peerList').innerHTML = '<div class="lxmf-no-peer">Nessun peer trovato</div>';
+                return;
+            }
+            
+            let html = '';
+            filtered.forEach(peer => {
+                const peerHash = cleanHash(peer.hash);
+                const isSelected = currentPeer && currentPeer.hash && 
+                    cleanHash(currentPeer.hash) === peerHash;
+                const onlineClass = peer.online ? 'online' : 'offline';
+                const timeAgo = getTimeAgo(peer.last_seen);
+                const hasUnread = unreadPeers.has(peerHash);
+                
+                let displayName = cleanDisplayName(peer.display_name || 'Anonimo');
+                if (displayName.length > 30) displayName = displayName.substring(0, 27) + '...';
+                
+                const hashDisplay = peer.hash ? peer.hash.substring(0, 24) + '...' : 'Hash non disponibile';
+                
+                const starClass = peer.favorite ? 'star-icon active' : 'star-icon';
+                const starHtml = `<span class="${starClass}" onclick="toggleFavorite('${peer.identity_hash || peer.hash}', event)">⭐</span>`;
+                
+                const groupsActive = (peer.groups || []).map(g => 
+                    `<span class="group-indicator ${g}" title="${g}" style="color: ${GROUP_COLORS[g] || '#888'};">${GROUP_ICONS[g] || ''}</span>`
+                ).join('');
+                
+                const isHomeActive = peer.groups?.includes('home') ? 'active-home' : '';
+                const isMountainActive = peer.groups?.includes('mountain') ? 'active-mountain' : '';
+                const isWorldActive = peer.groups?.includes('world') ? 'active-world' : '';
+                const isWorkActive = peer.groups?.includes('work') ? 'active-work' : '';
+                const isBotEchoActive = peer.groups?.includes('bot-echo') ? 'active-bot-echo' : '';
+                const isLenteActive = peer.groups?.includes('lente') ? 'active-lente' : '';
+
+                const homeStyle = peer.groups?.includes('home') ? `color: ${GROUP_COLORS.home}; text-shadow: 0 0 8px ${GROUP_COLORS.home}; background: rgba(136, 255, 136, 0.15);` : '';
+                const mountainStyle = peer.groups?.includes('mountain') ? `color: ${GROUP_COLORS.mountain}; text-shadow: 0 0 8px ${GROUP_COLORS.mountain}; background: rgba(136, 170, 255, 0.15);` : '';
+                const worldStyle = peer.groups?.includes('world') ? `color: ${GROUP_COLORS.world}; text-shadow: 0 0 8px ${GROUP_COLORS.world}; background: rgba(136, 204, 255, 0.15);` : '';
+                const workStyle = peer.groups?.includes('work') ? `color: ${GROUP_COLORS.work}; text-shadow: 0 0 8px ${GROUP_COLORS.work}; background: rgba(255, 170, 136, 0.15);` : '';
+                const botEchoStyle = peer.groups?.includes('bot-echo') ? `color: ${GROUP_COLORS['bot-echo']}; text-shadow: 0 0 8px ${GROUP_COLORS['bot-echo']}; background: rgba(255, 153, 0, 0.15);` : '';
+                const lenteStyle = peer.groups?.includes('lente') ? `color: ${GROUP_COLORS.lente}; text-shadow: 0 0 8px ${GROUP_COLORS.lente}; background: rgba(170, 136, 255, 0.15);` : '';
+
+                const groupsMenu = `
+                    <div class="peer-groups-menu" onclick="event.stopPropagation()">
+                        <button class="group-btn ${isHomeActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'home', event)" 
+                            title="Casa" style="${homeStyle}">🏠</button>
+                        <button class="group-btn ${isMountainActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'mountain', event)" 
+                            title="Montagna" style="${mountainStyle}">🏔️</button>
+                        <button class="group-btn ${isWorldActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'world', event)" 
+                            title="Mondo" style="${worldStyle}">🌍</button>
+                        <button class="group-btn ${isWorkActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'work', event)" 
+                            title="Lavoro" style="${workStyle}">🔧</button>
+                        <button class="group-btn ${isBotEchoActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'bot-echo', event)" 
+                            title="Bot Echo" style="${botEchoStyle}">🤖</button>
+                        <button class="group-btn ${isLenteActive}" 
+                            onclick="toggleGroup('${peer.identity_hash || peer.hash}', 'lente', event)" 
+                            title="Lente" style="${lenteStyle}">🔍</button>
+                    </div>
+                `;
+                
+                const appearanceIcon = peer.telemetry?.appearance?.icon || 'account';
+                
+                let signalHtml = '';
+                if (peer.rssi !== undefined || peer.snr !== undefined || peer.quality !== undefined) {
+                    let parts = [];
+                    if (peer.rssi !== undefined && !isNaN(peer.rssi)) {
+                        const rssiClass = getSignalClass(peer.rssi, 'rssi');
+                        parts.push(`<span class="${rssiClass}">📶 ${Number(peer.rssi).toFixed(1)}</span>`);
+                    }
+                    if (peer.snr !== undefined && !isNaN(peer.snr)) {
+                        const snrClass = getSignalClass(peer.snr, 'snr');
+                        parts.push(`<span class="${snrClass}">📊 ${Number(peer.snr).toFixed(1)}</span>`);
+                    }
+                    if (peer.quality !== undefined && !isNaN(peer.quality)) {
+                        parts.push(`⚡ ${Number(peer.quality).toFixed(1)}`);
+                    }
+                    signalHtml = `<div class="lxmf-peer-signal">${parts.join(' ')}</div>`;
+                }
+                
+                const hopsHtml = peer.hops ? 
+                    `<span class="lxmf-peer-hops">🏓 ${peer.hops} hop</span>` : 
+                    '<span class="lxmf-peer-hops">🏓 ? hop</span>';
+                
+                html += `
+                    <div class="lxmf-peer-item ${onlineClass} ${isSelected ? 'selected' : ''} ${hasUnread ? 'unread' : ''}" 
+                         onclick="selectPeer('${peer.hash || ''}')">
+                        <div class="lxmf-peer-header">
+                            ${starHtml}
+                            <span class="mdi mdi-${appearanceIcon}"></span>
+                            <span class="lxmf-peer-name">${escapeHtml(displayName)}</span>
+                            <span class="peer-groups-active">${groupsActive}</span>
+                            ${hasUnread ? '<span class="lxmf-peer-unread">●</span>' : ''}
+                        </div>
+                        ${groupsMenu}
+                        <div class="lxmf-peer-hash">${hashDisplay}</div>
+                        ${signalHtml}
+                        <div class="lxmf-peer-footer">
+                            <span class="lxmf-peer-time">${timeAgo}</span>
+                            <span class="lxmf-peer-status">${peer.online ? 'ONLINE' : 'OFFLINE'}</span>
+                            ${hopsHtml}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('peerList').innerHTML = html;
+        }
+
+        function clearSearch() {
+            document.getElementById('peerSearch').value = '';
+            renderPeerList();
+        }
+
+        async function selectPeer(hash) {
+            if (!hash) return;
+            
+            const peerHash = cleanHash(hash);
+            currentPeer = peers.find(p => p.hash && cleanHash(p.hash) === peerHash);
+            
+            if (currentPeer) {
+                unreadPeers.delete(peerHash);
+                
+                debugLog('Peer selezionato', { name: currentPeer.display_name, hash: peerHash.substring(0,8) });
+                
+                let displayName = cleanDisplayName(currentPeer.display_name || 'Anonimo');
+                if (displayName.length > 20) {
+                    displayName = displayName.substring(0, 17) + '...';
+                }
+                
+                let hopsDisplay = '';
+                if (currentPeer.hops !== undefined && currentPeer.hops !== null) {
+                    const hopsNum = Number(currentPeer.hops);
+                    if (!isNaN(hopsNum) && isFinite(hopsNum) && hopsNum >= 0 && hopsNum < 100) {
+                        hopsDisplay = ` <span style="color:#888; font-size:0.9em;">| 🏓 ${hopsNum} hop</span>`;
+                    }
+                }
+                
+                document.getElementById('selectedPeerDisplay').innerHTML = `📨 ${escapeHtml(displayName)}${hopsDisplay}`;
+                
+                let signalHtml = '';
+                if (currentPeer.rssi !== undefined || currentPeer.snr !== undefined || currentPeer.quality !== undefined) {
+                    let parts = [];
+                    if (currentPeer.rssi !== undefined && !isNaN(currentPeer.rssi)) {
+                        const rssiClass = getSignalClass(currentPeer.rssi, 'rssi');
+                        parts.push(`<span class="${rssiClass}">RSSI: ${Number(currentPeer.rssi).toFixed(1)}</span>`);
+                    }
+                    if (currentPeer.snr !== undefined && !isNaN(currentPeer.snr)) {
+                        const snrClass = getSignalClass(currentPeer.snr, 'snr');
+                        parts.push(`<span class="${snrClass}">SNR: ${Number(currentPeer.snr).toFixed(1)}</span>`);
+                    }
+                    if (currentPeer.quality !== undefined && !isNaN(currentPeer.quality)) {
+                        parts.push(`Q: ${Number(currentPeer.quality).toFixed(1)}`);
+                    }
+                    signalHtml = parts.join(' | ');
+                }
+                document.getElementById('selectedPeerSignal').innerHTML = signalHtml;
+                
+                document.getElementById('messageInput').disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('fileBtn').disabled = false;
+                document.getElementById('voiceBtn').disabled = false;
+                
+                document.getElementById('messageInput').focus();
+                
+                lastMessagesJson = '';
+                
+                const mapContainer = document.getElementById('mapContainer');
+                const mapPlaceholder = document.getElementById('mapPlaceholder');
+                if (mapContainer) mapContainer.style.display = 'none';
+                if (mapPlaceholder) {
+                    mapPlaceholder.style.display = 'flex';
+                    mapPlaceholder.innerHTML = '<span>🗺️ Seleziona un peer con posizione</span>';
+                }
+                
+                if (mapMarker) {
+                    mapMarker.setOpacity(0);
+                }
+                
+                const dashboard = document.getElementById('telemetryDashboard');
+                if (dashboard) {
+                    dashboard.innerHTML = '<div class="telemetry-empty">👈 Seleziona un peer per vedere i dati</div>';
+                }
+                
+                const rawContent = document.getElementById('rawContent');
+                if (rawContent) {
+                    rawContent.innerHTML = '<div style="color: #888; text-align: center; margin-top: 20px;">Nessun pacchetto ricevuto</div>';
+                }
+                
+                await pollMessages();
+                
+                renderPeerList();
+            }
+        }
+
+        // ============================================
+        // FUNZIONI MESSAGGI
+        // ============================================
+        async function pollMessages() {
+            if (!currentPeer) return;
+            
+            try {
+                const peerHash = cleanHash(currentPeer.hash);
+                debugLog('Poll messaggi per', peerHash.substring(0,8));
+                
+                const r = await fetch(`/api/chat/messages?peer=${encodeURIComponent(peerHash)}`);
+                const newMessages = await r.json();
+                
+                debugLog('Ricevuti messaggi', { count: newMessages?.length, primo: newMessages?.[0]?.content?.substring(0,30) });
+                
+                const newMessagesJson = JSON.stringify(newMessages);
+                
+                if (newMessagesJson !== lastMessagesJson) {
+                    lastMessagesJson = newMessagesJson;
+                    
+                    messages = newMessages;
+                    
+                    messageCache.set(peerHash, messages.length);
+                    
+                    renderMessages();
+                    
+                    if (messages.length > 0) {
+                        messages.forEach(msg => {
+                            if (msg.direction === 'incoming') {
+                                const packet = {
+                                    timestamp: msg.timestamp,
+                                    direction: msg.direction,
+                                    peer: msg.from || msg.to,
+                                    content: msg.content,
+                                    rssi: msg.rssi,
+                                    snr: msg.snr,
+                                    q: msg.q,
+                                    battery: msg.battery,
+                                    location: msg.location,
+                                    appearance: msg.appearance,
+                                    telemetry: msg.telemetry,
+                                    raw_hex: msg.raw_hex,
+                                    raw_ascii: msg.raw_ascii,
+                                    raw_size: msg.raw_size
+                                };
+                                
+                                addMonitorPacket(packet);
+                                
+                                const telemetryData = {
+                                    timestamp: msg.timestamp,
+                                    battery: msg.battery,
+                                    location: msg.location,
+                                    appearance: msg.appearance,
+                                    information: msg.information
+                                };
+                                
+                                if (msg.telemetry) {
+                                    if (msg.telemetry.battery) telemetryData.battery = msg.telemetry.battery;
+                                    if (msg.telemetry.location) telemetryData.location = msg.telemetry.location;
+                                    if (msg.telemetry.appearance) telemetryData.appearance = msg.telemetry.appearance;
+                                    if (msg.telemetry.information) telemetryData.information = msg.telemetry.information;
+                                }
+                                
+                                saveTelemetryToDatabase(cleanHash(msg.from || msg.to), telemetryData);
+                            }
+                        });
+                    }
+                    
+                    activeTransfers.clear();
+                    messages.forEach(msg => {
+                        if (msg.direction === 'outgoing' && msg.status === 'sending' && msg.progress < 100) {
+                            activeTransfers.set(msg.id || msg.timestamp, msg);
+                        }
+                        if (msg.is_receiving) {
+                            activeTransfers.set(msg.id || msg.timestamp, msg);
+                        }
+                    });
+                    
+                    if (monitorActive) {
+                        renderTelemetryDashboard();
+                    }
+                }
+            } catch (e) {
+                debugLog('Errore poll', e.message);
+            }
+        }
+
+        async function sendMessage() {
+            if (!currentPeer) return;
+            
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            
+            if (!content && selectedFiles.length === 0) return;
+            
+            input.disabled = true;
+            document.getElementById('sendButton').disabled = true;
+            document.getElementById('voiceBtn').disabled = true;
+            
+            try {
+                debugLog('Invio messaggio', { content: content.substring(0,30), files: selectedFiles.length });
+                
+                let response;
+                
+                if (selectedFiles.length > 0) {
+                    const file = selectedFiles[0];
+                    const formData = new FormData();
+                    formData.append('destination', currentPeer.hash);
+                    formData.append('file', file);
+                    if (content) formData.append('description', content);
+                    
+                    if (file.audioCodec) {
+                        formData.append('audio_codec', file.audioCodec);
+                    }
+                    
+                    response = await fetch('/api/chat/send-file', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    response = await fetch('/api/chat/send', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            destination: currentPeer.hash,
+                            content: content
+                        })
+                    });
+                }
+                
+                const data = await response.json();
+                debugLog('Risposta invio', data);
+                
+                if (data.error) {
+                    alert(`❌ Errore: ${data.error}`);
+                } else if (data.success) {
+                    input.value = '';
+                    selectedFiles = [];
+                    document.getElementById('filePreview').innerHTML = '';
+                    document.getElementById('fileInput').value = '';
+                    
+                    lastMessagesJson = '';
+                    setTimeout(() => pollMessages(), 500);
+                }
+            } catch (e) {
+                debugLog('Errore invio', e.message);
+                alert(`❌ Errore: ${e.message}`);
+            } finally {
+                input.disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('voiceBtn').disabled = false;
+                input.focus();
+            }
+        }
+
+        async function retryMessage(timestamp) {
+            if (!currentPeer) return;
+            
+            const failedMsg = messages.find(m => 
+                m.timestamp === timestamp && 
+                m.direction === 'outgoing' && 
+                m.status === 'failed'
+            );
+            
+            if (!failedMsg || !failedMsg.content) {
+                debugLog('Messaggio fallito non trovato per timestamp', timestamp);
+                return;
+            }
+            
+            debugLog('Riprova messaggio', { timestamp, content: failedMsg.content.substring(0,30) });
+            
+            const input = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendButton');
+            
+            input.disabled = true;
+            sendBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        destination: currentPeer.hash,
+                        content: failedMsg.content
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert(`❌ Errore: ${data.error}`);
+                } else if (data.success) {
+                    showNotification('✅ Messaggio reinviato!', 'success');
+                    lastMessagesJson = '';
+                    setTimeout(() => pollMessages(), 500);
+                }
+            } catch (e) {
+                debugLog('Errore riprova', e.message);
+                alert(`❌ Errore: ${e.message}`);
+            } finally {
+                input.disabled = false;
+                sendBtn.disabled = false;
+                input.focus();
+            }
+        }
+
+        // ============================================
+        // FUNZIONI INIZIALI
+        // ============================================
+        async function loadIdentities() {
+            try {
+                debugLog('Caricamento identità...');
+                const r = await fetch('/api/chat/identities');
+                const identities = await r.json();
+                
+                debugLog('Identità ricevute', identities);
+                
+                const select = document.getElementById('identitySelect');
+                
+                if (!identities || identities.length === 0) {
+                    select.innerHTML = '<option value="">❌ Nessuna identità trovata</option>';
+                    return;
+                }
+                
+                let html = '<option value="">📁 Scegli identità...</option>';
+                identities.forEach(id => {
+                    let shortHash = id.hash ? id.hash.replace(/[<>]/g, '').substring(0, 8) : '';
+                    html += `<option value="${id.path}">${id.name} (${shortHash})</option>`;
+                });
+                select.innerHTML = html;
+                
+            } catch (e) {
+                debugLog('Errore caricamento identità', e.message);
+                document.getElementById('identitySelect').innerHTML = '<option value="">❌ Errore caricamento</option>';
+            }
+        }
+
+        async function selectIdentity() {
+            const path = document.getElementById('identitySelect').value;
+            if (!path) return;
+            
+            const btn = document.getElementById('initButton');
+            const status = document.getElementById('initStatus');
+            
+            btn.disabled = true;
+            status.innerHTML = '⏳ Inizializzazione...';
+            
+            try {
+                debugLog('Selezione identità', path);
+                
+                const r = await fetch('/api/chat/identities/select', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path})
+                });
+                const data = await r.json();
+                
+                debugLog('Risposta select', data);
+                
+                if (data.error) throw new Error(data.error);
+                
+                currentIdentity = {
+                    name: data.identity.name,
+                    path: path,
+                    identity_hash: data.identity.identity_hash,
+                    delivery_hash: data.identity.delivery_hash,
+                    address: data.identity.address
+                };
+                
+                if (!currentIdentity.delivery_hash && currentIdentity.identity_hash) {
+                    console.log("⚠️ Delivery hash mancante, uso identity_hash come fallback");
+                    currentIdentity.delivery_hash = currentIdentity.identity_hash;
+                }
+                
+                console.log("✅ Identità caricata:", {
+                    name: currentIdentity.name,
+                    identity: currentIdentity.identity_hash?.substring(0, 16) + '...',
+                    delivery: currentIdentity.delivery_hash?.substring(0, 16) + '...'
+                });
+                
+                updateIdentityDisplay();
+                
+                document.getElementById('connectionStatus').className = 'status online';
+                document.getElementById('initPanel').style.display = 'none';
+                document.getElementById('chatContainer').style.display = 'flex';
+                
+                await loadPeers();
+                peerInterval = setInterval(loadPeers, 10000);
+                pollInterval = setInterval(pollMessages, 2000);
+                progressInterval = setInterval(updateTransferStats, 1000);
+                
+                debugLog('Client avviato', currentIdentity.name);
+                
+            } catch (e) {
+                status.innerHTML = `❌ Errore: ${e.message}`;
+                btn.disabled = false;
+                debugLog('Errore selectIdentity', e.message);
             }
         }
 
@@ -2895,7 +3328,6 @@
                 }
             });
             
-            // Debug periodico
             setInterval(() => {
                 debugLog('STATO', { 
                     messages: messages.length,
@@ -2911,6 +3343,10 @@
             if (pollInterval) clearInterval(pollInterval);
             if (progressInterval) clearInterval(progressInterval);
         });
+
+        function refreshPeers() {
+            loadPeers();
+        }
 
         // Esponi funzioni globali
         window.selectPeer = selectPeer;
@@ -2931,20 +3367,21 @@
         window.showMessageRaw = showMessageRaw;
         window.closeRawModal = closeRawModal;
         window.copyToClipboard = copyToClipboard;
-        window.debugRaw = function() {
-            debugLog('DEBUG RAW:', {
-                currentPeer: currentPeer?.hash?.substring(0,16),
-                incomingPackets: Object.keys(incomingPackets).length,
-                packets: currentPeer ? incomingPackets[cleanHash(currentPeer.hash)]?.length : 0
-            });
-        };
-        window.debugIdentity = debugIdentity;
-        window.debugTelemetry = function() {
-            console.log("📊 DATABASE TELEMETRIA:", telemetryDatabase);
-        };
-        // 🔥 Esponi nuove funzioni
+        window.toggleVoiceRecording = toggleVoiceRecording;
+        window.stopVoiceRecording = stopVoiceRecording;
+        window.switchRawTab = switchRawTab;
+        window.toggleHex = toggleHex;
+        window.toggleAscii = toggleAscii;
         window.showPeerTab = showPeerTab;
         window.toggleFavorite = toggleFavorite;
+        window.toggleGroup = toggleGroup;
+        window.syncPropagationNode = syncPropagationNode;
+        window.loadConfig = loadConfig;
+        window.saveConfig = saveConfig;
+        window.toggleRetriesSection = toggleRetriesSection;
+        window.loadTelemetryHistory = loadTelemetryHistory;
+        window.focusHistoryMarker = focusHistoryMarker;
+        window.debugLog = debugLog;
     </script>
 </body>
 </html>

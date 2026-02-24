@@ -161,20 +161,14 @@ def monitor_reset_all():
         # Usa il monitor_manager per pulire tutto
         monitor_manager.clear_all()
         
-        # Pulisci anche la cache esplicitamente
         if monitor_manager.announce_cache:
             monitor_manager.announce_cache.clear()
             
-            # Elimina file cache
-            cache_file = monitor_manager.announce_cache.cache_file
+            # ✅ Usa db_path invece di cache_file
+            cache_file = monitor_manager.announce_cache.db_path
             if os.path.exists(cache_file):
                 os.remove(cache_file)
                 print(f"[✓] File cache eliminato: {cache_file}")
-            
-            # Crea file cache vuoto
-            with open(cache_file, 'w') as f:
-                json.dump([], f)
-            print(f"[✓] Nuovo file cache vuoto creato")
         
         print("="*60)
         print("✅ RESET TOTALE COMPLETATO")

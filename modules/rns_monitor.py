@@ -11,6 +11,7 @@ import threading
 import queue
 import socket
 import multiprocessing
+import sqlite3
 from datetime import datetime, timedelta
 
 # Costanti
@@ -42,183 +43,445 @@ RNS_ASPECTS = [
 ]
 
 # ============================================
-# === CACHE PERSISTENTE ===
+# === SQLITE CACHE ===
 # ============================================
-class PersistentAnnounceCache:
-    """Cache persistente su disco per annunci RNS - ORA CON DATI RADIO"""
+class SQLiteAnnounceCache:
+    """Cache persistente su SQLite per annunci RNS - VELOCE E SCALABILE"""
     
-    def __init__(self, cache_dir, cache_file='announce_cache.json', save_interval=60, max_age_days=7, max_size=10000):
-        self.cache_file = os.path.join(cache_dir, cache_file)
-        self.save_interval = save_interval
-        self.max_age = timedelta(days=max_age_days)
+    def __init__(self, cache_dir, max_age_days=7, max_size=10000):
+        self.db_path = os.path.join(cache_dir, 'announces.db')
+        self.max_age_days = max_age_days
         self.max_size = max_size
+        self._init_db()
         
-        # Cache in memoria
-        self.cache = []
-        self.lock = threading.Lock()
-        self.stats = {
-            'total_saved': 0,
-            'last_save': None,
-            'save_count': 0,
-            'load_count': 0
-        }
-        
-        # Carica cache esistente
-        self._load_cache()
-        
-        # Avvia thread di salvataggio automatico
+        # Thread per cleanup periodico
         self.running = True
-        self.save_thread = threading.Thread(target=self._auto_save, daemon=True)
-        self.save_thread.start()
+        self.cleanup_thread = threading.Thread(target=self._auto_cleanup, daemon=True)
+        self.cleanup_thread.start()
+        
+        print(f"📦 SQLite Cache: {self.db_path}")
     
-    def _load_cache(self):
-        """Carica cache dal disco all'avvio"""
-        try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'r') as f:
-                    data = json.load(f)
-                    
-                    # Filtra annunci vecchi
-                    now = time.time()
-                    self.cache = [
-                        item for item in data 
-                        if now - item.get('timestamp', 0) < self.max_age.total_seconds()
-                    ]
-                    
-                    # Ordina per timestamp (più recenti prima)
-                    self.cache.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
-                    
-                self.stats['load_count'] += 1
-                self.stats['total_saved'] = len(self.cache)
-                print(f"[Cache] Caricati {len(self.cache)} annunci storici (rimossi {len(data) - len(self.cache)} vecchi)")
-            else:
-                print(f"[Cache] Nessun file cache esistente, partenza vuota")
-        except Exception as e:
-            print(f"[Cache] Errore caricamento: {e}")
-            self.cache = []
+    def _init_db(self):
+        """Inizializza database SQLite"""
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        
+        # Tabella principale annunci
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS announces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                announce_id INTEGER,                    -- ID originale del contatore
+                timestamp REAL NOT NULL,
+                dest_hash TEXT NOT NULL,
+                dest_short TEXT,
+                packet_hash TEXT,
+                identity_hash TEXT,
+                aspect TEXT,
+                hops TEXT,
+                interface TEXT,
+                via TEXT,
+                ip TEXT,
+                port INTEGER,
+                data TEXT,
+                data_length INTEGER,
+                has_identity BOOLEAN,
+                
+                -- 🔥 DATI RADIO (NUOVI)
+                rssi REAL,
+                snr REAL,
+                q REAL,
+                
+                -- JSON completo (per debug)
+                full_data TEXT,
+                
+                -- Indici
+                UNIQUE(timestamp, dest_hash, packet_hash) ON CONFLICT REPLACE
+            )
+        ''')
+        
+        # Indici per query veloci
+        c.execute('CREATE INDEX IF NOT EXISTS idx_aspect ON announces(aspect)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_dest ON announces(dest_hash)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_identity ON announces(identity_hash)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_time ON announces(timestamp)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_rssi ON announces(rssi)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_snr ON announces(snr)')
+        
+        # Tabella per statistiche aggregate
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS announce_stats (
+                dest_hash TEXT PRIMARY KEY,
+                first_seen REAL,
+                last_seen REAL,
+                announce_count INTEGER,
+                avg_hops REAL,
+                avg_rssi REAL,
+                avg_snr REAL,
+                avg_q REAL,
+                last_aspect TEXT,
+                last_interface TEXT
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print(f"✅ Database annunci SQLite inizializzato")
     
     def add_announce(self, announce):
-        """Aggiunge annuncio alla cache - ORA CON DATI RADIO COMPLETI"""
-        with self.lock:
-            # Aggiungi timestamp se mancante
-            if 'timestamp' not in announce:
-                announce['timestamp'] = time.time()
-            
-            # Evita duplicati (controlla packet_hash)
-            packet_hash = announce.get('packet_hash', '')
-            if packet_hash:
-                # Rimuovi eventuale duplicato esistente
-                self.cache = [a for a in self.cache if a.get('packet_hash') != packet_hash]
-            
-            # Inserisci in testa (più recente)
-            self.cache.insert(0, announce)
-            
-            # Limita dimensione
-            if len(self.cache) > self.max_size:
-                self.cache = self.cache[:self.max_size]
-            
-            # Aggiorna statistiche
-            self.stats['total_saved'] = len(self.cache)
-    
-    def _auto_save(self):
-        """Salva automaticamente ogni X secondi"""
-        while self.running:
-            time.sleep(self.save_interval)
-            self.save()
-    
-    def save(self):
-        """Salva cache su disco"""
+        """Aggiunge annuncio al database SQLite"""
         try:
-            with self.lock:
-                # Crea copia per salvare
-                cache_copy = self.cache.copy()
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
             
-            # Scrivi su file temporaneo poi rinomina
-            temp_file = f"{self.cache_file}.tmp"
-            with open(temp_file, 'w') as f:
-                json.dump(cache_copy, f, indent=2)
+            # Estrai dati
+            timestamp = announce.get('timestamp', time.time())
+            dest_hash = announce.get('dest_hash', '')
+            packet_hash = announce.get('packet_hash', '')
             
-            # Rinomina file temporaneo
-            os.replace(temp_file, self.cache_file)
+            # 🔥 DATI RADIO
+            rssi = announce.get('rssi')
+            snr = announce.get('snr')
+            q = announce.get('q')
             
-            self.stats['last_save'] = time.time()
-            self.stats['save_count'] += 1
+            # JSON completo
+            full_data = json.dumps(announce)
             
-            print(f"[Cache] Salvati {len(cache_copy)} annunci")
+            # Inserisci annuncio
+            c.execute('''
+                INSERT OR REPLACE INTO announces 
+                (announce_id, timestamp, dest_hash, dest_short, packet_hash, 
+                 identity_hash, aspect, hops, interface, via, ip, port, 
+                 data, data_length, has_identity, rssi, snr, q, full_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                announce.get('id'),
+                timestamp,
+                dest_hash,
+                announce.get('dest_short'),
+                packet_hash,
+                announce.get('identity_hash'),
+                announce.get('aspect'),
+                announce.get('hops'),
+                announce.get('interface'),
+                announce.get('via'),
+                announce.get('ip'),
+                announce.get('port'),
+                announce.get('data'),
+                announce.get('data_length'),
+                1 if announce.get('has_identity') else 0,
+                rssi, snr, q,
+                full_data
+            ))
+            
+            # Aggiorna statistiche aggregate
+            c.execute('''
+                INSERT INTO announce_stats 
+                (dest_hash, first_seen, last_seen, announce_count, 
+                 avg_hops, avg_rssi, avg_snr, avg_q, last_aspect, last_interface)
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(dest_hash) DO UPDATE SET
+                    last_seen = excluded.last_seen,
+                    announce_count = announce_count + 1,
+                    avg_hops = (avg_hops * announce_count + excluded.avg_hops) / (announce_count + 1),
+                    avg_rssi = (avg_rssi * announce_count + excluded.avg_rssi) / (announce_count + 1),
+                    avg_snr = (avg_snr * announce_count + excluded.avg_snr) / (announce_count + 1),
+                    avg_q = (avg_q * announce_count + excluded.avg_q) / (announce_count + 1),
+                    last_aspect = excluded.last_aspect,
+                    last_interface = excluded.last_interface
+            ''', (
+                dest_hash,
+                timestamp, timestamp,
+                announce.get('hops'),
+                rssi, snr, q,
+                announce.get('aspect'),
+                announce.get('interface')
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            # Cleanup se necessario (in background)
+            if self._should_cleanup():
+                threading.Thread(target=self._cleanup_old, daemon=True).start()
+            
+            return True
             
         except Exception as e:
-            print(f"[Cache] Errore salvataggio: {e}")
+            print(f"❌ Errore inserimento SQLite: {e}")
+            return False
     
-    def get_all(self, filter_func=None, limit=None, offset=0):
-        """Recupera annunci con filtro opzionale"""
-        with self.lock:
-            if filter_func:
-                filtered = [a for a in self.cache if filter_func(a)]
-            else:
-                filtered = self.cache.copy()
+    def get_announces(self, aspect=None, dest_hash=None, identity_hash=None,
+                      min_rssi=None, since=None, limit=None, offset=0, sort='time_desc'):
+        """Recupera annunci con filtri avanzati"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
         
-        if offset > 0 or limit is not None:
-            end = offset + limit if limit else None
-            return filtered[offset:end]
-        return filtered
+        # Costruisci query
+        query = "SELECT * FROM announces WHERE 1=1"
+        params = []
+        
+        if aspect:
+            query += " AND aspect = ?"
+            params.append(aspect)
+        
+        if dest_hash:
+            query += " AND dest_hash LIKE ?"
+            params.append(f'%{dest_hash}%')
+        
+        if identity_hash:
+            query += " AND identity_hash LIKE ?"
+            params.append(f'%{identity_hash}%')
+        
+        if min_rssi is not None:
+            query += " AND rssi >= ?"
+            params.append(min_rssi)
+        
+        if since:
+            query += " AND timestamp >= ?"
+            params.append(since)
+        
+        # Ordinamento
+        sort_map = {
+            'time_desc': ('timestamp', 'DESC'),
+            'time_asc': ('timestamp', 'ASC'),
+            'rssi_desc': ('rssi', 'DESC'),
+            'rssi_asc': ('rssi', 'ASC'),
+            'snr_desc': ('snr', 'DESC'),
+            'snr_asc': ('snr', 'ASC'),
+            'hops_desc': ('CAST(hops AS INTEGER)', 'DESC'),
+            'hops_asc': ('CAST(hops AS INTEGER)', 'ASC'),
+        }
+        sort_col, sort_dir = sort_map.get(sort, ('timestamp', 'DESC'))
+        query += f" ORDER BY {sort_col} {sort_dir}"
+        
+        if limit:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        
+        c.execute(query, params)
+        rows = c.fetchall()
+        conn.close()
+        
+        # Converti in dizionari
+        results = [dict(row) for row in rows]
+        
+        # Ricostruisci full_data se presente
+        for r in results:
+            if r.get('full_data'):
+                try:
+                    full = json.loads(r['full_data'])
+                    # Merge senza sovrascrivere campi già presenti
+                    for k, v in full.items():
+                        if k not in r or r[k] is None:
+                            r[k] = v
+                except:
+                    pass
+        
+        return results
+    
+    def count_announces(self, aspect=None, dest_hash=None, identity_hash=None,
+                        min_rssi=None, since=None):
+        """Conta annunci con filtri"""
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        
+        query = "SELECT COUNT(*) FROM announces WHERE 1=1"
+        params = []
+        
+        if aspect:
+            query += " AND aspect = ?"
+            params.append(aspect)
+        
+        if dest_hash:
+            query += " AND dest_hash LIKE ?"
+            params.append(f'%{dest_hash}%')
+        
+        if identity_hash:
+            query += " AND identity_hash LIKE ?"
+            params.append(f'%{identity_hash}%')
+        
+        if min_rssi is not None:
+            query += " AND rssi >= ?"
+            params.append(min_rssi)
+        
+        if since:
+            query += " AND timestamp >= ?"
+            params.append(since)
+        
+        c.execute(query, params)
+        count = c.fetchone()[0]
+        conn.close()
+        
+        return count
     
     def get_stats(self):
-        """Restituisce statistiche cache"""
-        with self.lock:
-            # Calcola statistiche aggiuntive
-            if self.cache:
-                oldest = min((a.get('timestamp', 0) for a in self.cache), default=0)
-                newest = max((a.get('timestamp', 0) for a in self.cache), default=0)
-                aspects = {}
-                for a in self.cache:
-                    asp = a.get('aspect', 'unknown')
-                    aspects[asp] = aspects.get(asp, 0) + 1
-            else:
-                oldest = newest = 0
-                aspects = {}
-            
-            return {
-                'size': len(self.cache),
-                'max_size': self.max_size,
-                'oldest': oldest,
-                'newest': newest,
-                'age_days': (time.time() - oldest) / 86400 if oldest else 0,
-                'aspects': aspects,
-                'stats': self.stats,
-                'cache_file': self.cache_file
+        """Statistiche database"""
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        
+        # Conteggio totale
+        c.execute("SELECT COUNT(*) FROM announces")
+        total = c.fetchone()[0]
+        
+        # Statistiche per aspect
+        c.execute('''
+            SELECT aspect, COUNT(*) as count 
+            FROM announces 
+            GROUP BY aspect 
+            ORDER BY count DESC 
+            LIMIT 10
+        ''')
+        aspects = [{'aspect': row[0], 'count': row[1]} for row in c.fetchall()]
+        
+        # Statistiche radio
+        c.execute('''
+            SELECT 
+                AVG(rssi) as avg_rssi,
+                MAX(rssi) as max_rssi,
+                MIN(rssi) as min_rssi,
+                AVG(snr) as avg_snr,
+                MAX(snr) as max_snr,
+                MIN(snr) as min_snr,
+                AVG(q) as avg_q
+            FROM announces 
+            WHERE rssi IS NOT NULL
+        ''')
+        radio = c.fetchone()
+        
+        # Primo e ultimo timestamp
+        c.execute("SELECT MIN(timestamp), MAX(timestamp) FROM announces")
+        time_range = c.fetchone()
+        
+        conn.close()
+        
+        return {
+            'total_announces': total,
+            'aspects': aspects,
+            'radio': {
+                'avg_rssi': radio[0],
+                'max_rssi': radio[1],
+                'min_rssi': radio[2],
+                'avg_snr': radio[3],
+                'max_snr': radio[4],
+                'min_snr': radio[5],
+                'avg_q': radio[6]
+            },
+            'time_range': {
+                'first': time_range[0],
+                'last': time_range[1],
+                'span_days': (time.time() - time_range[0]) / 86400 if time_range[0] else 0
             }
+        }
+    
+    def get_peer_stats(self, dest_hash):
+        """Statistiche per un peer specifico"""
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        
+        c.execute('''
+            SELECT * FROM announce_stats WHERE dest_hash = ?
+        ''', (dest_hash,))
+        
+        row = c.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                'dest_hash': row[0],
+                'first_seen': row[1],
+                'last_seen': row[2],
+                'announce_count': row[3],
+                'avg_hops': row[4],
+                'avg_rssi': row[5],
+                'avg_snr': row[6],
+                'avg_q': row[7],
+                'last_aspect': row[8],
+                'last_interface': row[9]
+            }
+        return None
+    
+    def _should_cleanup(self):
+        """Verifica se è ora di fare cleanup"""
+        # Cleanup ogni 1000 inserimenti (semplice)
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM announces")
+        count = c.fetchone()[0]
+        conn.close()
+        
+        return count > self.max_size
+    
+    def _cleanup_old(self):
+        """Rimuove annunci vecchi"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+            
+            # Rimuovi oltre max_size
+            c.execute('''
+                DELETE FROM announces 
+                WHERE id NOT IN (
+                    SELECT id FROM announces 
+                    ORDER BY timestamp DESC 
+                    LIMIT ?
+                )
+            ''', (self.max_size,))
+            
+            # Rimuovi oltre max_age
+            cutoff = time.time() - (self.max_age_days * 86400)
+            c.execute("DELETE FROM announces WHERE timestamp < ?", (cutoff,))
+            
+            deleted = c.rowcount
+            conn.commit()
+            conn.close()
+            
+            if deleted:
+                print(f"🧹 SQLite: rimossi {deleted} annunci vecchi")
+                
+        except Exception as e:
+            print(f"❌ Errore cleanup SQLite: {e}")
+    
+    def cleanup_old(self, days=30):
+        """Rimuovi annunci più vecchi di N giorni (metodo pubblico)"""
+        cutoff = time.time() - (days * 86400)
+        
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("DELETE FROM announces WHERE timestamp < ?", (cutoff,))
+        removed = c.rowcount
+        conn.commit()
+        conn.close()
+        
+        print(f"🧹 SQLite: rimossi {removed} annunci più vecchi di {days} giorni")
+        return removed
+    
+    def vacuum(self):
+        """Ottimizza database"""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("VACUUM")
+        conn.close()
+        print("🧹 SQLite: VACUUM completato")
+    
+    def _auto_cleanup(self):
+        """Thread di cleanup automatico"""
+        while self.running:
+            time.sleep(3600)  # Ogni ora
+            self._cleanup_old()
     
     def clear(self):
-        """Pulisce tutta la cache"""
-        with self.lock:
-            self.cache = []
-            self.stats['total_saved'] = 0
-            self.save()
-        print(f"[Cache] Cache pulita")
-    
-    def cleanup_old(self):
-        """Rimuove annunci vecchi"""
-        with self.lock:
-            now = time.time()
-            old_count = len(self.cache)
-            self.cache = [
-                a for a in self.cache 
-                if now - a.get('timestamp', 0) < self.max_age.total_seconds()
-            ]
-            removed = old_count - len(self.cache)
-            if removed:
-                self.stats['total_saved'] = len(self.cache)
-                self.save()
-                print(f"[Cache] Rimossi {removed} annunci vecchi")
-            return removed
+        """Pulisce tutto il database"""
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("DELETE FROM announces")
+        c.execute("DELETE FROM announce_stats")
+        conn.commit()
+        conn.close()
+        print("🧹 SQLite: database pulito")
     
     def stop(self):
-        """Ferma thread e salva"""
+        """Ferma thread"""
         self.running = False
-        if self.save_thread.is_alive():
-            self.save_thread.join(timeout=5)
-        self.save()
-        print(f"[Cache] Cache fermata")
 
 # ============================================
 # === PROCESSO MONITOR ===
@@ -440,7 +703,7 @@ def run_rns_monitor(socket_path, aspects):
 # === MANAGER PER FLASK ===
 # ============================================
 class RNSMonitorManager:
-    """Gestore per Flask con contatori centralizzati - ORA CON DATI RADIO"""
+    """Gestore per Flask con contatori centralizzati - ORA CON SQLITE"""
     
     def __init__(self, socket_path, aspects, cache_dir, max_history=1000):
         self.socket_path = socket_path
@@ -454,12 +717,14 @@ class RNSMonitorManager:
         
         # DATI CENTRALIZZATI - unico contatore per TUTTO
         self.announce_counter = 0  # Contatore unico globale
-        self.announce_history = []  # Memoria recente (max_history)
+        self.announce_history = []  # Memoria recente (ridotta a 100)
         self.history_lock = threading.Lock()
         self.announce_queue = queue.Queue(maxsize=1000)
         
-        # Cache persistente
-        self.announce_cache = PersistentAnnounceCache(cache_dir) if cache_dir else None
+        # Cache SQLite
+        self.announce_cache = SQLiteAnnounceCache(cache_dir) if cache_dir else None
+        
+        print(f"[MonitorManager] Inizializzato con SQLite: {cache_dir}")
     
     def start_monitor_process(self):
         """Avvia il processo monitor separato"""
@@ -523,12 +788,12 @@ class RNSMonitorManager:
                                 self.announce_counter += 1
                                 announce['id'] = self.announce_counter
                                 
-                                # Aggiungi alla history recente
+                                # Aggiungi alla history recente (solo ultimi 100)
                                 self.announce_history.insert(0, announce)
-                                if len(self.announce_history) > self.max_history:
+                                if len(self.announce_history) > 100:  # Ridotto a 100
                                     self.announce_history.pop()
                                 
-                                # Aggiungi alla cache persistente (con lo stesso ID)
+                                # 🔥 Aggiungi alla cache SQLite
                                 if self.announce_cache:
                                     self.announce_cache.add_announce(announce)
                             
@@ -561,13 +826,14 @@ class RNSMonitorManager:
                 time.sleep(2)
     
     def get_stats(self):
-        """Restituisce statistiche unificate - ORA CON DATI RADIO"""
+        """Restituisce statistiche unificate - ORA CON DATI SQLITE"""
         with self.history_lock:
             unique_sources = len({a.get('identity_hash', '') for a in self.announce_history if a.get('identity_hash')}) if self.announce_history else 0
             
-            cache_stats = self.announce_cache.get_stats() if self.announce_cache else {}
+            # 🔥 Statistiche da SQLite
+            sqlite_stats = self.announce_cache.get_stats() if self.announce_cache else {}
             
-            # Calcola statistiche radio
+            # Calcola statistiche radio dalla history recente
             radio_stats = {}
             if self.announce_history:
                 rssi_values = [a.get('rssi') for a in self.announce_history if a.get('rssi') is not None]
@@ -585,117 +851,155 @@ class RNSMonitorManager:
             return {
                 'total_announces': self.announce_counter,
                 'history_size': len(self.announce_history),
-                'cache_size': len(self.announce_cache.cache) if self.announce_cache else 0,
+                'sqlite_total': sqlite_stats.get('total_announces', 0),
                 'monitor_alive': self.monitor_process.is_alive() if self.monitor_process else False,
                 'unique_sources': unique_sources,
                 'radio_stats': radio_stats,
-                'cache': cache_stats
+                'sqlite': sqlite_stats  # Statistiche complete da SQLite
             }
     
     def get_history(self, aspect_filter='all', limit=100, offset=0, search='', sort='time_desc', source='memory'):
-        """Recupera storico annunci - ORA CON DATI RADIO"""
-        if source == 'cache' and self.announce_cache:
-            # Usa cache persistente
-            def filter_func(a):
-                if aspect_filter != 'all':
-                    if aspect_filter == 'unknown' and a.get('aspect') not in ['unknown', None]:
-                        return False
-                    elif aspect_filter == 'known' and a.get('aspect') in ['unknown', None, 'identity_hash']:
-                        return False
-                    elif aspect_filter not in ['all', 'unknown', 'known'] and a.get('aspect') != aspect_filter:
-                        return False
-                
-                if search:
-                    return (search in a.get('dest_hash', '').lower() or
-                           search in a.get('identity_hash', '').lower() or
-                           search in a.get('aspect', '').lower() or
-                           search in a.get('data', '').lower() or
-                           search in a.get('ip', '').lower() or
-                           search in a.get('interface', '').lower())
-                return True
-            
-            filtered = self.announce_cache.get_all(filter_func)
-            total = len(filtered)
-            
-            # Ordina
-            sort_functions = {
-                'time_desc': (lambda x: x.get('timestamp', 0), True),
-                'time_asc': (lambda x: x.get('timestamp', 0), False),
-                'hops_desc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 0, True),
-                'hops_asc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 999, False),
-                'rssi_desc': (lambda x: x.get('rssi', -999) or -999, True),
-                'rssi_asc': (lambda x: x.get('rssi', 999) or 999, False),
-            }
-            key_func, reverse = sort_functions.get(sort, (lambda x: x.get('timestamp', 0), True))
-            filtered.sort(key=key_func, reverse=reverse)
-            
-            paginated = filtered[offset:offset + limit]
-            
+        """
+        Recupera storico annunci - ORA CON SQLITE
+        
+        Args:
+            aspect_filter: 'all', 'unknown', 'known', o aspect specifico
+            limit: numero massimo di risultati
+            offset: offset per paginazione
+            search: testo da cercare
+            sort: tipo di ordinamento
+            source: 'memory' (history recente) o 'sqlite' (database completo)
+        """
+        if source == 'sqlite' and self.announce_cache:
+            # 🔥 USA SQLITE PER RICERCHE VELOCI SU TUTTO LO STORICO
+            return self._get_history_from_sqlite(aspect_filter, limit, offset, search, sort)
+        
         else:
-            # Usa memoria recente
-            with self.history_lock:
-                filtered = self.announce_history.copy()
-            
-            # Filtra per aspect
-            if aspect_filter != 'all':
-                if aspect_filter == 'unknown':
-                    filtered = [a for a in filtered if a.get('aspect') in ['unknown', None]]
-                elif aspect_filter == 'known':
-                    filtered = [a for a in filtered if a.get('aspect') not in ['unknown', None] and a.get('aspect') != 'identity_hash']
-                else:
-                    filtered = [a for a in filtered if a.get('aspect') == aspect_filter]
-            
-            # Filtra per search
-            if search:
-                filtered = [a for a in filtered if 
-                           search in a.get('dest_hash', '').lower() or
-                           search in a.get('identity_hash', '').lower() or
-                           search in a.get('aspect', '').lower() or
-                           search in a.get('data', '').lower() or
-                           search in a.get('ip', '').lower() or
-                           search in a.get('interface', '').lower()]
-            
-            # Ordina
-            sort_functions = {
-                'time_asc': (lambda x: x.get('timestamp', 0), False),
-                'time_desc': (lambda x: x.get('timestamp', 0), True),
-                'hops_asc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 999, False),
-                'hops_desc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 0, True),
-                'aspect_asc': (lambda x: x.get('aspect', ''), False),
-                'aspect_desc': (lambda x: x.get('aspect', ''), True),
-                'identity_asc': (lambda x: x.get('identity_hash', ''), False),
-                'identity_desc': (lambda x: x.get('identity_hash', ''), True),
-                'rssi_desc': (lambda x: x.get('rssi', -999) or -999, True),
-                'rssi_asc': (lambda x: x.get('rssi', 999) or 999, False),
-            }
-            
-            key_func, reverse = sort_functions.get(sort, (lambda x: x.get('timestamp', 0), True))
-            filtered.sort(key=key_func, reverse=reverse)
-            
-            total = len(filtered)
-            paginated = filtered[offset:offset + limit]
+            # Usa memoria recente (solo per streaming veloce)
+            return self._get_history_from_memory(aspect_filter, limit, offset, search, sort)
+    
+    def _get_history_from_memory(self, aspect_filter, limit, offset, search, sort):
+        """Recupera storico dalla memoria recente (history)"""
+        with self.history_lock:
+            filtered = self.announce_history.copy()
+        
+        # Filtra per aspect
+        if aspect_filter != 'all':
+            if aspect_filter == 'unknown':
+                filtered = [a for a in filtered if a.get('aspect') in ['unknown', None, '']]
+            elif aspect_filter == 'known':
+                filtered = [a for a in filtered if a.get('aspect') not in ['unknown', None, ''] and a.get('aspect') != 'identity_hash']
+            else:
+                filtered = [a for a in filtered if a.get('aspect') == aspect_filter]
+        
+        # Filtra per search
+        if search:
+            search_lower = search.lower()
+            filtered = [a for a in filtered if 
+                       search_lower in a.get('dest_hash', '').lower() or
+                       search_lower in a.get('identity_hash', '').lower() or
+                       search_lower in a.get('aspect', '').lower() or
+                       search_lower in a.get('data', '').lower() or
+                       search_lower in a.get('ip', '').lower() or
+                       search_lower in a.get('interface', '').lower()]
+        
+        # Ordina
+        sort_functions = {
+            'time_asc': (lambda x: x.get('timestamp', 0), False),
+            'time_desc': (lambda x: x.get('timestamp', 0), True),
+            'hops_asc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 999, False),
+            'hops_desc': (lambda x: int(x.get('hops', 0)) if str(x.get('hops', '0')).isdigit() else 0, True),
+            'aspect_asc': (lambda x: x.get('aspect', ''), False),
+            'aspect_desc': (lambda x: x.get('aspect', ''), True),
+            'identity_asc': (lambda x: x.get('identity_hash', ''), False),
+            'identity_desc': (lambda x: x.get('identity_hash', ''), True),
+            'rssi_desc': (lambda x: x.get('rssi', -999) or -999, True),
+            'rssi_asc': (lambda x: x.get('rssi', 999) or 999, False),
+            'snr_desc': (lambda x: x.get('snr', -999) or -999, True),
+            'snr_asc': (lambda x: x.get('snr', 999) or 999, False),
+        }
+        
+        key_func, reverse = sort_functions.get(sort, (lambda x: x.get('timestamp', 0), True))
+        filtered.sort(key=key_func, reverse=reverse)
+        
+        total = len(filtered)
+        paginated = filtered[offset:offset + limit]
         
         return {
             'announces': paginated,
             'total': total,
-            'source': source
+            'source': 'memory',
+            'offset': offset,
+            'limit': limit
+        }
+    
+    def _get_history_from_sqlite(self, aspect_filter, limit, offset, search, sort):
+        """Recupera storico da SQLite con filtri avanzati"""
+        
+        # Converti aspect_filter
+        aspect = None
+        if aspect_filter not in ['all', 'unknown', 'known']:
+            aspect = aspect_filter
+        
+        # Per search, cerchiamo in dest_hash e identity_hash
+        dest_filter = search if search else None
+        identity_filter = search if search else None
+        
+        # Ottieni da SQLite
+        announces = self.announce_cache.get_announces(
+            aspect=aspect,
+            dest_hash=dest_filter,
+            identity_hash=identity_filter,
+            limit=limit,
+            offset=offset,
+            sort=sort
+        )
+        
+        # Conteggio totale
+        total = self.announce_cache.count_announces(
+            aspect=aspect,
+            dest_hash=dest_filter,
+            identity_hash=identity_filter
+        )
+        
+        return {
+            'announces': announces,
+            'total': total,
+            'source': 'sqlite',
+            'offset': offset,
+            'limit': limit
         }
     
     def get_peer_details(self, dest_hash):
         """Ottieni dettagli completi di un peer specifico"""
+        # Prima cerca nella history recente
         with self.history_lock:
-            # Cerca nella history
             for a in self.announce_history:
                 if a.get('dest_hash') == dest_hash:
                     return a
-            
-            # Cerca nella cache
-            if self.announce_cache:
-                filtered = self.announce_cache.get_all(lambda x: x.get('dest_hash') == dest_hash)
-                if filtered:
-                    return filtered[0]
+        
+        # 🔥 Poi cerca in SQLite
+        if self.announce_cache:
+            results = self.announce_cache.get_announces(
+                dest_hash=dest_hash,
+                limit=1
+            )
+            if results:
+                return results[0]
         
         return None
+    
+    def get_peer_statistics(self, dest_hash):
+        """Ottieni statistiche aggregate per un peer"""
+        if self.announce_cache:
+            return self.announce_cache.get_peer_stats(dest_hash)
+        return None
+    
+    def search_advanced(self, **kwargs):
+        """Ricerca avanzata in SQLite"""
+        if self.announce_cache:
+            return self.announce_cache.get_announces(**kwargs)
+        return []
     
     def clear_all(self):
         """Reset totale di tutti i dati"""
@@ -710,25 +1014,10 @@ class RNSMonitorManager:
                 except:
                     break
         
-        # Pulisci cache
+        # 🔥 Pulisci SQLite
         if self.announce_cache:
             self.announce_cache.clear()
-            
-            # Elimina file cache
-            try:
-                if os.path.exists(self.announce_cache.cache_file):
-                    os.remove(self.announce_cache.cache_file)
-                    print(f"[MonitorManager] File cache eliminato: {self.announce_cache.cache_file}")
-            except Exception as e:
-                print(f"[MonitorManager] Errore eliminazione file: {e}")
-            
-            # Crea file cache vuoto
-            try:
-                with open(self.announce_cache.cache_file, 'w') as f:
-                    json.dump([], f)
-                print(f"[MonitorManager] Creato nuovo file cache vuoto")
-            except Exception as e:
-                print(f"[MonitorManager] Errore creazione file: {e}")
+            print("[MonitorManager] SQLite cache pulita")
         
         return True
     
@@ -736,7 +1025,7 @@ class RNSMonitorManager:
         """Ferma tutti i processi e thread"""
         self.running = False
         
-        # Ferma cache
+        # Ferma SQLite cache
         if self.announce_cache:
             self.announce_cache.stop()
         
@@ -755,7 +1044,7 @@ class RNSMonitorManager:
 
 
 def create_monitor_blueprint(monitor_manager):
-    """Crea un blueprint Flask con le route del monitor - ORA CON DATI RADIO"""
+    """Crea un blueprint Flask con le route del monitor - ORA CON SQLITE"""
     from flask import Blueprint, request, jsonify, Response, stream_with_context, render_template, make_response
     import uuid
     import json
@@ -764,16 +1053,14 @@ def create_monitor_blueprint(monitor_manager):
     # Blueprint con prefisso /api/monitor
     monitor_bp = Blueprint('monitor', __name__, url_prefix='/api/monitor')
     
-    # Pagina principale - CORRETTA
+    # === ENDPOINT ESISTENTI ===
+    
     @monitor_bp.route('')
     def monitor_page():
         response = make_response(render_template('monitor.html'))
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
         return response
     
-    # API stats
     @monitor_bp.route('/stats')
     def stats():
         return jsonify({
@@ -781,7 +1068,6 @@ def create_monitor_blueprint(monitor_manager):
             **monitor_manager.get_stats()
         })
     
-    # API history
     @monitor_bp.route('/history')
     def history():
         aspect = request.args.get('aspect', 'all')
@@ -789,7 +1075,7 @@ def create_monitor_blueprint(monitor_manager):
         offset = int(request.args.get('offset', 0))
         search = request.args.get('search', '').lower()
         sort = request.args.get('sort', 'time_desc')
-        source = request.args.get('source', 'memory')
+        source = request.args.get('source', 'memory')  # 'memory' o 'sqlite'
         
         result = monitor_manager.get_history(
             aspect_filter=aspect,
@@ -805,7 +1091,6 @@ def create_monitor_blueprint(monitor_manager):
             **result
         })
     
-    # API peer details
     @monitor_bp.route('/peer/<dest_hash>')
     def peer_details(dest_hash):
         peer = monitor_manager.get_peer_details(dest_hash)
@@ -813,65 +1098,58 @@ def create_monitor_blueprint(monitor_manager):
             return jsonify({'success': True, 'peer': peer})
         return jsonify({'success': False, 'error': 'Peer non trovato'}), 404
     
-    # API stream
     @monitor_bp.route('/stream')
     def stream():
         def generate():
             client_id = str(uuid.uuid4())[:8]
-            print(f"[SSE] Client {client_id} connesso")
+            last_id = 0
             
-            last_keepalive = time.time()
+            print(f"[Stream:{client_id}] Nuovo client connesso")
             
+            # Invia header SSE
+            yield "retry: 1000\n\n"
+            
+            # Invia storico recente
             with monitor_manager.history_lock:
-                last_id = monitor_manager.announce_counter
-                recent = list(reversed(monitor_manager.announce_history[-10:])) if monitor_manager.announce_history else []
-                for ann in recent:
-                    yield f"data: {json.dumps(ann)}\n\n"
+                recent = list(reversed(monitor_manager.announce_history[-20:]))
             
+            for announce in recent:
+                if announce.get('id', 0) > last_id:
+                    last_id = announce.get('id', 0)
+                    yield f"data: {json.dumps(announce)}\n\n"
+            
+            # Streaming in tempo reale
             while True:
                 try:
-                    announce = monitor_manager.announce_queue.get(timeout=15)
-                    if announce['id'] > last_id:
-                        last_id = announce['id']
+                    announce = monitor_manager.announce_queue.get(timeout=30)
+                    if announce.get('id', 0) > last_id:
+                        last_id = announce.get('id', 0)
                         yield f"data: {json.dumps(announce)}\n\n"
-                        print(f"[SSE] Inviato #{announce['id']} a {client_id}")
                 except queue.Empty:
-                    if time.time() - last_keepalive > 15:
-                        yield ":\n\n"
-                        last_keepalive = time.time()
-                    continue
+                    yield ": heartbeat\n\n"
                 except GeneratorExit:
-                    print(f"[SSE] Client {client_id} disconnesso")
+                    print(f"[Stream:{client_id}] Client disconnesso")
                     break
-                except Exception as e:
-                    print(f"[SSE] Errore: {e}")
-                    time.sleep(1)
         
-        response = Response(
+        return Response(
             stream_with_context(generate()),
             mimetype="text/event-stream",
             headers={
-                'Cache-Control': 'no-cache, no-transform',
-                'X-Accel-Buffering': 'no',
-                'Connection': 'keep-alive',
-                'Content-Type': 'text/event-stream; charset=utf-8',
-                'Access-Control-Allow-Origin': '*'
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no'
             }
         )
-        return response
     
-    # API clear
     @monitor_bp.route('/clear', methods=['POST'])
     def clear():
         monitor_manager.clear_all()
         return jsonify({'success': True, 'message': 'TUTTO PULITO!'})
     
-    # API reset-all
     @monitor_bp.route('/reset-all', methods=['POST'])
     def reset_all():
-        """Reset totale di tutti i dati (cache, history, contatori)"""
+        """Reset totale di storico e cache"""
         try:
-            print("="*60)
+            print("\n" + "="*60)
             print("🔄 RESET TOTALE RICHIESTO")
             print("="*60)
             
@@ -879,86 +1157,143 @@ def create_monitor_blueprint(monitor_manager):
             
             if monitor_manager.announce_cache:
                 monitor_manager.announce_cache.clear()
-                try:
-                    if os.path.exists(monitor_manager.announce_cache.cache_file):
-                        os.remove(monitor_manager.announce_cache.cache_file)
-                        print(f"[Reset] File cache eliminato: {monitor_manager.announce_cache.cache_file}")
-                except Exception as e:
-                    print(f"[Reset] Errore eliminazione file: {e}")
                 
-                try:
-                    with open(monitor_manager.announce_cache.cache_file, 'w') as f:
-                        json.dump([], f)
-                    print(f"[Reset] Creato nuovo file cache vuoto")
-                except Exception as e:
-                    print(f"[Reset] Errore creazione file: {e}")
+                # Elimina file cache
+                cache_file = monitor_manager.announce_cache.db_path
+                if os.path.exists(cache_file):
+                    os.remove(cache_file)
+                    print(f"[✓] File cache eliminato: {cache_file}")
             
-            stats = monitor_manager.get_stats()
-            print(f"[Reset] Completato. Stats: {stats}")
+            print("="*60)
+            print("✅ RESET TOTALE COMPLETATO")
+            print("="*60 + "\n")
             
             return jsonify({
                 'success': True,
                 'message': 'Reset totale completato',
-                'stats': stats
+                'announces': 0,
+                'identities': 0
             })
+            
         except Exception as e:
-            print(f"[Reset] ERRORE: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[!] Errore durante reset: {e}")
             return jsonify({
                 'success': False,
                 'error': str(e)
-            }), 500
-    
-    # API cache clear
-    @monitor_bp.route('/cache/clear', methods=['POST'])
-    def cache_clear():
-        if monitor_manager.announce_cache:
-            monitor_manager.announce_cache.clear()
-            return jsonify({'success': True, 'message': 'Cache persistente pulita'})
-        return jsonify({'success': False, 'error': 'Cache non disponibile'})
-    
-    # API cache cleanup
-    @monitor_bp.route('/cache/cleanup', methods=['POST'])
-    def cache_cleanup():
-        if monitor_manager.announce_cache:
-            removed = monitor_manager.announce_cache.cleanup_old()
-            return jsonify({
-                'success': True, 
-                'removed': removed,
-                'message': f'Rimossi {removed} annunci vecchi'
             })
-        return jsonify({'success': False, 'error': 'Cache non disponibile'})
     
-    # API cache save
-    @monitor_bp.route('/cache/save', methods=['POST'])
-    def cache_save():
-        if monitor_manager.announce_cache:
-            monitor_manager.announce_cache.save()
-            return jsonify({'success': True, 'message': 'Cache salvata'})
-        return jsonify({'success': False, 'error': 'Cache non disponibile'})
+    # ============================================
+    # === 🔥 NUOVI ENDPOINT PER SQLITE ===
+    # ============================================
     
-    # API cache stats
-    @monitor_bp.route('/cache/stats')
-    def cache_stats():
-        if monitor_manager.announce_cache:
-            stats = monitor_manager.announce_cache.get_stats()
+    @monitor_bp.route('/sqlite/stats')
+    def sqlite_stats():
+        """Statistiche dettagliate del database SQLite"""
+        if not monitor_manager.announce_cache:
+            return jsonify({'success': False, 'error': 'SQLite non disponibile'}), 404
+        
+        stats = monitor_manager.announce_cache.get_stats()
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    
+    @monitor_bp.route('/sqlite/peer/<dest_hash>/stats')
+    def sqlite_peer_stats(dest_hash):
+        """Statistiche aggregate per un peer specifico"""
+        if not monitor_manager.announce_cache:
+            return jsonify({'success': False, 'error': 'SQLite non disponibile'}), 404
+        
+        stats = monitor_manager.announce_cache.get_peer_stats(dest_hash)
+        if stats:
             return jsonify({
                 'success': True,
                 'stats': stats
             })
-        return jsonify({'success': False, 'error': 'Cache non disponibile'})
+        
+        return jsonify({'success': False, 'error': 'Peer non trovato'}), 404
     
-    # API aspects
-    @monitor_bp.route('/aspects')
-    def aspects():
+    @monitor_bp.route('/sqlite/search')
+    def sqlite_search():
+        """Ricerca avanzata in SQLite con tutti i filtri"""
+        if not monitor_manager.announce_cache:
+            return jsonify({'success': False, 'error': 'SQLite non disponibile'}), 404
+        
+        # Parametri di ricerca
+        aspect = request.args.get('aspect')
+        dest = request.args.get('dest')
+        identity = request.args.get('identity')
+        min_rssi = request.args.get('min_rssi', type=float)
+        since = request.args.get('since', type=float)
+        limit = int(request.args.get('limit', 100))
+        offset = int(request.args.get('offset', 0))
+        sort = request.args.get('sort', 'time_desc')
+        
+        # Costruisci filtri
+        results = monitor_manager.announce_cache.get_announces(
+            aspect=aspect if aspect and aspect != 'all' else None,
+            dest_hash=dest,
+            identity_hash=identity,
+            min_rssi=min_rssi,
+            since=since,
+            limit=limit,
+            offset=offset,
+            sort=sort
+        )
+        
         return jsonify({
             'success': True,
-            'aspects': monitor_manager.aspects
+            'results': results,
+            'count': len(results),
+            'filters': {
+                'aspect': aspect,
+                'dest': dest,
+                'identity': identity,
+                'min_rssi': min_rssi,
+                'since': since,
+                'limit': limit,
+                'offset': offset,
+                'sort': sort
+            }
+        })
+    
+    @monitor_bp.route('/sqlite/cleanup', methods=['POST'])
+    def sqlite_cleanup():
+        """Forza cleanup manuale del database"""
+        if not monitor_manager.announce_cache:
+            return jsonify({'success': False, 'error': 'SQLite non disponibile'}), 404
+        
+        days = int(request.json.get('days', 30)) if request.json else 30
+        
+        removed = monitor_manager.announce_cache.cleanup_old(days)
+        
+        return jsonify({
+            'success': True,
+            'removed': removed,
+            'message': f'Rimossi {removed} annunci più vecchi di {days} giorni'
+        })
+    
+    @monitor_bp.route('/sqlite/vacuum', methods=['POST'])
+    def sqlite_vacuum():
+        """Ottimizza database (VACUUM)"""
+        if not monitor_manager.announce_cache:
+            return jsonify({'success': False, 'error': 'SQLite non disponibile'}), 404
+        
+        size_before = os.path.getsize(monitor_manager.announce_cache.db_path) / (1024*1024)
+        
+        monitor_manager.announce_cache.vacuum()
+        
+        size_after = os.path.getsize(monitor_manager.announce_cache.db_path) / (1024*1024)
+        
+        return jsonify({
+            'success': True,
+            'size_before_mb': round(size_before, 2),
+            'size_after_mb': round(size_after, 2),
+            'reduced_mb': round(size_before - size_after, 2)
         })
     
     # ============================================
-    # === ENDPOINT PER LXMF-CHAT (UNICO) ===
+    # === ENDPOINT PER LXMF-CHAT ===
     # ============================================
 
     @monitor_bp.route('/launch-lxmfchat', methods=['GET'])
@@ -1087,11 +1422,8 @@ def create_monitor_blueprint(monitor_manager):
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500
     
-    # ============================================
-    # === RITORNA IL BLUEPRINT ===
-    # ============================================
-    
     return monitor_bp
+
 
 # ============================================
 # === FUNZIONE PER INIZIALIZZARE IL MONITOR ===

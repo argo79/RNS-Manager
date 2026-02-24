@@ -958,7 +958,7 @@
         }
 
         // ============================================
-        // === UPDATE TABS FROM CACHE - CORRETTA ===
+        // === ASPECT TABS - VERSIONE CORRETTA ===
         // ============================================
 
         function initAspectTabs() {
@@ -967,35 +967,43 @@
             const row3 = document.getElementById('aspect-row-3');
             
             function renderAspectTabs() {
-                let counts;
+                let counts = new Map();
                 
-                if (state.cacheSource === 'cache') {
-                    counts = new Map();
-                    counts.set('all', 0);
-                    counts.set('known', 0);
-                    counts.set('unknown', 0);
-                    ASPECTS.forEach(a => counts.set(a, 0));
+                // Inizializza tutti i contatori a 0
+                counts.set('all', 0);
+                counts.set('known', 0);
+                counts.set('unknown', 0);
+                ASPECTS.forEach(a => counts.set(a, 0));
+                
+                if (state.cacheSource === 'cache' && window._cacheAspectCounts) {
+                    // ✅ CORRETTO: window._cacheAspectCounts è un oggetto, non un array!
+                    console.log('📊 _cacheAspectCounts:', window._cacheAspectCounts);
                     
-                    if (window._cacheAspectCounts) {
-                        Object.entries(window._cacheAspectCounts).forEach(([asp, cnt]) => {
-                            if (ASPECTS.includes(asp)) {
-                                counts.set(asp, cnt);
-                                counts.set('known', (counts.get('known') || 0) + cnt);
-                                counts.set('all', (counts.get('all') || 0) + cnt);
-                            } else {
-                                counts.set('unknown', (counts.get('unknown') || 0) + cnt);
-                                counts.set('all', (counts.get('all') || 0) + cnt);
-                            }
-                        });
-                    }
+                    // Itera sulle proprietà dell'oggetto
+                    Object.entries(window._cacheAspectCounts).forEach(([asp, cnt]) => {
+                        const count = parseInt(cnt) || 0;
+                        
+                        if (ASPECTS.includes(asp)) {
+                            counts.set(asp, count);
+                            counts.set('known', (counts.get('known') || 0) + count);
+                            counts.set('all', (counts.get('all') || 0) + count);
+                        } else {
+                            counts.set('unknown', (counts.get('unknown') || 0) + count);
+                            counts.set('all', (counts.get('all') || 0) + count);
+                        }
+                    });
                 } else {
-                    counts = getAspectCounts();
+                    // Modalità memory: usa getAspectCounts()
+                    const memoryCounts = getAspectCounts();
+                    counts = memoryCounts; // getAspectCounts già restituisce Map
                 }
                 
+                // Renderizza le righe
                 row1.innerHTML = '';
                 row2.innerHTML = '';
                 row3.innerHTML = '';
                 
+                // Riga 1: "tutti" + primi 10 aspect
                 let html1 = `<div class="tab-aspect ${state.aspect === 'all' ? 'active' : ''}" data-aspect="all">📋 tutti (${counts.get('all') || 0})</div>`;
                 ASPECTS.slice(0, 10).forEach(a => {
                     const short = a.split('.').pop();
@@ -1004,7 +1012,8 @@
                 });
                 row1.innerHTML = html1;
                 
-                let html2 = ``;
+                // Riga 2: aspect 10-20
+                let html2 = '';
                 ASPECTS.slice(10, 20).forEach(a => {
                     const short = a.split('.').pop();
                     const count = counts.get(a) || 0;
@@ -1012,7 +1021,8 @@
                 });
                 row2.innerHTML = html2;
                 
-                let html3 = ``;
+                // Riga 3: aspect rimanenti + known/unknown
+                let html3 = '';
                 ASPECTS.slice(20).forEach(a => {
                     const short = a.split('.').pop();
                     const count = counts.get(a) || 0;
@@ -1022,6 +1032,7 @@
                 html3 += `<div class="tab-aspect ${state.aspect === 'unknown' ? 'active' : ''}" data-aspect="unknown">? sconosciuti (${counts.get('unknown') || 0})</div>`;
                 row3.innerHTML = html3;
                 
+                // Riassegna gli event listener
                 document.querySelectorAll('.tab-aspect').forEach(tab => {
                     const newTab = tab.cloneNode(true);
                     tab.parentNode.replaceChild(newTab, tab);
@@ -1498,7 +1509,7 @@
             
             if (state.cacheSource === 'cache') {
                 // MODALITÀ CACHE - USA I DATI FRESCHI DAL BACKEND
-                fetch('/api/monitor/cache/stats')
+                fetch('/api/monitor/sqlite/stats')
                     .then(res => res.json())
                     .then(data => {
                         if (data.success && data.stats) {
@@ -1758,16 +1769,34 @@
             });
         }
 
-        // MODIFICARE updateTabsFromCache() per evitare doppie chiamate
+        // ============================================
+        // === UPDATE TABS FROM CACHE - CORRETTA ===
+        // ============================================
+
         function updateTabsFromCache() {
             console.log('🔄 Aggiornamento dalla cache...');
             
             // Carica prima le stats per aggiornare i tab
-            fetch('/api/monitor/cache/stats')
+            fetch('/api/monitor/sqlite/stats')  // Assicurati che sia il path corretto
                 .then(res => res.json())
                 .then(data => {
                     if (data.success && data.stats) {
-                        window._cacheAspectCounts = data.stats.aspects || {};
+                        // ✅ CORRETTO: data.stats.aspects è un array di oggetti?
+                        // Dobbiamo convertirlo nel formato corretto
+                        const aspectCounts = {};
+                        
+                        // Se aspects è un array di {aspect, count}
+                        if (Array.isArray(data.stats.aspects)) {
+                            data.stats.aspects.forEach(item => {
+                                aspectCounts[item.aspect] = item.count;
+                            });
+                        } else {
+                            // Se è già un oggetto
+                            Object.assign(aspectCounts, data.stats.aspects || {});
+                        }
+                        
+                        window._cacheAspectCounts = aspectCounts;
+                        console.log('📊 _cacheAspectCounts aggiornato:', window._cacheAspectCounts);
                         
                         // Aggiorna i tab SUBITO con le stats
                         if (window.updateAspectTabs) {

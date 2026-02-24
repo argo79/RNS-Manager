@@ -175,6 +175,7 @@ select, input {
     width: 100%;
     border-collapse: collapse;
     font-size: 11px;
+    table-layout: fixed;
 }
 
 .table th {
@@ -198,12 +199,20 @@ select, input {
     padding: 8px 6px;
     border-bottom: 1px solid #222;
     word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .table tr:hover td { 
     background: var(--hover); 
 }
 
+.table td:last-child {
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+}
 .badge {
     display: inline-block;
     padding: 2px 8px;
