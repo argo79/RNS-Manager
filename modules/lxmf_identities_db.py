@@ -97,7 +97,7 @@ class LXMFIdentitiesDB:
                 pass
         
         if not display_name:
-            display_name = f"LXMF_{delivery_clean[:8]}"
+            display_name = None
         
         # Cerca identità esistente per delivery_hash
         existing = self.get_by_delivery(delivery_clean)
@@ -385,28 +385,57 @@ class LXMFIdentitiesDB:
         
         return peers
     
-    def import_from_cache(self, cache_file):
-        """Importa identità dalla cache JSON"""
-        count = 0
+
+    def import_from_sqlite(self, sqlite_path):
+        """Importa identità dal database SQLite del monitor"""
         try:
-            if os.path.exists(cache_file):
-                with open(cache_file, 'r') as f:
-                    cache_data = json.load(f)
-                
-                for announce in cache_data:
-                    if announce.get('aspect') == 'lxmf.delivery':
-                        result = self.update_from_announce(announce)
-                        if result:
-                            count += 1
-                            if count % 50 == 0:
-                                print(f"   → {count} identità importate...")
-                
-                print(f"✅ Importate {count} identità dalla cache")
+            if not os.path.exists(sqlite_path):
+                return 0
+            
+            conn = sqlite3.connect(sqlite_path)
+            c = conn.cursor()
+            c.execute("SELECT timestamp, dest_hash, data, hops, rssi, snr, q, via FROM announces WHERE aspect='lxmf.delivery'")
+            rows = c.fetchall()
+            conn.close()
+            
+            print(f"📊 Trovati {len(rows)} annunci lxmf.delivery")
+            
+            imported = 0
+            errors = 0
+            for i, row in enumerate(rows):
+                try:
+                    announce = {
+                        'aspect': 'lxmf.delivery',
+                        'timestamp': row[0],
+                        'dest_hash': row[1],
+                        'data': row[2],
+                        'hops': row[3],
+                        'rssi': row[4],
+                        'snr': row[5],
+                        'q': row[6],
+                        'via': row[7]
+                    }
+                    if self.update_from_announce(announce):
+                        imported += 1
+                    else:
+                        errors += 1
+                    
+                    if (i+1) % 100 == 0:
+                        print(f"   → {i+1}/{len(rows)} processati, {imported} importate")
+                        
+                except Exception as e:
+                    print(f"❌ Errore riga {i}: {e}")
+                    errors += 1
+            
+            print(f"✅ Importate {imported} identità dal monitor ({errors} errori)")
+            return imported
         except Exception as e:
-            print(f"❌ Errore import: {e}")
-        
-        return count
-    
+            print(f"❌ Errore import SQLite: {e}")
+            import traceback
+            traceback.print_exc()
+            return 0
+
+
     def get_stats(self):
         """Statistiche database"""
         conn = sqlite3.connect(self.db_path)

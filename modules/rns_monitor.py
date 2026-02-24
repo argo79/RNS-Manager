@@ -213,6 +213,12 @@ class SQLiteAnnounceCache:
     def get_announces(self, aspect=None, dest_hash=None, identity_hash=None,
                       min_rssi=None, since=None, limit=None, offset=0, sort='time_desc'):
         """Recupera annunci con filtri avanzati"""
+        
+        print(f"🔍 SQLiteAnnounceCache.get_announces()")
+        print(f"   aspect: {aspect}")
+        print(f"   limit: {limit}")
+        print(f"   offset: {offset}")
+        
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
@@ -224,14 +230,17 @@ class SQLiteAnnounceCache:
         if aspect:
             query += " AND aspect = ?"
             params.append(aspect)
+            print(f"   filtro aspect: {aspect}")
         
         if dest_hash:
             query += " AND dest_hash LIKE ?"
             params.append(f'%{dest_hash}%')
+            print(f"   filtro dest: {dest_hash}")
         
         if identity_hash:
             query += " AND identity_hash LIKE ?"
             params.append(f'%{identity_hash}%')
+            print(f"   filtro identity: {identity_hash}")
         
         if min_rssi is not None:
             query += " AND rssi >= ?"
@@ -255,9 +264,19 @@ class SQLiteAnnounceCache:
         sort_col, sort_dir = sort_map.get(sort, ('timestamp', 'DESC'))
         query += f" ORDER BY {sort_col} {sort_dir}"
         
-        if limit:
+        if limit and limit > 0:
             query += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
+            print(f"   LIMIT {limit}, OFFSET {offset}")
+        elif offset > 0:
+            query += " OFFSET ?"
+            params.append(offset)
+            print(f"   OFFSET {offset} (no limit)")
+        else:
+            print(f"   NESSUN LIMITE (tutti gli annunci)")
+        
+        print(f"   Query: {query}")
+        print(f"   Params: {params}")
         
         c.execute(query, params)
         rows = c.fetchall()
@@ -266,17 +285,7 @@ class SQLiteAnnounceCache:
         # Converti in dizionari
         results = [dict(row) for row in rows]
         
-        # Ricostruisci full_data se presente
-        for r in results:
-            if r.get('full_data'):
-                try:
-                    full = json.loads(r['full_data'])
-                    # Merge senza sovrascrivere campi già presenti
-                    for k, v in full.items():
-                        if k not in r or r[k] is None:
-                            r[k] = v
-                except:
-                    pass
+        print(f"   Risultati: {len(results)} annunci")
         
         return results
     
@@ -861,22 +870,17 @@ class RNSMonitorManager:
     def get_history(self, aspect_filter='all', limit=100, offset=0, search='', sort='time_desc', source='memory'):
         """
         Recupera storico annunci - ORA CON SQLITE
-        
-        Args:
-            aspect_filter: 'all', 'unknown', 'known', o aspect specifico
-            limit: numero massimo di risultati
-            offset: offset per paginazione
-            search: testo da cercare
-            sort: tipo di ordinamento
-            source: 'memory' (history recente) o 'sqlite' (database completo)
         """
-        if source == 'sqlite' and self.announce_cache:
-            # 🔥 USA SQLITE PER RICERCHE VELOCI SU TUTTO LO STORICO
+        print(f"\n🔴🔴🔴 get_history CHIAMATO con source={source} 🔴🔴🔴")
+        
+        # 🟢 FIX: Se source è 'cache' e abbiamo la cache, usa SQLITE!
+        if source == 'cache' and self.announce_cache:
+            print("   ✅ usando SQLITE (_get_history_from_sqlite)")
             return self._get_history_from_sqlite(aspect_filter, limit, offset, search, sort)
         
-        else:
-            # Usa memoria recente (solo per streaming veloce)
-            return self._get_history_from_memory(aspect_filter, limit, offset, search, sort)
+        # Altrimenti usa memoria
+        print("   ⚠️ usando MEMORIA (_get_history_from_memory)")
+        return self._get_history_from_memory(aspect_filter, limit, offset, search, sort)
     
     def _get_history_from_memory(self, aspect_filter, limit, offset, search, sort):
         """Recupera storico dalla memoria recente (history)"""
@@ -936,6 +940,15 @@ class RNSMonitorManager:
     def _get_history_from_sqlite(self, aspect_filter, limit, offset, search, sort):
         """Recupera storico da SQLite con filtri avanzati"""
         
+        print("\n" + "="*60)
+        print(f"🔴🔴🔴 _get_history_from_sqlite CHIAMATA!")
+        print(f"📊 aspect_filter: {aspect_filter}")
+        print(f"📊 limit: {limit}")
+        print(f"📊 offset: {offset}")
+        print(f"📊 search: {search}")
+        print(f"📊 sort: {sort}")
+        print("="*60 + "\n")
+        
         # Converti aspect_filter
         aspect = None
         if aspect_filter not in ['all', 'unknown', 'known']:
@@ -945,15 +958,24 @@ class RNSMonitorManager:
         dest_filter = search if search else None
         identity_filter = search if search else None
         
+        print(f"📌 Parametri convertiti: aspect={aspect}, dest={dest_filter}, identity={identity_filter}")
+        
         # Ottieni da SQLite
         announces = self.announce_cache.get_announces(
             aspect=aspect,
             dest_hash=dest_filter,
             identity_hash=identity_filter,
-            limit=limit,
+            limit=limit if limit and limit > 0 else None,
             offset=offset,
             sort=sort
         )
+        
+        print(f"✅ Trovati {len(announces)} annunci in SQLite")
+        if len(announces) > 0:
+            print(f"📝 Primo annuncio ID: {announces[0].get('id')}")
+            print(f"📝 Primo annuncio Aspect: {announces[0].get('aspect')}")
+        else:
+            print("❌ NESSUN annuncio trovato in SQLite!")
         
         # Conteggio totale
         total = self.announce_cache.count_announces(
@@ -961,6 +983,9 @@ class RNSMonitorManager:
             dest_hash=dest_filter,
             identity_hash=identity_filter
         )
+        
+        print(f"📊 Totale conteggio: {total}")
+        print("="*60 + "\n")
         
         return {
             'announces': announces,

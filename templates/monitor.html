@@ -78,7 +78,7 @@
                 <span style="color:var(--dim); font-size:11px;">💾 cache:</span>
                 <select id="cache-source-select" style="background:#1a1a1a; color:var(--fg); border:1px solid #333; padding:4px 8px; border-radius:4px;">
                     <option value="memory">📱 memoria (ultimi 1000)</option>
-                    <option value="cache">💾 disco (ultimi 7 giorni)</option>
+                    <option value="cache" selected>💾 disco (ultimi 7 giorni)</option>
                 </select>
                 <button class="btn" id="reset-all-btn" style="background:#550000; color:#ffaa00; font-size:11px; padding:4px 8px;">🔄 RESET TOTALE</button>
             </div>
@@ -257,7 +257,7 @@
             identities: new Map(),
             expandedIdentities: new Set(),
             identitySort: 'count_desc',
-            cacheSource: 'memory',
+            cacheSource: 'cache',  // <-- MODIFICATO: default a cache
             resetting: false,
             eventSource: null,
             backendStats: { total: 0, unique: 0, cacheSize: 0 },
@@ -868,17 +868,14 @@
                             unique: data.unique_sources || 0,
                             cacheSize: data.cache?.size || 0
                         };
-                        
-                        document.getElementById('total-announces').textContent = state.backendStats.total;
-                        document.getElementById('unique-sources').textContent = state.backendStats.unique;
-                        document.getElementById('cache-size-indicator').textContent = state.backendStats.cacheSize;
+                        // NON aggiornare header qui!
                     }
                 })
                 .catch(err => console.error('Errore refresh stats:', err));
         }
 
         // ============================================
-        // === ASPECT TABS - VERSIONE FINALE CON CACHE ===
+        // === ASPECT TABS - MODIFICATO PER USARE window._allAnnounces ===
         // ============================================
 
         function getAspectCounts() {
@@ -890,70 +887,22 @@
             counts.set('unknown', 0);
             ASPECTS.forEach(a => counts.set(a, 0));
             
-            if (state.cacheSource === 'cache') {
-                console.log('📁 Calcolo conteggi dalla cache...');
+            if (window._allAnnounces && window._allAnnounces.length > 0) {
+                console.log(`📊 Calcolo conteggi da ${window._allAnnounces.length} annunci`);
                 
-                // MODALITÀ CACHE: USA I DATI GIÀ CARICATI in window._allAnnounces
-                // Invece di fare una fetch che causa discrepanze
-                if (window._allAnnounces && window._allAnnounces.length > 0) {
-                    console.log(`📊 Calcolo conteggi da ${window._allAnnounces.length} annunci caricati`);
-                    
-                    // Resetta i contatori
-                    counts.set('all', 0);
-                    counts.set('known', 0);
-                    counts.set('unknown', 0);
-                    ASPECTS.forEach(a => counts.set(a, 0));
-                    
-                    // Conta gli annunci effettivamente caricati
-                    window._allAnnounces.forEach(ann => {
-                        const asp = ann.aspect || 'unknown';
-                        
-                        // Incrementa il contatore specifico dell'aspect
-                        if (ASPECTS.includes(asp)) {
-                            counts.set(asp, (counts.get(asp) || 0) + 1);
-                            counts.set('known', (counts.get('known') || 0) + 1);
-                        } else {
-                            counts.set('unknown', (counts.get('unknown') || 0) + 1);
-                        }
-                        
-                        // Incrementa il contatore totale
-                        counts.set('all', (counts.get('all') || 0) + 1);
-                    });
-                    
-                    console.log('📊 Conteggi calcolati:', Object.fromEntries(counts));
-                } else {
-                    console.log('⚠️ Nessun annuncio caricato in window._allAnnounces');
-                    
-                    // Se non ci sono annunci, prova a caricarli
-                    setTimeout(() => {
-                        if (window.updateAspectTabs) {
-                            window.updateAspectTabs();
-                        }
-                    }, 500);
-                }
-                
-                return counts;
-            }
-            
-            // MODALITÀ MEMORY: usa state.identities
-            console.log('📊 Calcolo conteggi da state.identities...');
-            
-            state.identities.forEach(id => {
-                id.aspects.forEach((data, asp) => {
-                    const count = data.count || 1;
+                window._allAnnounces.forEach(ann => {
+                    const asp = ann.aspect || 'unknown';
                     
                     if (ASPECTS.includes(asp)) {
-                        counts.set(asp, (counts.get(asp) || 0) + count);
-                        counts.set('known', (counts.get('known') || 0) + count);
-                        counts.set('all', (counts.get('all') || 0) + count);
-                    } else if (asp !== 'identity_hash') {
-                        counts.set('unknown', (counts.get('unknown') || 0) + count);
-                        counts.set('all', (counts.get('all') || 0) + count);
+                        counts.set(asp, (counts.get(asp) || 0) + 1);
+                        counts.set('known', (counts.get('known') || 0) + 1);
+                    } else {
+                        counts.set('unknown', (counts.get('unknown') || 0) + 1);
                     }
+                    counts.set('all', (counts.get('all') || 0) + 1);
                 });
-            });
+            }
             
-            console.log('📊 Conteggi memory:', Object.fromEntries(counts));
             return counts;
         }
 
@@ -967,36 +916,7 @@
             const row3 = document.getElementById('aspect-row-3');
             
             function renderAspectTabs() {
-                let counts = new Map();
-                
-                // Inizializza tutti i contatori a 0
-                counts.set('all', 0);
-                counts.set('known', 0);
-                counts.set('unknown', 0);
-                ASPECTS.forEach(a => counts.set(a, 0));
-                
-                if (state.cacheSource === 'cache' && window._cacheAspectCounts) {
-                    // ✅ CORRETTO: window._cacheAspectCounts è un oggetto, non un array!
-                    console.log('📊 _cacheAspectCounts:', window._cacheAspectCounts);
-                    
-                    // Itera sulle proprietà dell'oggetto
-                    Object.entries(window._cacheAspectCounts).forEach(([asp, cnt]) => {
-                        const count = parseInt(cnt) || 0;
-                        
-                        if (ASPECTS.includes(asp)) {
-                            counts.set(asp, count);
-                            counts.set('known', (counts.get('known') || 0) + count);
-                            counts.set('all', (counts.get('all') || 0) + count);
-                        } else {
-                            counts.set('unknown', (counts.get('unknown') || 0) + count);
-                            counts.set('all', (counts.get('all') || 0) + count);
-                        }
-                    });
-                } else {
-                    // Modalità memory: usa getAspectCounts()
-                    const memoryCounts = getAspectCounts();
-                    counts = memoryCounts; // getAspectCounts già restituisce Map
-                }
+                const counts = getAspectCounts();
                 
                 // Renderizza le righe
                 row1.innerHTML = '';
@@ -1042,7 +962,7 @@
                         this.classList.add('active');
                         state.aspect = this.dataset.aspect;
                         state.page = 1;
-                        loadHistory();
+                        applyCurrentSortAndRender();  // <-- MODIFICATO: non loadHistory()
                     });
                 });
             }
@@ -1100,7 +1020,21 @@
             const escapedAspect = a.aspect ? a.aspect.replace(/'/g, "\\'") : 'unknown';
             
             let row = '<tr>';
-            row += `<td style="white-space:nowrap; color:var(--dim);">${a.time || ''}</td>`;
+            let timeDisplay = '';
+            if (a.timestamp) {
+                const d = new Date(a.timestamp * 1000);
+                timeDisplay = d.toLocaleString('it-IT', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } else if (a.time) {
+                timeDisplay = a.time;
+            }
+            row += `<td style="white-space:nowrap; color:var(--dim);">${timeDisplay}</td>`;
             row += `<td class="identity" title="${a.identity_hash || ''}"><span class="clickable-hash" onclick="showIdentityInTab('${escapedIdentityHash}')">${idShort}</span></td>`;
             row += `<td class="dest" title="${a.dest_hash || ''}"><span class="clickable-hash" onclick="showAspectModal('${escapedIdentityHash}', '${escapedAspect}', '${escapedDestHash}')">${destShort}</span></td>`;
             
@@ -1501,119 +1435,79 @@
         }
 
         // ============================================
-        // === STATISTICHE - CORRETTA (COMPLETA) ===
+        // === STATISTICHE - MODIFICATA PER USARE window._allAnnounces ===
         // ============================================
 
         function renderStats() {
             const now = Date.now() / 1000;
             
             if (state.cacheSource === 'cache') {
-                // MODALITÀ CACHE - USA I DATI FRESCHI DAL BACKEND
-                fetch('/api/monitor/sqlite/stats')
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.success && data.stats) {
-                            window._cacheAspectCounts = data.stats.aspects || {};
-                            
-                            // Calcola totale dagli aspect
-                            const totalFromAspects = Object.values(window._cacheAspectCounts).reduce((a, b) => a + b, 0);
-                            
-                            document.getElementById('stat-total').textContent = totalFromAspects;
-                            document.getElementById('stat-identities').textContent = `${state.identities.size} (${state.identities.size} attive)`;
-                            
-                            // Calcola frequenza e periodo globali
-                            if (window._allAnnounces && window._allAnnounces.length > 1) {
-                                const first = Math.min(...window._allAnnounces.map(a => a.timestamp || 0));
-                                const last = Math.max(...window._allAnnounces.map(a => a.timestamp || 0));
-                                const elapsed = last - first;
-                                if (elapsed > 0) {
-                                    const rate = totalFromAspects / elapsed;
-                                    document.getElementById('stat-rate').textContent = formatRate(rate);
-                                    document.getElementById('stat-period').textContent = formatPeriod(1 / rate);
-                                } else {
-                                    document.getElementById('stat-rate').textContent = '—';
-                                    document.getElementById('stat-period').textContent = '—';
-                                }
-                            } else {
-                                document.getElementById('stat-rate').textContent = '—';
-                                document.getElementById('stat-period').textContent = '—';
-                            }
-                            
-                            // ============================================
-                            // === TOP ASPECT CON FREQUENZE E PERIODI ===
-                            // ============================================
-                            if (window._cacheAspectCounts && window._allAnnounces && window._allAnnounces.length > 1) {
-                                const first = Math.min(...window._allAnnounces.map(a => a.timestamp || 0));
-                                const last = Math.max(...window._allAnnounces.map(a => a.timestamp || 0));
-                                const elapsed = last - first;
-                                
-                                let aspHtml = '';
-                                Object.entries(window._cacheAspectCounts)
-                                    .sort((a,b) => b[1] - a[1])
-                                    .slice(0, 8)
-                                    .forEach(([asp, cnt]) => {
-                                        const short = asp.split('.').pop() || asp;
-                                        const rate = cnt / elapsed;
-                                        
-                                        aspHtml += `<div class="stat-card">`;
-                                        aspHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
-                                        aspHtml += `<span style="color:var(--fg); font-weight:bold;">${short.slice(0,12)}</span>`;
-                                        aspHtml += `<span style="color:var(--dim);">${cnt} ann.</span>`;
-                                        aspHtml += `</div>`;
-                                        aspHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
-                                        aspHtml += `<span style="color:#ffff88;" title="frequenza">⚡ ${formatRate(rate)}</span>`;
-                                        aspHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(1/rate)}</span>`;
-                                        aspHtml += `</div>`;
-                                        aspHtml += `</div>`;
-                                    });
-                                document.getElementById('stats-aspects').innerHTML = aspHtml || '<div style="color:var(--dim);">nessun dato</div>';
-                            } else {
-                                document.getElementById('stats-aspects').innerHTML = '<div style="color:var(--dim);">nessun dato</div>';
-                            }
-                            
-                            // ============================================
-                            // === TOP IDENTITÀ CON FREQUENZE E PERIODI ===
-                            // ============================================
-                            if (state.identities.size > 0 && window._allAnnounces && window._allAnnounces.length > 1) {
-                                const first = Math.min(...window._allAnnounces.map(a => a.timestamp || 0));
-                                const last = Math.max(...window._allAnnounces.map(a => a.timestamp || 0));
-                                const elapsed = last - first;
-                                
-                                let idHtml = '';
-                                [...state.identities.values()]
-                                    .sort((a,b) => b.count - a.count)
-                                    .slice(0, 10)
-                                    .forEach(id => {
-                                        const rate = id.count / elapsed;
-                                        const lastData = decodeUTF8(id.lastData);
-                                        
-                                        idHtml += `<div class="stat-card">`;
-                                        idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
-                                        idHtml += `<span style="font-family:monospace; color:#8888ff;" title="${id.hash}">${id.hash.slice(0,16)}…</span>`;
-                                        if (lastData) idHtml += `<span style="color:#88ff88; font-size:9px;">${lastData.slice(0,16)}</span>`;
-                                        idHtml += `</div>`;
-                                        idHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
-                                        idHtml += `<span style="color:var(--dim);">${id.count} ann.</span>`;
-                                        idHtml += `<span>${id.aspects.size} aspect</span>`;
-                                        idHtml += `</div>`;
-                                        idHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
-                                        idHtml += `<span style="color:#ffff88;" title="frequenza">⚡ ${formatRate(rate)}</span>`;
-                                        idHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(1/rate)}</span>`;
-                                        idHtml += `</div>`;
-                                        idHtml += `</div>`;
-                                    });
-                                document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
-                            } else {
-                                document.getElementById('stats-identities').innerHTML = '<div style="color:var(--dim);">nessun dato</div>';
-                            }
+                // MODALITÀ CACHE - USA window._allAnnounces
+                if (window._allAnnounces && window._allAnnounces.length > 0) {
+                    const total = window._allAnnounces.length;
+                    document.getElementById('stat-total').textContent = total;
+                    
+                    const activeIdentities = [...state.identities.values()].filter(id => isActive(id.last)).length;
+                    document.getElementById('stat-identities').textContent = `${state.identities.size} (${activeIdentities} attive)`;
+                    
+                    // Calcola frequenza
+                    const timestamps = window._allAnnounces.map(a => a.timestamp).filter(t => t);
+                    if (timestamps.length > 1) {
+                        const first = Math.min(...timestamps);
+                        const last = Math.max(...timestamps);
+                        const elapsed = last - first;
+                        if (elapsed > 0) {
+                            const rate = total / elapsed;
+                            document.getElementById('stat-rate').textContent = formatRate(rate);
+                            document.getElementById('stat-period').textContent = formatPeriod(1 / rate);
                         }
-                    })
-                    .catch(err => console.error('Errore caricamento stats cache:', err));
-                
-                return;
+                    }
+                    
+                    // TOP ASPECT
+                    const aspectCounts = {};
+                    window._allAnnounces.forEach(ann => {
+                        const asp = ann.aspect || 'unknown';
+                        aspectCounts[asp] = (aspectCounts[asp] || 0) + 1;
+                    });
+                    
+                    let aspHtml = '';
+                    Object.entries(aspectCounts)
+                        .sort((a,b) => b[1] - a[1])
+                        .slice(0, 8)
+                        .forEach(([asp, cnt]) => {
+                            const short = asp.split('.').pop() || asp;
+                            aspHtml += `<div class="stat-card">`;
+                            aspHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                            aspHtml += `<span style="color:var(--fg); font-weight:bold;">${short.slice(0,12)}</span>`;
+                            aspHtml += `<span style="color:var(--dim);">${cnt} ann.</span>`;
+                            aspHtml += `</div>`;
+                            aspHtml += `</div>`;
+                        });
+                    document.getElementById('stats-aspects').innerHTML = aspHtml || '<div style="color:var(--dim);">nessun dato</div>';
+                    
+                    // TOP IDENTITÀ
+                    let idHtml = '';
+                    [...state.identities.values()]
+                        .sort((a,b) => b.count - a.count)
+                        .slice(0, 10)
+                        .forEach(id => {
+                            idHtml += `<div class="stat-card">`;
+                            idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
+                            idHtml += `<span style="font-family:monospace; color:#8888ff;" title="${id.hash}">${id.hash.slice(0,16)}…</span>`;
+                            idHtml += `</div>`;
+                            idHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                            idHtml += `<span style="color:var(--dim);">${id.count} ann.</span>`;
+                            idHtml += `<span>${id.aspects.size} aspect</span>`;
+                            idHtml += `</div>`;
+                            idHtml += `</div>`;
+                        });
+                    document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
+                    
+                    return;
+                }
             }
             
-            // MODALITÀ MEMORY - invariata (con frequenze e periodi)
+            // MODALITÀ MEMORY o cache senza dati
             let totalAnnounces = 0;
             let firstSeen = now;
             let lastSeen = 0;
@@ -1721,41 +1615,105 @@
         }
 
         // ============================================
-        // === LOAD HISTORY - CORRETTA ===
+        // === LOAD HISTORY - MODIFICATA ===
         // ============================================
 
-        // MODIFICARE loadHistory() per usare l'aspect corrente
+        function loadFromCache() {
+            console.log('📦 Caricamento da SQLite...');
+            
+            const params = new URLSearchParams({
+                aspect: 'all',
+                search: '',
+                limit: 0,
+                offset: 0,
+                sort: 'time_desc',
+                source: 'cache'
+            });
+
+            return fetch(`/api/monitor/history?${params}`)
+                .then(res => {
+                    console.log('📦 Risposta status:', res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    console.log('📦 Dati grezzi:', data);
+                    
+                    if (data.success && data.announces && Array.isArray(data.announces)) {
+                        window._allAnnounces = data.announces;
+                        console.log(`✅ Caricati ${window._allAnnounces.length} annunci`);
+                        
+                        if (window._allAnnounces.length === 0) {
+                            document.getElementById('announce-body').innerHTML = 
+                                '<tr><td colspan="10" style="text-align:center; padding:40px; color:#ffff88;">📭 Database vuoto</td></tr>';
+                        } else {
+                            rebuildIdentitiesFromAnnounces();
+                            state.page = 1;
+                            applyCurrentSortAndRender();
+                            
+                            if (window.updateAspectTabs) window.updateAspectTabs();
+                            if (state.view === 'stats') renderStats();
+                            
+                            // 🔴 SOLO QUI si aggiorna l'header!
+                            document.getElementById('total-announces').textContent = window._allAnnounces.length;
+                            document.getElementById('cache-size-indicator').textContent = window._allAnnounces.length;
+                            document.getElementById('unique-sources').textContent = state.identities.size;
+                        }
+                    } else {
+                        console.error('❌ Formato dati non valido:', data);
+                        document.getElementById('announce-body').innerHTML = 
+                            '<tr><td colspan="10" style="text-align:center; padding:40px; color:#ff8888;">❌ Formato dati non valido</td></tr>';
+                    }
+                    return window._allAnnounces;
+                })
+                .catch(err => {
+                    console.error('❌ Errore fetch:', err);
+                    document.getElementById('announce-body').innerHTML = 
+                        '<tr><td colspan="10" style="text-align:center; padding:40px; color:#ff8888;">❌ Errore di caricamento</td></tr>';
+                });
+        }
+
         function loadHistory() {
             return new Promise((resolve, reject) => {
-                // Usa state.aspect invece di 'all' fisso
+                // Se siamo in modalità cache, carica dal DB
+                if (state.cacheSource === 'cache') {
+                    if (window._allAnnounces && window._allAnnounces.length > 0) {
+                        console.log(`📊 Filtro locale per aspect: ${state.aspect}`);
+                        applyCurrentSortAndRender();
+                        resolve(window._allAnnounces);
+                    } else {
+                        loadFromCache().then(resolve).catch(reject);
+                    }
+                    return;
+                }
+                
+                // Per memory mode, fai fetch normale
                 const params = new URLSearchParams({
-                    aspect: state.aspect,  // <-- MODIFICATO: usa aspect corrente
+                    aspect: state.aspect,
                     search: state.search,
                     limit: 1000,
                     offset: 0,
                     sort: 'time_desc',
-                    source: state.cacheSource
+                    source: 'memory'
                 });
 
                 fetch(`/api/monitor/history?${params}`)
                     .then(res => res.json())
                     .then(data => {
                         if (data.success) {
-                            if (window._processedAnnounces) {
-                                window._processedAnnounces.clear();
-                            }
-                            
                             window._allAnnounces = data.announces || [];
-                            
-                            console.log(`📊 Caricati ${window._allAnnounces.length} annunci da ${state.cacheSource} per aspect: ${state.aspect}`);
+                            console.log(`📊 Caricati ${window._allAnnounces.length} annunci da memoria`);
                             
                             rebuildIdentitiesFromAnnounces();
-                            
                             applyCurrentSortAndRender();
                             
                             if (window.updateAspectTabs) {
                                 window.updateAspectTabs();
                             }
+                            
+                            // 🔴 AGGIORNA HEADER!
+                            document.getElementById('total-announces').textContent = window._allAnnounces.length;
+                            document.getElementById('cache-size-indicator').textContent = window._allAnnounces.length;
+                            document.getElementById('unique-sources').textContent = state.identities.size;
                             
                             resolve(window._allAnnounces);
                         } else {
@@ -1769,75 +1727,52 @@
             });
         }
 
-        // ============================================
-        // === UPDATE TABS FROM CACHE - CORRETTA ===
-        // ============================================
-
         function updateTabsFromCache() {
-            console.log('🔄 Aggiornamento dalla cache...');
+            console.log('🚀 updateTabsFromCache()');
             
-            // Carica prima le stats per aggiornare i tab
-            fetch('/api/monitor/sqlite/stats')  // Assicurati che sia il path corretto
+            // Forza reset
+            window._allAnnounces = [];
+            
+            const params = new URLSearchParams({
+                aspect: 'all',
+                search: '',
+                limit: 0,
+                offset: 0,
+                sort: 'time_desc',
+                source: 'cache'
+            });
+
+            fetch(`/api/monitor/history?${params}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (data.success && data.stats) {
-                        // ✅ CORRETTO: data.stats.aspects è un array di oggetti?
-                        // Dobbiamo convertirlo nel formato corretto
-                        const aspectCounts = {};
+                    if (data.success && data.announces && Array.isArray(data.announces)) {
+                        window._allAnnounces = data.announces;
+                        console.log(`✅ Caricati ${window._allAnnounces.length} annunci da SQLite`);
                         
-                        // Se aspects è un array di {aspect, count}
-                        if (Array.isArray(data.stats.aspects)) {
-                            data.stats.aspects.forEach(item => {
-                                aspectCounts[item.aspect] = item.count;
-                            });
-                        } else {
-                            // Se è già un oggetto
-                            Object.assign(aspectCounts, data.stats.aspects || {});
-                        }
+                        rebuildIdentitiesFromAnnounces();
                         
-                        window._cacheAspectCounts = aspectCounts;
-                        console.log('📊 _cacheAspectCounts aggiornato:', window._cacheAspectCounts);
+                        state.page = 1;
+                        applyCurrentSortAndRender();
                         
-                        // Aggiorna i tab SUBITO con le stats
                         if (window.updateAspectTabs) {
                             window.updateAspectTabs();
                         }
                         
-                        // POI carica la history per l'aspect corrente
-                        return loadHistory();
+                        if (state.view === 'stats') {
+                            renderStats();
+                        }
+                        
+                        // 🔴 AGGIORNA HEADER!
+                        document.getElementById('total-announces').textContent = window._allAnnounces.length;
+                        document.getElementById('cache-size-indicator').textContent = window._allAnnounces.length;
+                        document.getElementById('unique-sources').textContent = state.identities.size;
+                    } else {
+                        console.error('❌ Dati non validi:', data);
                     }
                 })
-                .then(() => {
-                    if (state.view === 'stats') renderStats();
-                })
                 .catch(err => {
-                    console.error('Errore stats cache:', err);
-                    loadHistory();
+                    console.error('❌ Errore caricamento cache:', err);
                 });
-        }
-
-        // AGGIUNGERE una funzione per sincronizzare i conteggi
-        function syncAspectCounts() {
-            if (state.cacheSource === 'cache' && window._cacheAspectCounts && window._allAnnounces) {
-                // Verifica discrepanze
-                const actualCounts = {};
-                window._allAnnounces.forEach(ann => {
-                    const asp = ann.aspect || 'unknown';
-                    actualCounts[asp] = (actualCounts[asp] || 0) + 1;
-                });
-                
-                console.log('📊 Confronto conteggi:');
-                console.log('- Stats cache:', window._cacheAspectCounts);
-                console.log('- Annunci effettivi:', actualCounts);
-                
-                // Se c'è discrepanza, forse dobbiamo ricaricare
-                const totalFromCache = Object.values(window._cacheAspectCounts).reduce((a, b) => a + b, 0);
-                const totalFromActual = window._allAnnounces.length;
-                
-                if (totalFromCache !== totalFromActual) {
-                    console.log(`⚠️ Discrepanza: cache=${totalFromCache}, actual=${totalFromActual}`);
-                }
-            }
         }
 
         
@@ -1917,6 +1852,9 @@
                                     
                                     if (!exists) {
                                         window._allAnnounces.unshift(ann);
+                                        document.getElementById('total-announces').textContent = window._allAnnounces.length;
+                                        document.getElementById('cache-size-indicator').textContent = window._allAnnounces.length;
+                                        document.getElementById('unique-sources').textContent = state.identities.size;
                                         if (window._allAnnounces.length > 1000) window._allAnnounces.pop();
                                         
                                         updateIdentityStats(ann);
@@ -2168,15 +2106,19 @@
                 const newSource = this.value;
                 console.log(`🔄 Cambio sorgente: ${state.cacheSource} -> ${newSource}`);
                 
-                if (newSource === state.cacheSource) return;
+                if (newSource === state.cacheSource) {
+                    console.log('⚠️ Stessa sorgente, ignoro');
+                    return;
+                }
                 
                 state.cacheSource = newSource;
                 state.page = 1;
                 
                 if (newSource === 'cache') {
-                    // Una sola chiamata orchestrata
+                    console.log('🚀 CHIAMATA updateTabsFromCache()');
                     updateTabsFromCache();
                 } else {
+                    console.log('🚀 CHIAMATA loadHistory() per memory');
                     loadHistory();
                     if (window.updateAspectTabs) {
                         window.updateAspectTabs();
@@ -2218,10 +2160,9 @@
         }
 
         // ============================================
-        // === INIZIALIZZAZIONE ===
+        // === INIZIALIZZAZIONE - CORRETTA ===
         // ============================================
 
-        // Alla fine del file, dopo loadHistory()
         if (!window._rnsMonitorInitialized) {
             window._rnsMonitorInitialized = true;
             
@@ -2236,23 +2177,27 @@
             loadIdentitiesFromStorage();
             initAspectTabs();
             initMainTabs();
-            initEventListeners();            
-            connectSSE();            
-            loadHistory().then((announces) => {
-                if (announces && announces.length > 0) {
-                    const maxId = Math.max(...announces.map(a => a.id || 0));
-                    if (maxId > state.lastId) {
-                        state.lastId = maxId;
-                        console.log(`📌 lastId impostato a ${state.lastId}`);
-                    }
-                }
+            initEventListeners();
+            
+            // 🔴 FORZA CARICAMENTO DALLA CACHE ALL'AVVIO
+            console.log('🚀 CARICAMENTO INIZIALE DALLA CACHE...');
+            
+            // Imposta cache come sorgente
+            state.cacheSource = 'memory';
+            document.getElementById('cache-source-select').value = 'memory';
+            
+            // Carica dalla memoria invece che dalla cache
+            loadHistory().then(() => {
+                console.log('✅ Caricamento completato, header aggiornato');
+                connectSSE();
+                refreshBackendStats();
+                updateSortIndicators();
             }).catch(err => {
-                console.error('Errore nel caricamento iniziale:', err);
+                console.error('❌ Errore caricamento iniziale:', err);
+                connectSSE();
             });
             
-            refreshBackendStats();
-            updateSortIndicators();
-            
+            // Intervalli di aggiornamento
             setInterval(saveIdentitiesToStorage, 30000);
             setInterval(() => {
                 if (state.view === 'identities') renderIdentities();
