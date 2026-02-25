@@ -117,15 +117,15 @@
                 <thead>
                     <tr>
                         <th style="width:5%" onclick="setSort('time')">⏱ tempo<span id="sort-indicator-time" class="sort-indicator"></span></th>
-                        <th style="width:13%" onclick="setSort('identity')">🆔 identità <span id="sort-indicator-identity" class="sort-indicator"></span></th>
-                        <th style="width:13%" onclick="setSort('dest')">🎯 destinazione <span id="sort-indicator-dest" class="sort-indicator"></span></th>
+                        <th style="width:14%" onclick="setSort('identity')">🆔 identità <span id="sort-indicator-identity" class="sort-indicator"></span></th>
+                        <th style="width:14%" onclick="setSort('dest')">🎯 destinazione <span id="sort-indicator-dest" class="sort-indicator"></span></th>
                         <th style="width:15%" onclick="setSort('aspect')">🏷 aspect <span id="sort-indicator-aspect" class="sort-indicator"></span></th>
                         <th style="width:5%" onclick="setSort('hops')">📶 hops<span id="sort-indicator-hops" class="sort-indicator"></span></th>
                         <th style="width:5%" onclick="setSort('rssi')">📡 RSSI<span id="sort-indicator-rssi" class="sort-indicator"></span></th>
                         <th style="width:5%" onclick="setSort('snr')">📊 SNR<span id="sort-indicator-snr" class="sort-indicator"></span></th>
                         <th style="width:5%" onclick="setSort('q')">⚡ Q<span id="sort-indicator-q" class="sort-indicator"></span></th>
                         <th style="width:8%" onclick="setSort('iface')">🌐 iface <span id="sort-indicator-iface" class="sort-indicator"></span></th>
-                        <th style="width:17%" onclick="setSort('data')">💬 dati <span id="sort-indicator-data" class="sort-indicator"></span></th>
+                        <th style="width:15%" onclick="setSort('data')">💬 dati <span id="sort-indicator-data" class="sort-indicator"></span></th>
                     </tr>
                 </thead>
                 <tbody id="announce-body">
@@ -1153,7 +1153,7 @@
             
             window._processedAnnounces.add(announceId);
             
-            if (window._processedAnnounces.size > 10000) {
+            if (window._processedAnnounces.size > 100000) {
                 const iterator = window._processedAnnounces.values();
                 for (let i = 0; i < 1000; i++) {
                     window._processedAnnounces.delete(iterator.next().value);
