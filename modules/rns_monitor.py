@@ -21,7 +21,7 @@ SOCKET_PATH = os.path.expanduser("~/.rns_manager/rns_monitor.sock")
 RNS_ASPECTS = [
     "lxmf.delivery","nomadnetwork.node","lxst.telephony","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
     "rnstransport.probe","rnstransport.info.blackhole","rnsh","rncp","rncp.receive","rnsh.listen","rnsh.default",
-    "rns_unit_tests.link.establish",
+    "rns_unit_tests.link.establish","atak.cot","haven.status","demo.msg",
     "rnstransport.discovery.interface",
     "rnstransport.tunnel.synthesize",
     "rnstransport.path.request",
@@ -48,7 +48,7 @@ RNS_ASPECTS = [
 class SQLiteAnnounceCache:
     """Cache persistente su SQLite per annunci RNS - VELOCE E SCALABILE"""
     
-    def __init__(self, cache_dir, max_age_days=7, max_size=10000):
+    def __init__(self, cache_dir, max_age_days=7, max_size=100000):
         self.db_path = os.path.join(cache_dir, 'announces.db')
         self.max_age_days = max_age_days
         self.max_size = max_size
@@ -1206,7 +1206,35 @@ def create_monitor_blueprint(monitor_manager):
                 'success': False,
                 'error': str(e)
             })
-    
+
+    # ============================================
+    # === 🔥 NUOVO ENDPOINT PER SALVATAGGIO TEMPO REALE ===
+    # ============================================
+    @monitor_bp.route('/announce', methods=['POST'])
+    def save_announce():
+        """Salva un annuncio in tempo reale nel database SQLite"""
+        try:
+            announce = request.json
+            if not announce:
+                return jsonify({'success': False, 'error': 'Dati mancanti'}), 400
+            
+            print(f"\n📡 NUOVO ANNUNCIO IN TEMPO REALE - ID: {announce.get('id')}")
+            print(f"   Aspect: {announce.get('aspect')}")
+            print(f"   Dest: {announce.get('dest_hash', '')[:16]}...")
+            
+            # Salva nel database SQLite
+            if monitor_manager.announce_cache:
+                monitor_manager.announce_cache.add_announce(announce)
+                print(f"   ✅ Salvato in SQLite")
+            else:
+                print(f"   ⚠️ SQLite non disponibile")
+            
+            return jsonify({'success': True})
+            
+        except Exception as e:
+            print(f"❌ Errore salvataggio annuncio: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     # ============================================
     # === 🔥 NUOVI ENDPOINT PER SQLITE ===
     # ============================================
