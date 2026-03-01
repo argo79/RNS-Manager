@@ -59,7 +59,7 @@
     <div class="container">
         <header>
             <div>
-                <h1>RETICULUM MONITOR 1.0.6</h1>
+                <h1>RETICULUM MONITOR 1.0.8</h1>
                 <div class="header-subtitle">Monitoraggio annunci e identità Reticulum</div>
             </div>
             <div style="display: flex; gap: 10px;">
@@ -275,10 +275,25 @@
         // ============================================
 
         function applyCurrentSortAndRender() {
-            // Usa _liveAnnounces per la vista live
-            const source = (state.cacheSource === 'cache' && window._liveAnnounces.length > 0) 
-                ? window._liveAnnounces 
-                : window._allAnnounces;
+            // Determina se c'è un filtro attivo
+            const hasFilter = (state.aspect !== 'all' || state.search !== '');
+            
+            // Scegli la fonte giusta
+            let source;
+            let sourceType;
+            
+            if (state.cacheSource === 'cache' && !hasFilter) {
+                source = window._liveAnnounces;  // Solo vista live senza filtri
+                sourceType = '_liveAnnounces';
+            } else {
+                source = window._allAnnounces;    // Con filtri o in memory mode
+                sourceType = '_allAnnounces';
+            }
+            
+            // Log per debug
+            console.log(`🎯 applyCurrentSortAndRender - hasFilter: ${hasFilter}, cacheSource: ${state.cacheSource}, usando: ${sourceType}`);
+            console.log(`   aspect: ${state.aspect}, search: "${state.search}"`);
+            console.log(`   source length: ${source?.length || 0}`);
             
             if (!source || source.length === 0) {
                 document.getElementById('announce-body').innerHTML = '<tr><td colspan="10" style="text-align:center; padding:40px; color:var(--dim);">— nessun annuncio —</td></tr>';

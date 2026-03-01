@@ -70,7 +70,7 @@ monitor_manager = rns_monitor.RNSMonitorManager(
     socket_path=rns_monitor.SOCKET_PATH,
     aspects=rns_monitor.RNS_ASPECTS,
     cache_dir=CACHE_DIR,
-    max_history=1000
+    max_history=2000
 )
 
 # Avvia processi
