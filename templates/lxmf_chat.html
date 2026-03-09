@@ -428,17 +428,18 @@
             document.getElementById('locationSource').addEventListener('change', toggleLocationFields);
         });
         
-        // ==================== PROGRESS BAR PER MESSAGGI ====================
         function updateMessageProgress(data) {
             const msgIndex = messages.findIndex(m => m.hash === data.hash);
             if (msgIndex !== -1) {
-                messages[msgIndex].progress = data.progress;
+                // 🔴 SOLO QUESTA RIGA CAMBIA!
+                messages[msgIndex].progress = Math.round(data.progress * 100);
+                
                 messages[msgIndex].speed = data.speed;
                 messages[msgIndex].bytes_sent = data.bytes_sent;
                 messages[msgIndex].total_bytes = data.total_bytes;
                 messages[msgIndex].state = data.state;
                 
-                if (data.progress >= 100) {
+                if (data.progress >= 1) {  // 1 = 100%
                     messages[msgIndex].status = 'delivered';
                 }
                 
@@ -1250,13 +1251,17 @@
                     contentHtml += attachmentsHtml;
                 }
                 
+                // In displayMessages(), nella parte della progress bar
                 let progressHtml = '';
                 if (!isIncoming && msg.status === 'sending' && msg.progress !== undefined && msg.progress < 100) {
                     const percent = Math.round(msg.progress);
                     
-                    let speedText = '0.0 KB/s';
+                    // Calcola velocità in KB/s e kbps
+                    let speedKBs = '0.0';
+                    let speedKbps = '0.0';
                     if (msg.speed) {
-                        speedText = (msg.speed / 1000).toFixed(1) + ' KB/s';
+                        speedKBs = (msg.speed / 1024).toFixed(1);
+                        speedKbps = (msg.speed * 8 / 1024).toFixed(1);  // bytes/sec → kbps
                     }
                     
                     let sentText = '0';
@@ -1279,7 +1284,7 @@
                                 <div style="width: ${percent}%; height: 100%; background: #4c9aff; transition: width 0.3s;"></div>
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-top: 3px; font-size: 0.6rem; color: #8a9bb5;">
-                                <span>⚡ ${speedText}</span>
+                                <span>⚡ ${speedKBs} KB/s (${speedKbps} kbps)</span>
                                 <span>📦 ${sentText}/${totalText} KB</span>
                             </div>
                         </div>
@@ -1991,11 +1996,18 @@
                     const lat = entry.location.latitude;
                     const lon = entry.location.longitude;
                     
-                    let color = '#4c9aff';
-                    if (entry.rssi) {
-                        if (entry.rssi > -70) color = '#4caf50';
-                        else if (entry.rssi > -85) color = '#ffeb3b';
-                        else color = '#f44336';
+                    // 🔴 SOLO QUESTA PARTE CAMBIA - scala da -140 a -30
+                    let color = '#4c9aff';  // default blu
+                    if (entry.rssi !== undefined && entry.rssi !== null) {
+                        // Mappa RSSI da -140 a -30 a tonalità da rosso (0°) a verde (120°)
+                        const minRssi = -140;
+                        const maxRssi = -30;
+                        // Normalizza tra 0 e 1
+                        let t = (entry.rssi - minRssi) / (maxRssi - minRssi);
+                        t = Math.max(0, Math.min(1, t));  // Limita tra 0 e 1
+                        // Converti in tonalità (0° = rosso, 120° = verde)
+                        const hue = t * 120;
+                        color = `hsl(${hue}, 100%, 50%)`;
                     }
                     
                     const circleIcon = L.divIcon({

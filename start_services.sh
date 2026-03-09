@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="$(command -v python3)"
 
 # storage Reticulum nella home dell'utente corrente
-RNS_STORAGE="$HOME/.rns_manager/storage/Prova1"
+RNS_STORAGE="$HOME/.rns_manager/storage/Prova2"
 
 cd "$SCRIPT_DIR"
 

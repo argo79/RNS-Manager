@@ -2083,38 +2083,52 @@ class Messenger:
                     if msg.progress != last_progress and msg.progress > 0:
                         data['last_progress'] = msg.progress
                         
-                        # Invia aggiornamento se c'è un callback
+                        # Calcola velocità
+                        speed = 0
+                        bytes_sent = 0
+                        total_bytes = 0
+                        
+                        if hasattr(msg, 'resource_representation') and msg.resource_representation:
+                            resource = msg.resource_representation
+                            if hasattr(resource, 'get_progress') and hasattr(resource, 'size'):
+                                try:
+                                    resource_progress = resource.get_progress()
+                                    total_bytes = resource.size
+                                    bytes_sent = int(resource_progress * total_bytes)
+                                    
+                                    # 🔴 CALCOLA VELOCITÀ
+                                    now = time.time()
+                                    if 'last_update' not in data:
+                                        data['last_update'] = now
+                                        data['last_bytes'] = bytes_sent
+                                    else:
+                                        time_diff = now - data['last_update']
+                                        bytes_diff = bytes_sent - data['last_bytes']
+                                        if time_diff > 0:
+                                            speed = bytes_diff / time_diff  # bytes/sec
+                                        data['last_update'] = now
+                                        data['last_bytes'] = bytes_sent
+                                        
+                                except:
+                                    pass
+                        
                         if msg_hash in self.progress_callbacks:
                             progress_data = {
                                 'hash': msg_hash,
                                 'progress': msg.progress,
                                 'state': msg.state,
                                 'delivery_attempts': msg.delivery_attempts,
-                                'status': 'transferring'
+                                'status': 'transferring',
+                                'speed': speed,
+                                'bytes_sent': bytes_sent,
+                                'total_bytes': total_bytes
                             }
                             
-                            # Se è un resource, prova a ottenere più dettagli
-                            if hasattr(msg, 'resource_representation') and msg.resource_representation:
-                                resource = msg.resource_representation
-                                if hasattr(resource, 'get_progress') and hasattr(resource, 'size'):
-                                    try:
-                                        progress_data['bytes_sent'] = int(resource.get_progress() * resource.size)
-                                        progress_data['total_bytes'] = resource.size
-                                        if hasattr(resource, 'get_speed'):
-                                            progress_data['speed'] = resource.get_speed()
-                                    except:
-                                        pass
-                            
                             self.progress_callbacks[msg_hash](progress_data)
-                    
-                    # Rimuovi se completato
-                    if msg.state in [LXMF.LXMessage.DELIVERED, LXMF.LXMessage.FAILED, LXMF.LXMessage.REJECTED, LXMF.LXMessage.CANCELLED]:
-                        del self.sent_messages[msg_hash]
-                        
             except Exception as e:
                 print(f"Errore nel monitoraggio progresso: {e}")
             
-            time.sleep(0.5)  # Controlla ogni 500ms
+            time.sleep(0.5)
 
     def sync_messages(self, limit=10):
         if not self.propagation_node:
