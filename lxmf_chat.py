@@ -14,12 +14,13 @@ import traceback
 import signal
 import uuid
 import tempfile
+import argparse
 from messenger import Messenger, Commands, guess_image_format
 import LXMF
 import RNS
 from messenger import Messenger, Commands, guess_image_format, CODEC2_AVAILABLE
 
-# 🔴 COSTANTI LXMF AGGIUNTE
+# 🔴 COSTANTI LXMF
 FIELD_TELEMETRY = 0x02
 FIELD_TELEMETRY_STREAM = 0x03
 FIELD_ICON_APPEARANCE = 0x04
@@ -40,11 +41,10 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = 'rns-manager-secret-key'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Istanza globale del messenger (inizialmente None)
+# Istanza globale del messenger
 messenger = None
 message_queue = queue.Queue()
 messenger_lock = threading.Lock()
-
 
 def on_progress(info):
     """Callback quando il progresso di invio cambia"""
@@ -62,20 +62,18 @@ def message_callback(msg):
         # 🔴 CONVERTI APPEARANCE DA BYTES A STRINGA
         appearance = msg.get('appearance')
         if appearance and len(appearance) >= 3:
-            # Se appearance è già una lista di bytes, converti in esadecimale
             fg = appearance[1]
             bg = appearance[2]
             
-            # Converti bytes a hex string se necessario
             if isinstance(fg, bytes):
                 fg = fg.hex()
             if isinstance(bg, bytes):
                 bg = bg.hex()
             
             appearance = [
-                appearance[0],  # icona (stringa)
-                fg,              # foreground hex
-                bg               # background hex
+                appearance[0],
+                fg,
+                bg
             ]
             print(f"🎨 APPEARANCE convertita: {appearance}")
         
@@ -92,7 +90,7 @@ def message_callback(msg):
             else:
                 telemetry_data = {'info': 'Telemetria non decodificabile'}
         
-        # 🔴 CONVERTI ATTACHMENTS IN FORMATO BASE64 PER IL FRONTEND
+        # 🔴 CONVERTI ATTACHMENTS
         attachments = msg.get('attachments', [])
         serializable_attachments = []
         for att in attachments:
@@ -105,7 +103,7 @@ def message_callback(msg):
                         'type': 'image',
                         'format': att_data.get('type', 'jpg'),
                         'size': att_data.get('size', 0),
-                        'data': att_data.get('bytes')  # hex già
+                        'data': att_data.get('bytes')
                     })
                 elif att_type == 'audio':
                     serializable_attachments.append({
@@ -151,14 +149,10 @@ def message_callback(msg):
         print(f"Errore in message_callback: {e}")
         traceback.print_exc()
 
-
-
-
 def create_messenger(identity_file=None):
     """Crea una nuova istanza del messenger con l'identità specificata"""
     global messenger
     try:
-        # SE MESSENGER ESISTE GIÀ, NON CREARNE UN ALTRO!
         if messenger is not None:
             print("⚠️ Messenger già inizializzato, uso quello esistente")
             return True
@@ -199,10 +193,8 @@ def get_status():
     if not messenger:
         return jsonify({'status': 'not_initialized', 'message': 'Nessuna identità selezionata'})
     
-    # Calcola l'aspect hash per lxmf.delivery
     aspect_hash = None
     try:
-        # Crea un destination temporaneo per calcolare l'hash
         dest = RNS.Destination(
             messenger.identity,
             RNS.Destination.OUT,
@@ -212,7 +204,6 @@ def get_status():
         )
         aspect_hash = dest.hash.hex()
     except:
-        # Fallback
         aspect_hash = messenger.dest.hash.hex() if hasattr(messenger, 'dest') else None
     
     return jsonify({
@@ -237,14 +228,12 @@ def list_identities():
     for f in os.listdir(storagepath):
         fpath = os.path.join(storagepath, f)
         if os.path.isfile(fpath) and os.path.getsize(fpath) == 64:
-            # Prova a leggere il nome associato
             name_file = os.path.join(storagepath, f"{f}.name")
             name = None
             if os.path.exists(name_file):
                 with open(name_file, 'r') as nf:
                     name = nf.read().strip()
             
-            # Leggi i primi byte per preview
             try:
                 with open(fpath, 'rb') as idf:
                     data = idf.read(32)
@@ -273,23 +262,18 @@ def select_identity():
         return jsonify({'success': False, 'error': 'Nessuna identità specificata'})
     
     try:
-        # IMPORTANTE: Se messenger esiste già, PRIMA FERMA TUTTO!
         if messenger is not None:
             print("⚠️ Messenger già attivo, procedo con shutdown...")
             shutdown_result = shutdown_messenger()
             if not shutdown_result.json['success']:
                 print("⚠️ Shutdown precedente non completato, procedo comunque...")
         
-        # Assicuriamoci che non ci siano residui
         time.sleep(1.0)
         
-        # Ora procedi con la nuova inizializzazione
         print(f"🔄 Inizializzazione messenger con identità: {identity_file}")
-        
         success = create_messenger(identity_file)
         
         if success and messenger:
-            # Salva il nome se fornito
             if display_name:
                 storagepath = os.path.expanduser("~/.rns_manager/storage")
                 name_file = os.path.join(storagepath, f"{identity_file}.name")
@@ -312,53 +296,82 @@ def select_identity():
 
 @app.route('/api/peers')
 def get_peers():
-    """Restituisce la lista dei peer con identity e delivery hash"""
+    """Restituisce la lista dei peer con tutti i dati"""
     if not messenger:
         return jsonify([])
     
     try:
+        # Usa direttamente list_peers() che ora restituisce tutto
         peers = messenger.list_peers()
         
-        # Arricchisci con informazioni sulle destinazioni
-        for p in peers:
-            with messenger.db_lock:
-                conn = sqlite3.connect(messenger.peers_db, timeout=10)
-                c = conn.cursor()
+        # 🔴 AGGIUNGI I DATI DELL'ULTIMA TELEMETRIA
+        with messenger.db_lock:
+            conn = sqlite3.connect(messenger.peers_db, timeout=10)
+            c = conn.cursor()
+            
+            for peer in peers:
+                # Recupera gli ultimi dati telemetria per questo peer
                 c.execute('''
-                    SELECT destination_hash, last_seen, hops, rssi, snr, q, app_data, appearance
+                    SELECT last_latitude, last_longitude, last_altitude,
+                           last_speed, last_bearing, last_accuracy,
+                           last_battery, last_battery_charging,
+                           last_temperature, last_humidity, last_pressure,
+                           last_light, last_uptime, last_processor,
+                           last_ram, last_nvm, last_telemetry_time,
+                           trust_level, allow_telemetry, allow_commands,
+                           messages_sent, messages_received, telemetry_count,
+                           is_favorite, group_name, notes,
+                           destination_hash, last_seen, hops, rssi, snr, q
                     FROM destinations 
                     WHERE identity_hash = ? AND aspect = 'lxmf.delivery'
                     ORDER BY last_seen DESC LIMIT 1
-                ''', (p['hash'],))
-                row = c.fetchone()
-                conn.close()
-            
-            if row:
-                p['dest_hash'] = row[0]
-                p['last_seen'] = row[1]
-                p['hops'] = row[2]
-                p['rssi'] = row[3]
-                p['snr'] = row[4]
-                p['q'] = row[5]
+                ''', (peer['hash'],))
                 
-                # 🔴 DECODIFICA APPEARANCE
-                if row[7]:
-                    try:
-                        appearance_data = json.loads(row[7])
-                        p['appearance'] = [
-                            appearance_data.get('icon'),
-                            appearance_data.get('fg'),
-                            appearance_data.get('bg')
-                        ]
-                    except:
-                        p['appearance'] = None
+                row = c.fetchone()
+                if row:
+                    peer.update({
+                        'dest_hash': row[26],
+                        'last_seen': row[27],
+                        'hops': row[28],
+                        'rssi': row[29],
+                        'snr': row[30],
+                        'q': row[31],
+                        'last_location': {
+                            'latitude': row[0],
+                            'longitude': row[1],
+                            'altitude': row[2],
+                            'speed': row[3],
+                            'bearing': row[4],
+                            'accuracy': row[5]
+                        } if row[0] and row[1] else None,
+                        'last_battery': {
+                            'percent': row[6],
+                            'charging': bool(row[7])
+                        } if row[6] is not None else None,
+                        'last_temperature': row[8],
+                        'last_humidity': row[9],
+                        'last_pressure': row[10],
+                        'last_light': row[11],
+                        'last_uptime': row[12],
+                        'last_processor': row[13],
+                        'last_ram': row[14],
+                        'last_nvm': row[15],
+                        'last_telemetry_time': row[16],
+                        'trust_level': row[17],
+                        'allow_telemetry': bool(row[18]),
+                        'allow_commands': bool(row[19]),
+                        'messages_sent': row[20],
+                        'messages_received': row[21],
+                        'telemetry_count': row[22],
+                        'favorite': bool(row[23]),
+                        'group': row[24] or 'public',
+                        'notes': row[25]
+                    })
                 else:
-                    p['appearance'] = None
-            else:
-                p['dest_hash'] = None
-                p['appearance'] = None
+                    peer['favorite'] = False
+                    peer['group'] = 'public'
             
-            p['favorite'] = False
+            conn.close()
         
         return jsonify(peers)
     
@@ -376,21 +389,15 @@ def get_conversation(dest_hash):
     messages = []
     
     try:
-        # ============================================
-        # 🔴 LEGGI DAL DATABASE messages (NUOVA TABELLA)
-        # ============================================
         with messenger.db_lock:
             conn = sqlite3.connect(messenger.peers_db, timeout=10)
             c = conn.cursor()
             
-            # Verifica se la tabella messages esiste
             c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='messages'")
             if not c.fetchone():
-                print("⚠️ Tabella messages non esiste ancora")
                 conn.close()
                 return jsonify([])
             
-            # Recupera messaggi dalla tabella messages
             c.execute('''
                 SELECT hash, source_hash, destination_hash, content, title, timestamp,
                        method, packed_size, rssi, snr, q, hops, incoming,
@@ -408,9 +415,6 @@ def get_conversation(dest_hash):
         for row in rows:
             hash_msg, source, dest, content, title, ts, method, packed_size, rssi, snr, q, hops, incoming, raw_hex, raw_ascii, attachments_json = row
             
-            # ============================================
-            # PARSING ATTACHMENTS DAL JSON
-            # ============================================
             msg_attachments = []
             if attachments_json:
                 try:
@@ -457,7 +461,6 @@ def get_conversation(dest_hash):
                 'status': 'delivered' if incoming else 'sent'
             })
         
-        # Ordina cronologicamente
         messages.sort(key=lambda x: x['time'])
         print(f"✅ Totale messaggi caricati: {len(messages)}")
         
@@ -484,14 +487,12 @@ def send_message():
         if not dest:
             return jsonify({'success': False, 'error': 'Destinazione mancante'})
         
-        # Gestione allegati
         image_path = None
         audio_path = None
         file_paths = None
         file_type = request.form.get('type', 'file')
         
         if file:
-            # Salva temporaneamente
             upload_dir = os.path.expanduser("~/.rns_manager/uploads")
             os.makedirs(upload_dir, exist_ok=True)
             
@@ -537,7 +538,6 @@ def send_message():
             'progress': on_progress
         }
         
-        # Invia il messaggio
         result = messenger.send(
             dest, content, title=title,
             image_path=image_path,
@@ -545,8 +545,6 @@ def send_message():
             file_attachments=file_paths,
             callbacks=callbacks
         )
-        
-        # 🔴 NON restituire filename! Il frontend riceverà l'allegato via websocket quando arriva
         
         return jsonify(result)
     
@@ -604,7 +602,7 @@ def request_telemetry():
     result = messenger.request_telemetry(dest)
     return jsonify(result)
 
-# ==================== NUOVI ENDPOINT PER TELEMETRIA ====================
+# ==================== ENDPOINT PER TELEMETRIA ====================
 
 @app.route('/api/telemetry/config', methods=['GET', 'POST'])
 def handle_telemetry_config():
@@ -613,7 +611,6 @@ def handle_telemetry_config():
         return jsonify({'error': 'Messenger non inizializzato'})
     
     if request.method == 'GET':
-        # Restituisci la configurazione attuale
         config = {
             'location_source': messenger.config.get('location_source', 'fixed'),
             'fixed_location': messenger.config.get('fixed_location', {
@@ -625,15 +622,14 @@ def handle_telemetry_config():
             'enable_system': messenger.config.get('enable_system', True),
             'gpsd_host': messenger.config.get('gpsd_host', 'localhost'),
             'gpsd_port': messenger.config.get('gpsd_port', 2947),
-            'appearance': messenger.config.get('appearance', ['📡', '4c9aff', '1a1f2e'])
+            'appearance': messenger.config.get('appearance', ['antenna', '4c9aff', '1a1f2e'])
         }
         return jsonify(config)
     
-    else:  # POST
+    else:
         try:
             data = request.json
             
-            # Aggiorna solo i campi relativi alla telemetria
             if 'location_source' in data:
                 messenger.config['location_source'] = data['location_source']
             if 'fixed_location' in data:
@@ -649,11 +645,9 @@ def handle_telemetry_config():
             if 'appearance' in data:
                 messenger.config['appearance'] = data['appearance']
             
-            # Salva su file
             with open(messenger.configpath, 'w') as f:
                 json.dump(messenger.config, f, indent=4)
             
-            # Ricarica il provider di telemetria se necessario
             if hasattr(messenger, 'telemetry_provider'):
                 messenger.telemetry_provider.config = messenger.config
             
@@ -677,7 +671,6 @@ def get_telemetry_history(peer_hash):
                 try:
                     with open(filepath, 'r') as f:
                         data = json.load(f)
-                        # Estrai timestamp dal filename
                         ts = int(filename.split('_')[1].split('.')[0])
                         data['timestamp'] = ts
                         history.append(data)
@@ -685,10 +678,9 @@ def get_telemetry_history(peer_hash):
                     print(f"❌ Errore lettura {filename}: {e}")
                     continue
     
-    # Ordina per timestamp (dal più recente)
     history.sort(key=lambda x: x['timestamp'], reverse=True)
     print(f"📊 Caricati {len(history)} record di telemetria per {peer_hash[:8]}...")
-    return jsonify(history[:50])  # Limita a 50 record
+    return jsonify(history[:50])
 
 @app.route('/api/telemetry/test', methods=['POST'])
 def test_telemetry():
@@ -705,6 +697,67 @@ def test_telemetry():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/peer/<identity_hash>/telemetry/last')
+def get_last_telemetry(identity_hash):
+    """Restituisce l'ultima telemetria conosciuta di un peer"""
+    if not messenger:
+        return jsonify({'error': 'Messenger non inizializzato'}), 404
+    
+    try:
+        with messenger.db_lock:
+            conn = sqlite3.connect(messenger.peers_db, timeout=10)
+            c = conn.cursor()
+            
+            c.execute('''
+                SELECT last_latitude, last_longitude, last_altitude,
+                       last_speed, last_bearing, last_accuracy,
+                       last_battery, last_battery_charging,
+                       last_temperature, last_humidity, last_pressure,
+                       last_light, last_uptime, last_processor,
+                       last_ram, last_nvm, last_telemetry_time
+                FROM destinations 
+                WHERE identity_hash = ? AND aspect = 'lxmf.delivery'
+                ORDER BY last_seen DESC LIMIT 1
+            ''', (identity_hash,))
+            
+            row = c.fetchone()
+            conn.close()
+        
+        if not row or not row[16]:
+            return jsonify({'error': 'Nessuna telemetria disponibile'}), 404
+        
+        telemetry = {
+            'location': {
+                'latitude': row[0],
+                'longitude': row[1],
+                'altitude': row[2],
+                'speed': row[3],
+                'bearing': row[4],
+                'accuracy': row[5]
+            } if row[0] and row[1] else None,
+            'battery': {
+                'percent': row[6],
+                'charging': bool(row[7])
+            } if row[6] is not None else None,
+            'temperature': row[8],
+            'humidity': row[9],
+            'pressure': row[10],
+            'light': row[11],
+            'uptime': row[12],
+            'processor': row[13],
+            'ram': row[14],
+            'nvm': row[15],
+            'timestamp': row[16]
+        }
+        
+        return jsonify(telemetry)
+        
+    except Exception as e:
+        print(f"❌ Errore get_last_telemetry: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ==================== ENDPOINT PER RAW ====================
+
 @app.route('/api/raw/history')
 def get_raw_history_all():
     """Restituisce lo storico dei pacchetti raw (globale)"""
@@ -713,7 +766,6 @@ def get_raw_history_all():
     
     history = []
     try:
-        # Carica gli ultimi 50 messaggi raw
         raw_files = sorted(os.listdir(messenger.raw_dir), reverse=True)[:50]
         for filename in raw_files:
             if filename.endswith('.raw'):
@@ -721,7 +773,6 @@ def get_raw_history_all():
                 with open(filepath, 'rb') as f:
                     raw_data = f.read()
                 
-                # Cerca anche il json associato per i metadati
                 json_file = filename.replace('.raw', '.json')
                 json_path = os.path.join(messenger.raw_dir, json_file)
                 metadata = {}
@@ -754,7 +805,6 @@ def get_raw_history(dest_hash):
         conn = sqlite3.connect(messenger.peers_db)
         c = conn.cursor()
         
-        # Verifica se la tabella messages esiste
         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='messages'")
         if not c.fetchone():
             conn.close()
@@ -794,7 +844,6 @@ def get_raw(hash):
     if not messenger:
         return jsonify({'error': 'Messenger non inizializzato'})
     
-    # Cerca in memoria
     if hasattr(messenger, 'received_raw') and hash in messenger.received_raw:
         data = messenger.received_raw[hash]
         return jsonify({
@@ -803,7 +852,6 @@ def get_raw(hash):
             'source': 'memory'
         })
     
-    # Cerca su disco
     hex_path = os.path.join(messenger.raw_dir, f"{hash}.hex")
     raw_path = os.path.join(messenger.raw_dir, f"{hash}.raw")
     
@@ -838,8 +886,10 @@ def get_raw(hash):
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    """Serve file per download - DEPRECATO, mantenuto per compatibilità"""
+    """Serve file per download - DEPRECATO"""
     return '', 404
+
+# ==================== ENDPOINT PER CONFIG ====================
 
 @app.route('/api/config', methods=['GET', 'POST'])
 def handle_config():
@@ -849,7 +899,6 @@ def handle_config():
     
     if request.method == 'GET':
         config = messenger.config
-        # Aggiungi info sul codec disponibile
         config['codec2_available'] = CODEC2_AVAILABLE
         return jsonify(config)
     else:
@@ -857,11 +906,9 @@ def handle_config():
             data = request.json
             messenger.config.update(data)
             
-            # Salva su file
             with open(messenger.configpath, 'w') as f:
                 json.dump(messenger.config, f, indent=4)
             
-            # Aggiorna propagation node se cambiato
             if 'propagation_node' in data:
                 node_hash = data['propagation_node']
                 if node_hash:
@@ -914,18 +961,14 @@ def shutdown_messenger():
         if messenger:
             print("🛑 Arresto del messenger in corso...")
             
-            # 1. Rimuovi i callback per evitare effetti collaterali
             messenger.delivery_callbacks.clear()
             messenger.failed_callbacks.clear()
             messenger.progress_callbacks.clear()
             
-            # 2. Pulisci le risorse interne del messenger
             messenger.cleanup()
             
-            # 3. Elimina l'istanza del messenger
             messenger = None
             
-            # 4. Piccola pausa per permettere a Reticulum di processare
             import time
             time.sleep(1.0)
             
@@ -950,7 +993,6 @@ def cleanup_temp_files():
         for f in os.listdir(upload_dir):
             fpath = os.path.join(upload_dir, f)
             if os.path.isfile(fpath):
-                # Rimuovi file più vecchi di 1 ora
                 if now - os.path.getmtime(fpath) > 3600:
                     os.unlink(fpath)
                     count += 1
@@ -959,7 +1001,8 @@ def cleanup_temp_files():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-# 🔴 QUI - AGGIUNGI IL NUOVO ENDPOINT PER GLI ATTACHMENT
+# ==================== ENDPOINT PER ATTACHMENT ====================
+
 @app.route('/api/attachment/<hash>')
 def get_attachment(hash):
     """Recupera un attachment dal database per visualizzazione/download"""
@@ -988,16 +1031,13 @@ def get_attachment(hash):
         if not attachments:
             return jsonify({'error': 'Nessun attachment'}), 404
         
-        # Prendi il primo attachment
         att = attachments[0]
         
-        # Gestione diversi formati
         file_bytes = None
         filename = None
         mime_type = None
         is_inline = False
         
-        # Formato dict
         if isinstance(att, dict):
             if 'bytes' in att:
                 file_bytes = bytes.fromhex(att['bytes'])
@@ -1022,7 +1062,6 @@ def get_attachment(hash):
                     mime_type = "application/octet-stream"
                     filename = att.get('name', 'file.bin')
         
-        # Formato ['type', {...}]
         elif isinstance(att, list) and len(att) == 2:
             att_type = att[0]
             att_data = att[1]
@@ -1070,7 +1109,6 @@ def get_attachment(hash):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-
 # ==================== ENDPOINT PER PREFERITI ====================
 
 @app.route('/api/favorites', methods=['GET'])
@@ -1085,7 +1123,6 @@ def get_favorites():
             conn = sqlite3.connect(messenger.peers_db, timeout=10)
             c = conn.cursor()
             
-            # Crea tabella se non esiste
             c.execute('''
                 CREATE TABLE IF NOT EXISTS favorites (
                     peer_hash TEXT PRIMARY KEY,
@@ -1122,7 +1159,6 @@ def add_favorite():
             conn = sqlite3.connect(messenger.peers_db, timeout=10)
             c = conn.cursor()
             
-            # Crea tabella se non esiste
             c.execute('''
                 CREATE TABLE IF NOT EXISTS favorites (
                     peer_hash TEXT PRIMARY KEY,
@@ -1164,6 +1200,71 @@ def remove_favorite():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+# ==================== ENDPOINT PER GESTIONE PEER ====================
+
+@app.route('/api/peer/update', methods=['POST'])
+def update_peer():
+    """Aggiorna gruppo, permessi e note di un peer"""
+    if not messenger:
+        return jsonify({'success': False, 'error': 'Messenger non inizializzato'})
+    
+    data = request.json
+    identity_hash = data.get('identity_hash')
+    
+    if not identity_hash:
+        return jsonify({'success': False, 'error': 'identity_hash mancante'})
+    
+    try:
+        with messenger.db_lock:
+            conn = sqlite3.connect(messenger.peers_db, timeout=10)
+            c = conn.cursor()
+            
+            updates = []
+            values = []
+            
+            if 'group' in data:
+                updates.append("group_name=?")
+                values.append(data['group'])
+            
+            if 'trust_level' in data:
+                updates.append("trust_level=?")
+                values.append(data['trust_level'])
+            
+            if 'allow_telemetry' in data:
+                updates.append("allow_telemetry=?")
+                values.append(1 if data['allow_telemetry'] else 0)
+            
+            if 'allow_commands' in data:
+                updates.append("allow_commands=?")
+                values.append(1 if data['allow_commands'] else 0)
+            
+            if 'notes' in data:
+                updates.append("notes=?")
+                values.append(data['notes'])
+            
+            if 'favorite' in data:
+                updates.append("is_favorite=?")
+                values.append(1 if data['favorite'] else 0)
+            
+            if updates:
+                values.append(identity_hash)
+                values.append(identity_hash)
+                
+                c.execute(f'''
+                    UPDATE destinations 
+                    SET {', '.join(updates)}
+                    WHERE identity_hash = ? AND aspect = 'lxmf.delivery'
+                ''', values)
+                
+                conn.commit()
+            
+            conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Errore aggiornamento peer: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 # ==================== SOCKET.IO EVENTS ====================
 
@@ -1181,8 +1282,6 @@ def handle_ping():
     emit('pong', {'time': time.time()})
 
 # ==================== PARSER ARGOMENTI ====================
-
-import argparse
 
 def parse_arguments():
     """Parsing degli argomenti da riga di comando"""
@@ -1203,34 +1302,27 @@ def parse_arguments():
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
-    # Parsing argomenti
     args = parse_arguments()
     
-    # Crea directory uploads all'avvio
     upload_dir = os.path.expanduser("~/.rns_manager/uploads")
     os.makedirs(upload_dir, exist_ok=True)
     
-    # Se specificato, carica direttamente l'identità
     if args.identity:
         print(f"🔑 Tentativo di caricamento identità: {args.identity}")
         
-        # Estrai solo il nome del file se è un percorso completo
         if os.path.exists(args.identity):
             identity_file = os.path.basename(args.identity)
             storagepath = os.path.expanduser("~/.rns_manager/storage")
             
-            # Verifica che il file sia nella directory storage
             expected_path = os.path.join(storagepath, identity_file)
             if os.path.exists(expected_path):
                 print(f"✅ Trovato file identità: {expected_path}")
                 
-                # Crea un thread separato per l'inizializzazione
                 def init_identity():
-                    time.sleep(2)  # Aspetta che il server sia partito
+                    time.sleep(2)
                     print(f"🔄 Inizializzazione automatica con identità: {identity_file}")
                     from flask import request
                     with app.test_request_context():
-                        # Crea una richiesta POST simulata
                         with app.test_client() as client:
                             response = client.post('/api/identity/select', 
                                                   json={'identity': identity_file, 'name': ''})
@@ -1238,7 +1330,6 @@ if __name__ == '__main__':
                                 data = response.get_json()
                                 if data.get('success'):
                                     print(f"✅ Identità {identity_file} caricata automaticamente")
-                                    # Invia tramite socketio
                                     socketio.emit('identity_loaded', data)
                                 else:
                                     print(f"❌ Errore caricamento identità: {data.get('error')}")

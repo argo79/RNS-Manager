@@ -84,15 +84,19 @@
                     <button onclick="sortPeers('signal', event)" class="lxmf-sort-btn" style="flex:1; padding:5px;" title="Ordina per segnale (RSSI/Q)">📶</button>
                 </div>
 
-                <!-- PULSANTI GRUPPI -->
-                <div class="lxmf-group-controls" style="display: flex; gap: 2px; padding: 0 10px 10px 10px; border-top: 1px solid #2a3142; margin-top: 5px; padding-top: 10px;">
-                    <button onclick="filterGroup('preferiti', event)" class="lxmf-group-btn" style="flex:1; padding:5px; background: #ffd70020; color: #ffd700;" title="Preferiti">⭐</button>
-                    <button onclick="filterGroup('casa', event)" class="lxmf-group-btn" style="flex:1; padding:5px; background: #4c9aff20; color: #4c9aff;" title="Casa">🏠</button>
-                    <button onclick="filterGroup('lavoro', event)" class="lxmf-group-btn" style="flex:1; padding:5px; background: #4caf5020; color: #4caf50;" title="Lavoro">💼</button>
-                    <button onclick="filterGroup('montagna', event)" class="lxmf-group-btn" style="flex:1; padding:5px; background: #79554820; color: #795548;" title="Montagna">⛰️</button>
-                    <button onclick="filterGroup('amici', event)" class="lxmf-group-btn" style="flex:1; padding:5px; background: #e91e6320; color: #e91e63;" title="Amici">👥</button>
-                    <button onclick="filterGroup('bot', event)" class="lxmf-group-btn" style="flex:1; padding:5px; background: #9c27b020; color: #9c27b0;" title="Bot">🤖</button>
-                    <button onclick="clearGroupFilter(event)" class="lxmf-group-btn" style="flex:0.5; padding:5px; background: #2a3142; color: #8a9bb5;" title="Mostra tutti">✕</button>
+                <!-- PULSANTI GRUPPI (9+1) -->
+                <div class="lxmf-group-controls" style="display: flex; flex-wrap: wrap; gap: 2px; padding: 0 10px 10px 10px; border-top: 1px solid #2a3142; margin-top: 5px; padding-top: 10px;">
+                    <button onclick="filterGroup('favorite', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #ffd70020; color: #ffd700;" title="Preferiti">⭐</button>
+                    <button onclick="filterGroup('home', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #4c9aff20; color: #4c9aff;" title="Casa">🏠</button>
+                    <button onclick="filterGroup('work', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #4caf5020; color: #4caf50;" title="Lavoro">💼</button>
+                    <button onclick="filterGroup('family', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #e91e6320; color: #e91e63;" title="Famiglia">👨‍👩‍👧</button>
+                    <button onclick="filterGroup('friends', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #9c27b020; color: #9c27b0;" title="Amici">👥</button>
+                    <button onclick="filterGroup('server', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #607d8b20; color: #607d8b;" title="Server">🖥️</button>
+                    <button onclick="filterGroup('bot', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #79554820; color: #795548;" title="Bot">🤖</button>
+                    <button onclick="filterGroup('monitor', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #ff980020; color: #ff9800;" title="Monitoraggio">📡</button>
+                    <button onclick="filterGroup('research', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #00968820; color: #009688;" title="Ricerca">🔬</button>
+                    <button onclick="filterGroup('public', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #9e9e9e20; color: #9e9e9e;" title="Pubblico">🌐</button>
+                    <button onclick="clearGroupFilter(event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #2a3142; color: #8a9bb5;" title="Mostra tutti">✕</button>
                 </div>
                 
                 <!-- Lista peer -->
@@ -303,7 +307,7 @@
                                     <option value="desktop-classic">desktop-classic</option>
                                     <option value="raspberry-pi">raspberry-pi</option>
                                     <option value="penguin">penguin</option>
-                                    <option value="car-connected">car</option>
+                                    <option value="car">car</option>
                                     <option value="bike">bike</option>
                                     <option value="airplane">airplane</option>
                                     <option value="home">home</option>
@@ -315,13 +319,11 @@
                                     <option value="lightbulb-on">lightbulb-on</option>
                                     <option value="battery">battery</option>
                                     <option value="battery-charging">battery-charging</option>
-                                    <option value="radioactive-circle">radioactive-circle</option>
-                                    <option value="radio-handheld">radio-handheld</option>
                                     <option value="radio">radio</option>
+                                    <option value="radio-handheld">radio-handheld</option>
+                                    <option value="radio-tower">radio-tower</option>
                                     <option value="wifi">wifi</option>
                                     <option value="access-point">access-point</option>
-                                    <option value="access-point-network">access-point-network</option>
-                                    <option value="radio-tower">radio-tower</option>
                                     <option value="server">server</option>
                                     <option value="router">router</option>
                                     <option value="linux">linux</option>
@@ -378,6 +380,20 @@
         let sortDirection = 'desc';
         let currentGroupFilter = null;
 
+        // Gruppi disponibili (9+1)
+        const PEER_GROUPS = {
+            'favorite': { icon: '⭐', name: 'Preferiti', color: '#ffd700' },
+            'home': { icon: '🏠', name: 'Casa', color: '#4c9aff' },
+            'work': { icon: '💼', name: 'Lavoro', color: '#4caf50' },
+            'family': { icon: '👨‍👩‍👧', name: 'Famiglia', color: '#e91e63' },
+            'friends': { icon: '👥', name: 'Amici', color: '#9c27b0' },
+            'server': { icon: '🖥️', name: 'Server', color: '#607d8b' },
+            'bot': { icon: '🤖', name: 'Bot', color: '#795548' },
+            'monitor': { icon: '📡', name: 'Monitoraggio', color: '#ff9800' },
+            'research': { icon: '🔬', name: 'Ricerca', color: '#009688' },
+            'public': { icon: '🌐', name: 'Pubblico', color: '#9e9e9e' }
+        };
+
         // Riferimenti ai marker sulla mappa
         window.ourNodeMarker = null;
         window.peerMarker = null;
@@ -428,18 +444,20 @@
             document.getElementById('locationSource').addEventListener('change', toggleLocationFields);
         });
         
+        // ==================== PROGRESS BAR PER MESSAGGI ====================
         function updateMessageProgress(data) {
             const msgIndex = messages.findIndex(m => m.hash === data.hash);
             if (msgIndex !== -1) {
-                // 🔴 SOLO QUESTA RIGA CAMBIA!
-                messages[msgIndex].progress = Math.round(data.progress * 100);
+                // data.progress è già percentuale (0-100)
+                messages[msgIndex].progress = Math.round(data.progress);
                 
                 messages[msgIndex].speed = data.speed;
                 messages[msgIndex].bytes_sent = data.bytes_sent;
                 messages[msgIndex].total_bytes = data.total_bytes;
                 messages[msgIndex].state = data.state;
                 
-                if (data.progress >= 1) {  // 1 = 100%
+                // 100 = 100% completato
+                if (data.progress >= 100) {
                     messages[msgIndex].status = 'delivered';
                 }
                 
@@ -642,28 +660,8 @@
                 
                 console.log('📋 Peer caricati:', peers);
                 
-                // 🔴 CARICA PREFERITI DA LOCALSTORAGE
-                const favorites = JSON.parse(localStorage.getItem('peer_favorites') || '{}');
-                peers.forEach(p => {
-                    p.favorite = favorites[p.hash] || false;
-                });
-                
-                // 🔴 IMPORTANTE: Mantieni currentPeer se esiste
-                if (currentPeer) {
-                    const updatedPeer = peers.find(p => 
-                        p.hash === currentPeer.hash || p.dest_hash === currentPeer.dest_hash
-                    );
-                    if (updatedPeer) {
-                        currentPeer.name = updatedPeer.name;
-                        currentPeer.dest_hash = updatedPeer.dest_hash;
-                        
-                        if (updatedPeer.appearance) {
-                            currentPeer.appearance = updatedPeer.appearance;
-                        }
-                        // Mantieni lo stato favorite
-                        currentPeer.favorite = updatedPeer.favorite;
-                    }
-                }
+                // 🔴 CARICA GRUPPI E PREFERITI DAL DATABASE
+                // groups e favorite sono già nel peer dal backend!
                 
                 document.getElementById('peerCount').textContent = peers.length;
                 document.getElementById('peerCountDisplay').textContent = peers.length;
@@ -679,24 +677,52 @@
             }
         }
 
-        function toggleFavorite(peerHash) {
+        async function updatePeerGroup(peerHash, group) {
+            try {
+                const response = await fetch(`/api/peer/${peerHash}/groups`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groups: [group] })  // Sostituisce tutti i gruppi
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showTransferStats(`👥 Gruppo aggiornato`);
+                }
+            } catch (error) {
+                console.error('Errore aggiornamento gruppo:', error);
+            }
+        }
+
+        async function toggleFavorite(peerHash) {
             const peer = peers.find(p => p.hash === peerHash);
             if (!peer) return;
             
-            peer.favorite = !peer.favorite;
-            
-            // 🔴 SALVA IN LOCALSTORAGE
-            let favorites = JSON.parse(localStorage.getItem('peer_favorites') || '{}');
-            favorites[peerHash] = peer.favorite;
-            localStorage.setItem('peer_favorites', JSON.stringify(favorites));
-            
-            // 🔴 Se è il peer corrente, aggiorna anche currentPeer
-            if (currentPeer && currentPeer.hash === peerHash) {
-                currentPeer.favorite = peer.favorite;
+            try {
+                const response = await fetch(`/api/peer/${peerHash}/favorite`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        identity_hash: peerHash,
+                        favorite: !peer.favorite
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    peer.favorite = !peer.favorite;
+                    
+                    // Se è il peer corrente, aggiorna anche currentPeer
+                    if (currentPeer && currentPeer.hash === peerHash) {
+                        currentPeer.favorite = peer.favorite;
+                    }
+                    
+                    displayPeers();
+                    showTransferStats(peer.favorite ? '⭐ Aggiunto ai preferiti' : '⭐ Rimosso dai preferiti');
+                }
+            } catch (error) {
+                console.error('Errore toggle favorite:', error);
             }
-            
-            displayPeers();
-            showTransferStats(peer.favorite ? '⭐ Aggiunto ai preferiti' : '⭐ Rimosso dai preferiti');
         }
 
         function updateSelectedPeerUI() {
@@ -783,16 +809,16 @@
             const peerIndex = peers.findIndex(p => p.hash === peerHash);
             if (peerIndex === -1) return;
             
-            if (!peers[peerIndex].groups) {
-                peers[peerIndex].groups = [];
+            const peer = peers[peerIndex];
+            let currentGroup = peer.group || 'public';
+            
+            let newGroup = group;
+            if (currentGroup === group) {
+                newGroup = 'public';  // toggle off
             }
             
-            const groupIndex = peers[peerIndex].groups.indexOf(group);
-            if (groupIndex === -1) {
-                peers[peerIndex].groups.push(group);
-            } else {
-                peers[peerIndex].groups.splice(groupIndex, 1);
-            }
+            updatePeerGroup(peerHash, newGroup);
+            peer.group = newGroup;
             
             displayPeers();
         }
@@ -812,12 +838,10 @@
             }
             
             if (currentGroupFilter) {
-                if (currentGroupFilter === 'preferiti') {
+                if (currentGroupFilter === 'favorite') {
                     displayList = displayList.filter(p => p.favorite === true);
                 } else {
-                    displayList = displayList.filter(p => 
-                        p.groups && p.groups.includes(currentGroupFilter)
-                    );
+                    displayList = displayList.filter(p => p.group === currentGroupFilter);
                 }
             }
             
@@ -876,7 +900,8 @@
                 const signalString = signalParts.length > 0 ? signalParts.join(' ') : '📡 Nessun dato radio';
                 const lastSeenStr = peer.last_seen ? new Date(peer.last_seen * 1000).toLocaleString() : 'Mai';
                 
-                const peerGroups = peer.groups || [];
+                const group = peer.group || 'public';
+                const groupInfo = PEER_GROUPS[group] || PEER_GROUPS['public'];
                 
                 html += `
                     <div class="lxmf-peer-item ${isSelected ? 'selected' : ''}" onclick="selectPeer('${peer.hash}', '${destHash}', '${displayName}')">
@@ -893,26 +918,46 @@
                             `<div class="peer-hash" style="color: #666;">📨 Nessun delivery</div>`
                         }
                         
+                        <div class="peer-group-indicator" style="font-size:0.7rem; margin-top:4px; color: ${groupInfo.color};">
+                            ${groupInfo.icon} ${groupInfo.name}
+                        </div>
+                        
                         <div class="peer-group-tags" style="display: flex; gap: 2px; margin-top: 5px; flex-wrap: wrap;" onclick="event.stopPropagation()">
-                            <button class="peer-group-btn ${peerGroups.includes('casa') ? 'active' : ''}" 
-                                onclick="togglePeerGroup('${peer.hash}', 'casa', event)" 
-                                style="padding: 2px 6px; border-radius: 4px; background: ${peerGroups.includes('casa') ? '#4c9aff' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;">🏠</button>
+                            <button class="peer-group-btn ${group === 'home' ? 'active' : ''}" 
+                                onclick="togglePeerGroup('${peer.hash}', 'home', event)" 
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'home' ? '#4c9aff' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Casa">🏠</button>
                                 
-                            <button class="peer-group-btn ${peerGroups.includes('lavoro') ? 'active' : ''}" 
-                                onclick="togglePeerGroup('${peer.hash}', 'lavoro', event)" 
-                                style="padding: 2px 6px; border-radius: 4px; background: ${peerGroups.includes('lavoro') ? '#4caf50' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;">💼</button>
+                            <button class="peer-group-btn ${group === 'work' ? 'active' : ''}" 
+                                onclick="togglePeerGroup('${peer.hash}', 'work', event)" 
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'work' ? '#4caf50' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Lavoro">💼</button>
                                 
-                            <button class="peer-group-btn ${peerGroups.includes('montagna') ? 'active' : ''}" 
-                                onclick="togglePeerGroup('${peer.hash}', 'montagna', event)" 
-                                style="padding: 2px 6px; border-radius: 4px; background: ${peerGroups.includes('montagna') ? '#795548' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;">⛰️</button>
+                            <button class="peer-group-btn ${group === 'family' ? 'active' : ''}" 
+                                onclick="togglePeerGroup('${peer.hash}', 'family', event)" 
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'family' ? '#e91e63' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Famiglia">👨‍👩‍👧</button>
                                 
-                            <button class="peer-group-btn ${peerGroups.includes('amici') ? 'active' : ''}" 
-                                onclick="togglePeerGroup('${peer.hash}', 'amici', event)" 
-                                style="padding: 2px 6px; border-radius: 4px; background: ${peerGroups.includes('amici') ? '#e91e63' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;">👥</button>
+                            <button class="peer-group-btn ${group === 'friends' ? 'active' : ''}" 
+                                onclick="togglePeerGroup('${peer.hash}', 'friends', event)" 
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'friends' ? '#9c27b0' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Amici">👥</button>
                                 
-                            <button class="peer-group-btn ${peerGroups.includes('bot') ? 'active' : ''}" 
+                            <button class="peer-group-btn ${group === 'server' ? 'active' : ''}" 
+                                onclick="togglePeerGroup('${peer.hash}', 'server', event)" 
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'server' ? '#607d8b' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Server">🖥️</button>
+                                
+                            <button class="peer-group-btn ${group === 'bot' ? 'active' : ''}" 
                                 onclick="togglePeerGroup('${peer.hash}', 'bot', event)" 
-                                style="padding: 2px 6px; border-radius: 4px; background: ${peerGroups.includes('bot') ? '#9c27b0' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;">🤖</button>
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'bot' ? '#795548' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Bot">🤖</button>
+                                
+                            <button class="peer-group-btn ${group === 'monitor' ? 'active' : ''}" 
+                                onclick="togglePeerGroup('${peer.hash}', 'monitor', event)" 
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'monitor' ? '#ff9800' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Monitoraggio">📡</button>
+                                
+                            <button class="peer-group-btn ${group === 'research' ? 'active' : ''}" 
+                                onclick="togglePeerGroup('${peer.hash}', 'research', event)" 
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'research' ? '#009688' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Ricerca">🔬</button>
+                                
+                            <button class="peer-group-btn ${group === 'public' ? 'active' : ''}" 
+                                onclick="togglePeerGroup('${peer.hash}', 'public', event)" 
+                                style="padding: 2px 6px; border-radius: 4px; background: ${group === 'public' ? '#9e9e9e' : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="Pubblico">🌐</button>
                         </div>
                         
                         <div class="peer-signal" style="font-size:0.7rem; margin-top:4px;">${signalString}</div>
@@ -935,6 +980,8 @@
             
             if (peer && peer.appearance) {
                 currentPeer.appearance = peer.appearance;
+                currentPeer.favorite = peer.favorite;
+                currentPeer.group = peer.group;
                 console.log('🎨 Appearance salvata in currentPeer:', currentPeer.appearance);
             }
 
@@ -975,13 +1022,8 @@
             
             loadConversation(destHash);
             
-            // 🔴 UNA SOLA VERSIONE - PRIMA PROVA CON LOCALSTORAGE, POI CON last_location
-            const savedLoc = localStorage.getItem(`peer_location_${currentPeer.hash}`);
-            if (savedLoc) {
-                const loc = JSON.parse(savedLoc);
-                showPeerOnMap(loc.lat, loc.lon, loc.icon, loc.color, displayName);
-            }
-            else if (peer && peer.last_location) {
+            // Mostra ultima posizione nota
+            if (peer && peer.last_location) {
                 let mdiIcon = 'map-marker';
                 let iconColor = '#4c9aff';
                 
@@ -1251,17 +1293,16 @@
                     contentHtml += attachmentsHtml;
                 }
                 
-                // In displayMessages(), nella parte della progress bar
+                // PROGRESS BAR
                 let progressHtml = '';
                 if (!isIncoming && msg.status === 'sending' && msg.progress !== undefined && msg.progress < 100) {
                     const percent = Math.round(msg.progress);
                     
-                    // Calcola velocità in KB/s e kbps
                     let speedKBs = '0.0';
                     let speedKbps = '0.0';
                     if (msg.speed) {
                         speedKBs = (msg.speed / 1024).toFixed(1);
-                        speedKbps = (msg.speed * 8 / 1024).toFixed(1);  // bytes/sec → kbps
+                        speedKbps = (msg.speed * 8 / 1024).toFixed(1);
                     }
                     
                     let sentText = '0';
@@ -1390,6 +1431,12 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: fileUrl, mode: parseInt(mode) })
                 });
+                
+                if (!response.ok) {
+                    alert('Conversione Codec2 non disponibile sul server');
+                    return;
+                }
+                
                 const data = await response.json();
                 if (data.success && data.wav_url) {
                     window.open(data.wav_url, '_blank');
@@ -1398,7 +1445,7 @@
                 }
             } catch (error) {
                 console.error('Errore conversione:', error);
-                alert('Errore conversione');
+                alert('Errore conversione: ' + error.message);
             }
         }
         
@@ -1569,7 +1616,6 @@
                 recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 audioChunks = [];
                 
-                // 🔴 USA MediaRecorder STANDARD - FUNZIONA SEMPRE!
                 mediaRecorder = new MediaRecorder(recordingStream);
                 
                 mediaRecorder.ondataavailable = (event) => {
@@ -1582,7 +1628,6 @@
                     console.log('Registrazione fermata, chunks:', audioChunks.length);
                     
                     if (audioChunks.length > 0) {
-                        // Crea blob in formato webm (supportato da tutti)
                         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                         sendVoiceMessage(audioBlob);
                     } else {
@@ -1996,16 +2041,12 @@
                     const lat = entry.location.latitude;
                     const lon = entry.location.longitude;
                     
-                    // 🔴 SOLO QUESTA PARTE CAMBIA - scala da -140 a -30
-                    let color = '#4c9aff';  // default blu
+                    let color = '#4c9aff';
                     if (entry.rssi !== undefined && entry.rssi !== null) {
-                        // Mappa RSSI da -140 a -30 a tonalità da rosso (0°) a verde (120°)
                         const minRssi = -140;
                         const maxRssi = -30;
-                        // Normalizza tra 0 e 1
                         let t = (entry.rssi - minRssi) / (maxRssi - minRssi);
-                        t = Math.max(0, Math.min(1, t));  // Limita tra 0 e 1
-                        // Converti in tonalità (0° = rosso, 120° = verde)
+                        t = Math.max(0, Math.min(1, t));
                         const hue = t * 120;
                         color = `hsl(${hue}, 100%, 50%)`;
                     }
@@ -2143,14 +2184,6 @@
                         longitude: loc.longitude
                     };
                     
-                    // 🔴 AGGIUNGI SOLO QUESTA RIGA!
-                    localStorage.setItem(`peer_location_${currentPeer.hash}`, JSON.stringify({
-                        lat: loc.latitude,
-                        lon: loc.longitude,
-                        icon: currentPeer.appearance ? currentPeer.appearance[0] : 'map-marker',
-                        color: currentPeer.appearance ? '#' + currentPeer.appearance[1] : '#4c9aff'
-                    }));
-                    
                     const peerIndex = peers.findIndex(p => p.hash === currentPeer.hash);
                     if (peerIndex !== -1) {
                         peers[peerIndex].last_location = currentPeer.last_location;
@@ -2214,7 +2247,6 @@
                 `;
             }
 
-            // 📊 STATISTICHE SISTEMA (PROCESSOR, RAM, NVM, INFORMATION)
             let hasSystem = false;
             let systemHtml = '<div class="telemetry-system-grid" style="margin-top: 8px; border-top: 1px solid #2a3142; padding-top: 8px;">';
 
@@ -2237,6 +2269,7 @@
 
             systemHtml += '</div>';
             if (hasSystem) html += systemHtml;
+            
             let hasSensors = false;
             let sensorsHtml = '<div class="telemetry-sensor-grid">';
             

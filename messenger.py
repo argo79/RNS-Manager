@@ -51,6 +51,22 @@ class Commands:
     SIGNAL_REPORT = 0x04
     RANGETEST = 0x05
 
+# ============================================
+# GRUPPI DISPONIBILI (10 stati)
+# ============================================
+PEER_GROUPS = {
+    'favorite': {'icon': '⭐', 'name': 'Preferiti', 'trust': 3, 'color': '#FFD700'},
+    'home': {'icon': '🏠', 'name': 'Casa', 'trust': 3, 'color': '#4CAF50'},
+    'work': {'icon': '💼', 'name': 'Lavoro', 'trust': 2, 'color': '#2196F3'},
+    'family': {'icon': '👨‍👩‍👧', 'name': 'Famiglia', 'trust': 3, 'color': '#E91E63'},
+    'friends': {'icon': '👥', 'name': 'Amici', 'trust': 2, 'color': '#9C27B0'},
+    'server': {'icon': '🖥️', 'name': 'Server', 'trust': 1, 'color': '#607D8B'},
+    'bot': {'icon': '🤖', 'name': 'Bot', 'trust': 1, 'color': '#795548'},
+    'monitor': {'icon': '📡', 'name': 'Monitoraggio', 'trust': 2, 'color': '#FF9800'},
+    'research': {'icon': '🔬', 'name': 'Ricerca', 'trust': 2, 'color': '#009688'},
+    'public': {'icon': '🌐', 'name': 'Pubblico', 'trust': 0, 'color': '#9E9E9E'}
+}
+
 CODEC2_AVAILABLE = audio_codec.detect_codec2()
 _RETICULUM_INSTANCE = None
 
@@ -314,21 +330,35 @@ class Messenger:
         with self.db_lock:
             conn = sqlite3.connect(self.peers_db, timeout=10)
             c = conn.cursor()
+            
+            # ============================================
+            # TABELLA IDENTITÀ (solo anagrafica)
+            # ============================================
             c.execute('''
                 CREATE TABLE IF NOT EXISTS identities (
                     identity_hash TEXT PRIMARY KEY,
                     display_name TEXT,
                     first_seen REAL,
                     last_seen REAL,
-                    notes TEXT,
-                    group_name TEXT
+                    notes TEXT
                 )
             ''')
+            
+            # ============================================
+            # TABELLA DESTINAZIONI (QUELLE CHE USIAMO DAVVERO!)
+            # ============================================
             c.execute('''
                 CREATE TABLE IF NOT EXISTS destinations (
                     destination_hash TEXT PRIMARY KEY,
                     identity_hash TEXT,
                     aspect TEXT,
+                    
+                    -- Dati anagrafici
+                    display_name TEXT,
+                    group_name TEXT DEFAULT 'public',
+                    notes TEXT,
+                    
+                    -- Dati ultimo annuncio
                     last_seen REAL,
                     hops INTEGER,
                     rssi REAL,
@@ -336,9 +366,47 @@ class Messenger:
                     q REAL,
                     app_data TEXT,
                     appearance TEXT,
+                    
+                    -- 🔴 ULTIMA TELEMETRIA COMPLETA
+                    last_latitude REAL,
+                    last_longitude REAL,
+                    last_altitude REAL,
+                    last_speed REAL,
+                    last_bearing REAL,
+                    last_accuracy REAL,
+                    last_battery REAL,
+                    last_battery_charging INTEGER,
+                    last_temperature REAL,
+                    last_humidity REAL,
+                    last_pressure REAL,
+                    last_light REAL,
+                    last_uptime REAL,
+                    last_processor REAL,
+                    last_ram REAL,
+                    last_nvm REAL,
+                    last_telemetry_time REAL,
+                    
+                    -- 🔴 PERMESSI E STATO
+                    trust_level INTEGER DEFAULT 0,
+                    allow_telemetry INTEGER DEFAULT 0,
+                    allow_commands INTEGER DEFAULT 0,
+                    last_telemetry_request REAL,
+                    last_command_executed REAL,
+                    last_command_result TEXT,
+                    
+                    -- 🔴 STATISTICHE
+                    messages_sent INTEGER DEFAULT 0,
+                    messages_received INTEGER DEFAULT 0,
+                    telemetry_count INTEGER DEFAULT 0,
+                    last_message_time REAL,
+                    
+                    -- 🔴 PREFERITI (sovrascrive gruppo)
+                    is_favorite INTEGER DEFAULT 0,
+                    
                     FOREIGN KEY(identity_hash) REFERENCES identities(identity_hash) ON DELETE CASCADE
                 )
             ''')
+            
             c.execute('''
                 CREATE TABLE IF NOT EXISTS sent_messages (
                     hash TEXT PRIMARY KEY,
@@ -355,7 +423,7 @@ class Messenger:
                 )
             ''')
             
-            # 🔴 CREA TABELLA MESSAGGI PER TUTTI I MESSAGGI (ricevuti e inviati)
+            # 🔴 TABELLA MESSAGGI PER TUTTI I MESSAGGI (ricevuti e inviati)
             c.execute('''
                 CREATE TABLE IF NOT EXISTS messages (
                     hash TEXT PRIMARY KEY,
@@ -377,20 +445,62 @@ class Messenger:
                 )
             ''')
             
+            # ============================================
+            # TABELLA GRUPPI (opzionale)
+            # ============================================
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS groups (
+                    group_name TEXT PRIMARY KEY,
+                    description TEXT,
+                    trust_level INTEGER DEFAULT 0,
+                    created_at REAL
+                )
+            ''')
+            
+            # ============================================
+            # 🔴 NUOVA TABELLA PER I GRUPPI MULTIPLI (N:N)
+            # ============================================
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS peer_groups (
+                    identity_hash TEXT,
+                    group_name TEXT,
+                    added_at REAL,
+                    PRIMARY KEY (identity_hash, group_name),
+                    FOREIGN KEY(identity_hash) REFERENCES identities(identity_hash) ON DELETE CASCADE,
+                    FOREIGN KEY(group_name) REFERENCES groups(group_name) ON DELETE CASCADE
+                )
+            ''')
+            
+            # ============================================
+            # 🔴 NUOVA TABELLA PER I PREFERITI (separata)
+            # ============================================
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS favorites (
+                    identity_hash TEXT PRIMARY KEY,
+                    added_at REAL,
+                    FOREIGN KEY(identity_hash) REFERENCES identities(identity_hash) ON DELETE CASCADE
+                )
+            ''')
+            
+            # ============================================
+            # INDICI PER VELOCITÀ
+            # ============================================
             c.execute('CREATE INDEX IF NOT EXISTS idx_dest_identity ON destinations(identity_hash)')
-            c.execute('CREATE INDEX IF NOT EXISTS idx_dest_aspect ON destinations(aspect)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_dest_group ON destinations(group_name)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_dest_favorite ON destinations(is_favorite)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_dest_last_seen ON destinations(last_seen)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_dest_trust ON destinations(trust_level)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_dest_telemetry ON destinations(last_telemetry_time)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_sent_status ON sent_messages(status)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_sent_dest ON sent_messages(destination_hash)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_messages_dest ON messages(destination_hash)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_messages_source ON messages(source_hash)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_messages_time ON messages(timestamp)')
             
-            # 🔴 AGGIUNGI COLONNA appearance SE NON ESISTE
-            try:
-                c.execute("ALTER TABLE destinations ADD COLUMN appearance TEXT")
-            except:
-                pass
-                
+            # 🔴 NUOVI INDICI
+            c.execute('CREATE INDEX IF NOT EXISTS idx_peer_groups_identity ON peer_groups(identity_hash)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_peer_groups_group ON peer_groups(group_name)')
+            
             conn.commit()
             conn.close()
 
@@ -417,7 +527,7 @@ class Messenger:
             },
             "gpsd_host": "localhost",
             "gpsd_port": 2947,
-            "appearance": ["📡", "4c9aff", "1a1f2e"]
+            "appearance": ["antenna", "4c9aff", "1a1f2e"]
         }
         if os.path.exists(self.configpath):
             with open(self.configpath, 'r') as f:
@@ -626,6 +736,100 @@ class Messenger:
         except Exception as e:
             print(f"❌ Errore salvataggio appearance: {e}")
 
+    def _update_peer_telemetry(self, source_hash, telemetry_data, msg_data=None):
+        """Aggiorna l'ultima telemetria conosciuta di un peer"""
+        try:
+            with self.db_lock:
+                conn = sqlite3.connect(self.peers_db, timeout=10)
+                c = conn.cursor()
+                
+                # Prepara i dati
+                data = {
+                    'last_telemetry_time': time.time()
+                }
+                
+                if telemetry_data:
+                    if 'location' in telemetry_data:
+                        loc = telemetry_data['location']
+                        data['last_latitude'] = loc.get('latitude')
+                        data['last_longitude'] = loc.get('longitude')
+                        data['last_altitude'] = loc.get('altitude')
+                        data['last_speed'] = loc.get('speed')
+                        data['last_bearing'] = loc.get('bearing')
+                        data['last_accuracy'] = loc.get('accuracy')
+                    
+                    if 'battery' in telemetry_data:
+                        bat = telemetry_data['battery']
+                        data['last_battery'] = bat.get('charge_percent')
+                        data['last_battery_charging'] = 1 if bat.get('charging') else 0
+                    
+                    if 'temperature' in telemetry_data:
+                        data['last_temperature'] = telemetry_data['temperature']
+                    
+                    if 'humidity' in telemetry_data:
+                        data['last_humidity'] = telemetry_data['humidity']
+                    
+                    if 'pressure' in telemetry_data:
+                        data['last_pressure'] = telemetry_data['pressure']
+                    
+                    if 'ambient_light' in telemetry_data:
+                        data['last_light'] = telemetry_data['ambient_light']
+                    
+                    if 'information' in telemetry_data and 'contents' in telemetry_data['information']:
+                        # Prova a estrarre uptime
+                        info = telemetry_data['information']['contents']
+                        if 'Uptime:' in info:
+                            try:
+                                uptime_str = info.split('Uptime:')[1].strip().replace('s', '')
+                                data['last_uptime'] = float(uptime_str)
+                            except:
+                                pass
+                    
+                    if 'processor' in telemetry_data:
+                        data['last_processor'] = telemetry_data['processor']
+                    
+                    if 'ram' in telemetry_data:
+                        data['last_ram'] = telemetry_data['ram']
+                    
+                    if 'nvm' in telemetry_data:
+                        data['last_nvm'] = telemetry_data['nvm']
+                
+                if msg_data:
+                    data['last_seen'] = time.time()
+                    if hasattr(msg_data, 'hops'):
+                        data['hops'] = msg_data.hops
+                    if hasattr(msg_data, 'rssi'):
+                        data['rssi'] = msg_data.rssi
+                    if hasattr(msg_data, 'snr'):
+                        data['snr'] = msg_data.snr
+                    if hasattr(msg_data, 'q'):
+                        data['q'] = msg_data.q
+                
+                # Costruisci la query dinamica
+                set_clause = ', '.join([f"{k}=?" for k in data.keys()])
+                values = list(data.values())
+                values.append(source_hash)
+                
+                c.execute(f'''
+                    UPDATE destinations 
+                    SET {set_clause}
+                    WHERE destination_hash = ?
+                ''', values)
+                
+                # Incrementa contatore telemetria
+                c.execute('''
+                    UPDATE destinations 
+                    SET telemetry_count = telemetry_count + 1 
+                    WHERE destination_hash = ?
+                ''', (source_hash,))
+                
+                conn.commit()
+                conn.close()
+                
+                print(f"📊 Telemetria aggiornata per {source_hash[:8]}")
+                
+        except Exception as e:
+            print(f"❌ Errore aggiornamento telemetria peer: {e}")
 
     def _get_last_telemetry_timestamp(self, peer_hash):
         max_ts = 0
@@ -693,9 +897,11 @@ class Messenger:
                     appearance_json = existing[0]
             
             c.execute('''
-                INSERT INTO destinations (destination_hash, last_seen, hops, rssi, snr, q, app_data, appearance)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO destinations (
+                    destination_hash, identity_hash, aspect, last_seen, hops, rssi, snr, q, app_data, appearance
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(destination_hash) DO UPDATE SET
+                    identity_hash = excluded.identity_hash,
                     last_seen = excluded.last_seen,
                     hops = excluded.hops,
                     rssi = excluded.rssi,
@@ -703,7 +909,7 @@ class Messenger:
                     q = excluded.q,
                     app_data = excluded.app_data,
                     appearance = COALESCE(excluded.appearance, appearance)
-            ''', (source_hash, now, hops, rssi, snr, q, None, appearance_json))
+            ''', (source_hash, identity_hash, 'lxmf.delivery', now, hops, rssi, snr, q, None, appearance_json))
             
             if identity_hash:
                 c.execute('''
@@ -1193,7 +1399,11 @@ class Messenger:
             if FIELD_TELEMETRY in message.fields:
                 try:
                     telemetry_obj = telemeter.Telemeter.from_packed(message.fields[FIELD_TELEMETRY])
+                    telemetry_data = telemetry_obj.read_all()
                     self._save_telemetry(message.source_hash.hex(), telemetry_obj, message)
+                    
+                    # 🔴 AGGIORNA L'ULTIMA TELEMETRIA DEL PEER
+                    self._update_peer_telemetry(message.source_hash.hex(), telemetry_data, message)
                     
                     # 🔴 SE IL PEER CHE HA INVIATO LA TELEMETRIA È IN RANGETEST, SALVA!
                     source_hash = message.source_hash.hex()
@@ -1302,6 +1512,7 @@ class Messenger:
             if not isinstance(cmd_dict, dict):
                 continue
             for cmd_type, cmd_data in cmd_dict.items():
+                cmd_type = int(cmd_type)
                 if cmd_type == Commands.PING:
                     self.send(source, "Ping reply", callbacks=None)
                 elif cmd_type == Commands.ECHO:
@@ -1386,7 +1597,7 @@ class Messenger:
                                 fields[FIELD_TELEMETRY] = telemetry_packed
                                 print(f"📦 Telemetria packata: {len(telemetry_packed)} bytes")
                         
-                        # 🎨 ICON APPEARANCE - QUESTA PARTE MANCAVA!
+                        # 🎨 ICON APPEARANCE - DAL CONFIG!
                         appearance = self.config.get('appearance', ['antenna', '4c9aff', '1a1f2e'])
                         if appearance and len(appearance) == 3:
                             try:
@@ -1410,7 +1621,6 @@ class Messenger:
                     except Exception as e:
                         print(f"❌ Errore telemetria: {e}")
                         traceback.print_exc()
-
 
     def _start_rangetest(self, peer_hash, interval):
         """Avvia un rangetest periodico verso un peer"""
@@ -1617,78 +1827,83 @@ class Messenger:
 
     def _export_to_kml(self, points, peer_short, timestamp, output_dir):
         """Esporta in formato KML"""
-        import xml.etree.ElementTree as ET
-        from xml.dom import minidom
-        
-        kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
-        document = ET.SubElement(kml, 'Document')
-        
-        name = ET.SubElement(document, 'name')
-        name.text = f"Rangetest {peer_short} {time.strftime('%Y-%m-%d %H:%M:%S')}"
-        
-        # Crea una linea per il percorso
-        placemark = ET.SubElement(document, 'Placemark')
-        line_name = ET.SubElement(placemark, 'name')
-        line_name.text = "Percorso"
-        
-        line_style = ET.SubElement(placemark, 'Style')
-        line_style = ET.SubElement(line_style, 'LineStyle')
-        line_color = ET.SubElement(line_style, 'color')
-        line_color.text = 'ff0000ff'  # Rosso
-        line_width = ET.SubElement(line_style, 'width')
-        line_width.text = '2'
-        
-        linestring = ET.SubElement(placemark, 'LineString')
-        tessellate = ET.SubElement(linestring, 'tessellate')
-        tessellate.text = '1'
-        coordinates = ET.SubElement(linestring, 'coordinates')
-        
-        coord_text = []
-        for point in points:
-            # 🔴 CORREZIONE: location è DENTRO point, NON in point['telemetry']!
-            if point.get('location') and point['location'].get('latitude'):
-                loc = point['location']
-                coord_text.append(f"{loc.get('longitude', 0)},{loc.get('latitude', 0)},{loc.get('altitude', 0)}")
-        
-        coordinates.text = '\n'.join(coord_text)
-        
-        # Aggiungi punti come placemarks
-        for i, point in enumerate(points):
-            if point.get('location') and point['location'].get('latitude'):
-                loc = point['location']
-                pt = ET.SubElement(document, 'Placemark')
-                pt_name = ET.SubElement(pt, 'name')
-                pt_name.text = f"Punto {i+1}"
-                
-                # Aggiungi descrizione con dati radio
-                description = ET.SubElement(pt, 'description')
-                radio_text = []
-                if point.get('radio'):
-                    radio = point['radio']
-                    if radio.get('rssi'):
-                        radio_text.append(f"RSSI: {radio['rssi']} dBm")
-                    if radio.get('snr'):
-                        radio_text.append(f"SNR: {radio['snr']} dB")
-                    if radio.get('q'):
-                        radio_text.append(f"Q: {radio['q']}%")
-                    if radio.get('hops'):
-                        radio_text.append(f"Hops: {radio['hops']}")
-                
-                if point.get('battery'):
-                    radio_text.append(f"Batteria: {point['battery'].get('charge_percent', 0)}%")
-                
-                description.text = "\n".join(radio_text) if radio_text else "Nessun dato radio"
-                
-                pt_point = ET.SubElement(pt, 'Point')
-                pt_coords = ET.SubElement(pt_point, 'coordinates')
-                pt_coords.text = f"{loc.get('longitude', 0)},{loc.get('latitude', 0)},{loc.get('altitude', 0)}"
-        
-        # Formatta e salva
-        xml_str = minidom.parseString(ET.tostring(kml)).toprettyxml(indent="  ")
-        filename = os.path.join(output_dir, f"rangetest_{peer_short}_{timestamp}.kml")
-        with open(filename, 'w') as f:
-            f.write(xml_str)
-        print(f"💾 KML salvato: {filename}")
+        try:
+            import xml.etree.ElementTree as ET
+            from xml.dom import minidom
+            
+            kml = ET.Element('kml', xmlns='http://www.opengis.net/kml/2.2')
+            document = ET.SubElement(kml, 'Document')
+            
+            name = ET.SubElement(document, 'name')
+            name.text = f"Rangetest {peer_short} {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            
+            # Crea una linea per il percorso
+            placemark = ET.SubElement(document, 'Placemark')
+            line_name = ET.SubElement(placemark, 'name')
+            line_name.text = "Percorso"
+            
+            line_style = ET.SubElement(placemark, 'Style')
+            line_style = ET.SubElement(line_style, 'LineStyle')
+            line_color = ET.SubElement(line_style, 'color')
+            line_color.text = 'ff0000ff'  # Rosso
+            line_width = ET.SubElement(line_style, 'width')
+            line_width.text = '2'
+            
+            linestring = ET.SubElement(placemark, 'LineString')
+            tessellate = ET.SubElement(linestring, 'tessellate')
+            tessellate.text = '1'
+            coordinates = ET.SubElement(linestring, 'coordinates')
+            
+            coord_text = []
+            for point in points:
+                # 🔴 CORREZIONE: location è DENTRO point, NON in point['telemetry']!
+                if point.get('location') and point['location'].get('latitude'):
+                    loc = point['location']
+                    coord_text.append(f"{loc.get('longitude', 0)},{loc.get('latitude', 0)},{loc.get('altitude', 0)}")
+            
+            coordinates.text = '\n'.join(coord_text)
+            
+            # Aggiungi punti come placemarks
+            for i, point in enumerate(points):
+                if point.get('location') and point['location'].get('latitude'):
+                    loc = point['location']
+                    pt = ET.SubElement(document, 'Placemark')
+                    pt_name = ET.SubElement(pt, 'name')
+                    pt_name.text = f"Punto {i+1}"
+                    
+                    # Aggiungi descrizione con dati radio
+                    description = ET.SubElement(pt, 'description')
+                    radio_text = []
+                    if point.get('radio'):
+                        radio = point['radio']
+                        if radio.get('rssi'):
+                            radio_text.append(f"RSSI: {radio['rssi']} dBm")
+                        if radio.get('snr'):
+                            radio_text.append(f"SNR: {radio['snr']} dB")
+                        if radio.get('q'):
+                            radio_text.append(f"Q: {radio['q']}%")
+                        if radio.get('hops'):
+                            radio_text.append(f"Hops: {radio['hops']}")
+                    
+                    if point.get('battery'):
+                        radio_text.append(f"Batteria: {point['battery'].get('charge_percent', 0)}%")
+                    
+                    description.text = "\n".join(radio_text) if radio_text else "Nessun dato radio"
+                    
+                    pt_point = ET.SubElement(pt, 'Point')
+                    pt_coords = ET.SubElement(pt_point, 'coordinates')
+                    pt_coords.text = f"{loc.get('longitude', 0)},{loc.get('latitude', 0)},{loc.get('altitude', 0)}"
+            
+            # Formatta e salva
+            xml_str = minidom.parseString(ET.tostring(kml)).toprettyxml(indent="  ")
+            filename = os.path.join(output_dir, f"rangetest_{peer_short}_{timestamp}.kml")
+            with open(filename, 'w') as f:
+                f.write(xml_str)
+            print(f"💾 KML salvato: {filename}")
+            
+        except Exception as e:
+            print(f"❌ Errore esportazione KML: {e}")
+            traceback.print_exc()
 
     def send(self, dest_hash, content, title="", callbacks=None,
                  image_path=None, audio_path=None,
@@ -1823,7 +2038,7 @@ class Messenger:
                     fields_dict[FIELD_FILE_ATTACHMENTS] = attachments_list
 
                 # 🎨 ICON APPEARANCE
-                appearance = self.config.get('appearance', ['📡', '4c9aff', '1a1f2e'])
+                appearance = self.config.get('appearance', ['antenna', '4c9aff', '1a1f2e'])
                 if appearance and len(appearance) == 3:
                     # Converti hex color in bytes
                     fg_bytes = bytes.fromhex(appearance[1].lstrip('#')) if isinstance(appearance[1], str) else appearance[1]
@@ -2180,9 +2395,9 @@ class Messenger:
             conn = sqlite3.connect(self.peers_db, timeout=10)
             c = conn.cursor()
             
-            # 🔴 UNA SOLA QUERY CHE PRENDE TUTTO!
+            # 🔴 CORREZIONE: group_name NON esiste in identities, ma in destinations!
             c.execute('''
-                SELECT i.identity_hash, i.display_name, i.group_name, d.appearance
+                SELECT i.identity_hash, i.display_name, d.group_name, d.appearance
                 FROM identities i
                 LEFT JOIN destinations d ON i.identity_hash = d.identity_hash 
                     AND d.aspect = 'lxmf.delivery'
@@ -2205,7 +2420,7 @@ class Messenger:
             peer = {
                 'hash': row[0],
                 'name': row[1],
-                'group': row[2]
+                'group': row[2] or 'public'  # 🔴 group_name viene da destinations!
             }
             
             # 🔴 DECODIFICA APPEARANCE SE PRESENTE
@@ -2434,4 +2649,3 @@ class AnnounceHandler:
 
             conn.commit()
             conn.close()
-
