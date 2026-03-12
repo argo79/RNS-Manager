@@ -28,6 +28,7 @@ RNS_ASPECTS = [
     "rnstransport.remote.management",    
     "rnstransport.network.instance",
     "rnstransport.network",
+    "styrene.delivery",
     "example_utilities.minimalsample",
     "example_utilities.echo.request",
     "example_utilities.broadcast",
