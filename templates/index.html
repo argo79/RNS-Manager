@@ -7,27 +7,21 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/rns_monitor.css">
     <script>
-        // Sistema di traduzione multilingua completo
         let translations = {};
         let currentLang = 'it';
-        
-        // Lista lingue supportate
         const supportedLangs = ['it', 'en', 'fr', 'es', 'de', 'pt', 'ru', 'zh', 'ja', 'ar', 'hi', 'bn', 'ur', 'tr', 'pl'];
         const APP_VERSION = "1.0.3";
 
-        // Determina la lingua del browser all'avvio
         function detectBrowserLanguage() {
             try {
                 const browserLang = navigator.language || navigator.userLanguage || 'it';
                 const shortLang = browserLang.split('-')[0].toLowerCase();
                 return supportedLangs.includes(shortLang) ? shortLang : 'it';
             } catch (e) {
-                console.warn('Errore rilevamento lingua:', e);
                 return 'it';
             }
         }
         
-        // Carica traduzioni
         async function loadTranslations(lang) {
             try {
                 const response = await fetch('/static/index_translations.json');
@@ -35,37 +29,24 @@
                 const data = await response.json();
                 translations = data[lang] || data.it;
                 currentLang = lang;
-                
-                // Salva preferenza
                 localStorage.setItem('rns_language', lang);
-                
-                // Aggiorna attributo lang
                 document.documentElement.lang = lang;
-                
-                // Aggiorna dropdown
                 const selector = document.getElementById('languageSelector');
                 if (selector) selector.value = lang;
-                
-                // Traduci tutto
                 translatePage();
                 translateDynamicContent();
-                
-                // Ricarica identità se presente
                 if (typeof loadIdentities === 'function' && document.getElementById('identitiesList').children.length > 1) {
                     loadIdentities();
                 }
-                
                 return true;
             } catch (error) {
                 console.error('Errore caricamento traduzioni:', error);
-                // Fallback esteso
                 translations = getItalianFallback();
                 translatePage();
                 return false;
             }
         }
         
-        // Traduzioni italiane di fallback (COMPLETE)
         function getItalianFallback() {
             return {
                 "title": "RNID Identity Manager 1.0.1",
@@ -222,61 +203,45 @@
                 console.warn(`Traduzione mancante: ${key}`);
                 return key;
             }
-            
             let text = translations[key];
-            
-            // Sostituisci i parametri passati
             Object.keys(params).forEach(param => {
                 const regex = new RegExp(`\\{${param}\\}`, 'g');
                 text = text.replace(regex, params[param]);
             });
-            
-            // Sostituisci automaticamente {version} con APP_VERSION
             text = text.replace(/\{version\}/g, APP_VERSION);
-            
             return text;
         }
         
         function translatePage() {
-            // Titolo pagina
             document.title = t('title');
-            
-            // Elementi con data-i18n
             document.querySelectorAll('[data-i18n]').forEach(el => {
                 const key = el.getAttribute('data-i18n');
                 if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
                     el.placeholder = t(key);
                 } else if (el.tagName === 'BUTTON' && el.classList.contains('copy-btn')) {
-                    // Mantieni icone
                     const icon = el.innerHTML.match(/[📋🔒🔓✍️✅🔍🔄🗑ℹ📢▶]/)?.[0] || '';
                     el.innerHTML = icon + ' ' + t(key);
                 } else {
                     el.textContent = t(key);
                 }
             });
-            
-            // Placeholder
             document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
                 const key = el.getAttribute('data-i18n-placeholder');
                 el.placeholder = t(key);
             });
-            
-            // Valori di default
             document.querySelectorAll('[data-i18n-value]').forEach(el => {
                 const key = el.getAttribute('data-i18n-value');
                 if (!el.value || el.value === 'New_identity') {
                     el.value = t(key);
                 }
             });
-            // Per gli elementi che contengono HTML (come le info)
             document.querySelectorAll('[data-i18n-html]').forEach(el => {
                 const key = el.getAttribute('data-i18n-html');
-                el.innerHTML = t(key); // usa innerHTML invece di textContent
+                el.innerHTML = t(key);
             });
         }
         
         function translateDynamicContent() {
-            // Traduci messaggi nella lista identità
             const list = document.getElementById('identitiesList');
             if (list) {
                 const warningDiv = list.querySelector('.warning');
@@ -284,8 +249,6 @@
                     warningDiv.textContent = t('warning_load');
                 }
             }
-            
-            // Traduci badge delle identità
             document.querySelectorAll('.identity-badge').forEach(badge => {
                 if (badge.textContent.includes('PUBBLICA') || badge.textContent.includes('PUBLIC')) {
                     badge.textContent = t('public_only');
@@ -295,20 +258,11 @@
         
         async function changeLanguage(lang) {
             await loadTranslations(lang);
-            
-            // Ricarica identità per aggiornare badge
             if (typeof loadIdentities === 'function') {
                 loadIdentities();
             }
-            
-            // Aggiorna comando corrente se necessario
-            const cmdInput = document.getElementById('commandInput');
-            if (cmdInput && cmdInput.value.includes('rnid')) {
-                // Non tradurre comandi
-            }
         }
         
-        // Override showOutput
         const originalShowOutput = window.showOutput;
         window.showOutput = function(message, type = '') {
             if (typeof message === 'string' && message.startsWith('_')) {
@@ -318,25 +272,17 @@
             originalShowOutput(message, type);
         };
         
-        // Inizializzazione all'avvio
         window.addEventListener('DOMContentLoaded', async function() {
-            // Determina lingua: localStorage > browser > italiano
             const savedLang = localStorage.getItem('rns_language');
             const browserLang = detectBrowserLanguage();
             const initialLang = savedLang || browserLang || 'it';
-            
-            // Carica traduzioni
             await loadTranslations(initialLang);
-            
-            // Inizializza comando
             document.getElementById('commandInput').value = 'rnid -h';
             setTimeout(() => {
                 if (typeof executeCommand === 'function') {
                     executeCommand();
                 }
             }, 500);
-            
-            // Messaggio lista identità
             const list = document.getElementById('identitiesList');
             if (list) {
                 list.innerHTML = `<div class="warning">${t('warning_load')}</div>`;
@@ -375,7 +321,6 @@
         </header>
         
         <div class="row">
-            <!-- COLONNA 1: Gestione Identità -->
             <div class="col">
                 <div class="section">
                     <h2 data-i18n="identities">IDENTITÀ DISPONIBILI</h2>
@@ -383,7 +328,6 @@
                         <button onclick="loadIdentities()" data-i18n="load">🔄 Carica</button>
                         <button class="secondary" onclick="scanAllStorage()" data-i18n="search">🔍 Cerca</button>
                     </div>
-                    
                     <div id="identitiesList" class="identities-list">
                         <div class="warning" data-i18n="warning_load"> Premi "Carica" per visualizzare le identità</div>
                     </div>
@@ -396,7 +340,6 @@
                         <div class="tab" onclick="showTab('generate-tab')" data-i18n="generate">GENERA</div>
                     </div>
                     
-                    <!-- IMPORT TAB -->
                     <div id="import-tab" class="tab-content active">
                         <div class="form-group">
                             <label data-i18n="file_identity">Importa da file (64 bytes):</label>
@@ -435,7 +378,6 @@
                         </div>
                     </div>
 
-                    <!-- EXPORT TAB -->
                     <div id="export-tab" class="tab-content">
                         <div class="form-group">
                             <label data-i18n="export_selected">Esporta identità selezionata:</label>
@@ -448,7 +390,6 @@
                         </div>
                     </div>
                     
-                    <!-- GENERATE TAB -->
                     <div id="generate-tab" class="tab-content">
                         <div class="form-group">
                             <label data-i18n="new_identity_name">Nome nuova identità:</label>
@@ -459,7 +400,6 @@
                 </div>
             </div>
             
-            <!-- COLONNA 2: Operazioni & Analytics -->
             <div class="col">                
                 <div class="section">
                     <h2 data-i18n="verify_analyze">VERIFICA & ANALISI HASH</h2>
@@ -482,7 +422,6 @@
                             <button class="secondary" onclick="addToPublicIdentities()" id="addToIdentitiesBtn" style="display:none;" data-i18n="add_to_public">➕ Aggiungi alle Pubbliche</button>
                         </div>
                     </div>
-                    
                     <div id="verifyResult" style="margin-top: 10px; font-size: 11px; max-height: 300px; overflow-y: auto; padding: 8px; background: #111; border: 1px solid #333; border-radius: 3px;"></div>
                 </div>
 
@@ -492,7 +431,6 @@
                         <input type="text" id="aspectInput" data-i18n-placeholder="aspect_input" value="rnstransport.probe">
                         <button onclick="calculateAspectHash()" data-i18n="calculate">🔢 Calcola</button>
                     </div>
-                    
                     <div class="aspect-buttons">
                         <button class="aspect-btn" onclick="setAspect('rnstransport.probe')">rnstransport.probe</button>
                         <button class="aspect-btn" onclick="setAspect('lxmf.delivery')">lxmf.delivery</button>
@@ -503,7 +441,6 @@
                     </div>
                 </div>
 
-                <!-- SEZIONE CIFRATURA & DECIFRATURA -->
                 <div class="section">
                     <h2 data-i18n="encrypt_decrypt">🔐 CIFRATURA & DECIFRATURA</h2>
                     
@@ -512,7 +449,6 @@
                         <div class="tab" onclick="showCryptoTab('crypto-text-tab')" data-i18n="text_tab">📝 Testo</div>
                     </div>
                     
-                    <!-- TAB FILE -->
                     <div id="crypto-file-tab" class="tab-content active">
                         <div class="form-group">
                             <label data-i18n="file_input">File input:</label>
@@ -535,9 +471,19 @@
                             <button onclick="encryptFile()" data-i18n="encrypt_file">🔒 Cifra File</button>
                             <button onclick="decryptFile()" data-i18n="decrypt_file">🔓 Decifra File</button>
                         </div>
+                        
+                        <div id="cryptoFileResult" style="margin-top: 10px; display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <label style="margin: 0; font-size: 11px; color:#0f0;">📄 DATO PURO:</label>
+                                <button class="crypto-copy-btn" onclick="copyCryptoFileResult()" data-i18n="copy">📋 Copia</button>
+                            </div>
+                            <textarea id="cryptoFileOutput" 
+                                     readonly
+                                     style="width:100%; height: 80px; background:#000; color:#0f0; border:1px solid #333; padding:8px; font-family:monospace; font-size: 11px; resize: none;"
+                                     onclick="this.select()"></textarea>
+                        </div>
                     </div>
                     
-                    <!-- TAB TESTO -->
                     <div id="crypto-text-tab" class="tab-content">
                         <div class="form-group">
                             <label data-i18n="text_to_crypto">Testo da cifrare/decifrare:</label>
@@ -553,37 +499,30 @@
                             <button class="secondary" onclick="clearCryptoText()" data-i18n="clear_text">🗑 Pulisci</button>
                         </div>
                         
-                        <!-- RISULTATO CIFRATO -->
                         <div id="cryptoEncryptedResult" style="margin-top: 10px; display: none;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                                <label style="margin: 0; font-size: 11px;" data-i18n="encrypted_text">Testo cifrato:</label>
-                                <button class="crypto-copy-btn" onclick="copyEncryptedResult()" data-i18n="copy">
-                                    📋 Copia
-                                </button>
+                                <label style="margin: 0; font-size: 11px; color:#0ff;">🔒 DATO CIFRATO (base64):</label>
+                                <button class="crypto-copy-btn" onclick="copyEncryptedResult()" data-i18n="copy">📋 Copia</button>
                             </div>
                             <textarea id="cryptoEncryptedOutput" 
                                      readonly
-                                     style="width:100%; height: 60px; background:#000; color:#0f0; border:1px solid #333; padding:8px; font-family:monospace; font-size: 11px; resize: none;"
+                                     style="width:100%; height: 80px; background:#000; color:#0ff; border:1px solid #00f; padding:8px; font-family:monospace; font-size: 11px; resize: none;"
                                      onclick="this.select()"></textarea>
                         </div>
                         
-                        <!-- RISULTATO DECIFRATO -->
                         <div id="cryptoDecryptedResult" style="margin-top: 10px; display: none;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                                <label style="margin: 0; font-size: 11px;" data-i18n="decrypted_text">Testo decifrato:</label>
-                                <button class="crypto-copy-btn" onclick="copyDecryptedResult()" data-i18n="copy">
-                                    📋 Copia
-                                </button>
+                                <label style="margin: 0; font-size: 11px; color:#0f0;">🔓 TESTO DECIFRATO:</label>
+                                <button class="crypto-copy-btn" onclick="copyDecryptedResult()" data-i18n="copy">📋 Copia</button>
                             </div>
                             <textarea id="cryptoDecryptedOutput" 
                                      readonly
-                                     style="width:100%; height: 60px; background:#000; color:#0f0; border:1px solid #333; padding:8px; font-family:monospace; font-size: 11px; resize: none;"
+                                     style="width:100%; height: 80px; background:#000; color:#0f0; border:1px solid #0f0; padding:8px; font-family:monospace; font-size: 11px; resize: none;"
                                      onclick="this.select()"></textarea>
                         </div>
                     </div>
                 </div>
 
-                <!-- SEZIONE FIRMA & VERIFICA FIRMA -->
                 <div class="section">
                     <h2 data-i18n="sign_verify">✍️ FIRMA & VERIFICA FIRMA</h2>
                     
@@ -619,13 +558,10 @@
                         <button onclick="verifySignature()" data-i18n="verify_signature">✅ Verifica Firma</button>
                     </div>
                     
-                    <!-- RISULTATO VERIFICA -->
                     <div id="verifyResultSection" style="margin-top: 10px; display: none;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                             <label style="margin: 0; font-size: 11px;" data-i18n="verify_result">Risultato verifica:</label>
-                            <button class="crypto-copy-btn" onclick="copyVerifyResult()" data-i18n="copy">
-                                📋 Copia
-                            </button>
+                            <button class="crypto-copy-btn" onclick="copyVerifyResult()" data-i18n="copy">📋 Copia</button>
                         </div>
                         <textarea id="verifyResultOutput" 
                                  readonly
@@ -635,7 +571,6 @@
                 </div>
             </div>
             
-            <!-- COLONNA 3: Interazione & Output -->
             <div class="col">
                 <div class="section">
                     <h2 data-i18n="identity_info">INFORMAZIONI IDENTITÀ</h2>
@@ -643,14 +578,12 @@
                         <button class="secondary" onclick="showIdentityInfo()" data-i18n="info_identity">ℹ Info Identità</button>
                         <button class="secondary" onclick="announceWithAspect()" data-i18n="announce_identity">📢 Annuncia</button>
                     </div>
-                    
                     <div class="aspect-input-group" style="margin-top: 10px;">
                         <input type="text" id="announceAspect" data-i18n-placeholder="announce_aspect" value="rnstransport.probe">
                         <button class="secondary" onclick="announceWithCustomAspect()" data-i18n="announce_custom">📢 Annuncia Custom</button>
                     </div>
                 </div>
                 
-                <!-- SEZIONE COMANDI RNID -->
                 <div class="section">
                     <h2 data-i18n="rnid_commands">COMANDI RNID</h2>
                     <div class="command-area">
@@ -686,10 +619,6 @@
     </div>
 
     <script>
-        // ===========================================
-        // TUTTO IL CODICE ORIGINALE QUI (COMPLETO)
-        // ===========================================
-        
         let selectedIdentity = null;
         let lastExportedData = null;
         let selectedSigFileForVerification = null;
@@ -703,11 +632,9 @@
             isPublic: true
         };
 
-        // Tab management
         function showTab(tabId) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
             event.target.classList.add('active');
             document.getElementById(tabId).classList.add('active');
         }
@@ -715,7 +642,6 @@
         function showCryptoTab(tabId) {
             document.querySelectorAll('#crypto-tabs .tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('#crypto-tabs ~ .tab-content, #crypto-tabs + .tab-content').forEach(content => content.classList.remove('active'));
-            
             event.target.classList.add('active');
             document.getElementById(tabId).classList.add('active');
         }
@@ -738,33 +664,25 @@
         async function loadIdentities() {
             const list = document.getElementById('identitiesList');
             list.innerHTML = `<div class="warning">${t('loading')}</div>`;
-            
             try {
                 const response = await fetch('/api/identities/list');
                 const backendData = await response.json();
                 const backendIdentities = backendData.identities || [];
-                
                 const publicIdentities = JSON.parse(localStorage.getItem('rns_public_identities') || '[]');
-                
                 if (backendIdentities.length === 0 && publicIdentities.length === 0) {
                     list.innerHTML = `<div class="warning">${t('no_identities')}</div>`;
                     return;
                 }
-                
                 let html = '';
-                
                 backendIdentities.forEach(identity => {
                     html += renderIdentityItem(identity, false);
                 });
-                
                 publicIdentities.forEach(identity => {
                     identity.isPublic = true;
                     html += renderIdentityItem(identity, true);
                 });
-                
                 list.innerHTML = html;
                 translateDynamicContent();
-                
             } catch (error) {
                 console.error('Errore loadIdentities:', error);
                 list.innerHTML = `<div class="error">${t('error')}: ${error}</div>`;
@@ -773,28 +691,23 @@
 
         function renderIdentityItem(identity, isPublic = false) {
             const validClass = isPublic ? 'success' : (identity.valid ? 'success' : 'warning');
-            
             let sizeInfo = '';
             if (identity.size) {
                 sizeInfo = identity.size === 64 ? '64 bytes ✓' : `${identity.size} bytes`;
             } else {
                 sizeInfo = isPublic ? '32 bytes (pubblica)' : '? bytes';
             }
-            
             const name = identity.name || (isPublic ? `public_${identity.rns_hash?.substring(0, 8)}` : 'unknown');
             const app = identity.app || (isPublic ? 'public' : 'unknown');
-            
             let hashInfo = '';
             const rnsHash = identity.rns_hash || identity.rnsHash;
             if (rnsHash) {
                 const shortHash = rnsHash.length > 32 ? rnsHash.substring(0, 32) + '...' : rnsHash;
                 hashInfo = `<div style="font-size: 10px; color: #0ff; font-family: monospace; margin-top: 2px;">RNS: ${shortHash}</div>`;
             }
-            
             let aspectInfo = '';
             const rnsAspects = ['rnstransport.probe', 'lxmf.delivery', 'nomadnetwork.node', 'lxmf.propagation', 'call.audio', 'lxst.telephony'];
             const aspectHashes = identity.aspect_hashes || identity.aspects || {};
-            
             rnsAspects.forEach(aspect => {
                 if (aspectHashes[aspect]) {
                     const hash = aspectHashes[aspect];
@@ -802,26 +715,23 @@
                     aspectInfo += `<div style="font-size: 9px; color: ${isPublic ? '#8f8' : '#888'}; margin-top: 1px;">${aspect.split('.').pop()}: ${shortHash}</div>`;
                 }
             });
-            
             let deleteButton = '';
             if (isPublic && rnsHash) {
                 deleteButton = `<button onclick="event.stopPropagation(); removePublicIdentity('${rnsHash}')" style="background: #f44; color: white; border: none; padding: 2px 5px; font-size: 9px; border-radius: 2px; margin-left: 5px; cursor: pointer; vertical-align: middle;">✕</button>`;
             }
-            
             return `
                 <div class="identity-item" onclick="${isPublic ? `selectPublicIdentity('${rnsHash}', this)` : `selectIdentity('${identity.path}', this)`}">
                     <div style="flex: 1;">
                         <div class="identity-name">${name} ${isPublic ? '🌐' : '🔑'} ${deleteButton}</div>
                         <div class="identity-info">${sizeInfo} • ${app} ${hashInfo} ${aspectInfo}</div>
                     </div>
-                    <span class="identity-badge ${validClass}">${isPublic ? t('public_only') : (identity.valid ? t('private_badge') : t('verify_badge'))}</span>
+                    <span class="identity-badge ${validClass}">${isPublic ? t('public_only') : (identity.valid ? 'PRIVATA' : 'DA VERIFICARE')}</span>
                 </div>
             `;
         }
 
         function removePublicIdentity(rnsHash) {
             if (!confirm(t('confirm_remove_public'))) return;
-            
             try {
                 const publicIdentities = JSON.parse(localStorage.getItem('rns_public_identities') || '[]');
                 const filteredIdentities = publicIdentities.filter(id => id.rns_hash !== rnsHash);
@@ -856,35 +766,43 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
-            showOutput(t('exporting', { format: format.toUpperCase() }), 'warning');
-            
+            const isPrivate = !selectedIdentity.startsWith('public:');
+            const typeLabel = isPrivate ? 'PRIVATA' : 'PUBBLICA';
+            showOutput(`📤 Esportazione ${typeLabel} in ${format.toUpperCase()}...`, 'warning');
             try {
                 const response = await fetch('/api/identities/export', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: selectedIdentity, format })
+                    body: JSON.stringify({ 
+                        path: selectedIdentity, 
+                        format: format,
+                        private: isPrivate
+                    })
                 });
-                
                 const data = await response.json();
-                
                 if (data.success) {
-                    lastExportedData = { format: format, data: data.data };
-                    
+                    lastExportedData = { format: format, data: data.data, type: data.type };
                     const output = document.getElementById('exportResult');
+                    const typeColor = isPrivate ? '#ff0' : '#0f0';
                     output.innerHTML = `
-                        <div style="margin-bottom: 8px;"><span class="success">${t('export_success', { format: format.toUpperCase() })}</span></div>
-                        <div class="export-buttons"><button class="copy-btn" onclick="copyExportedData()">${t('copy')} ${format.toUpperCase()}</button></div>
-                        <textarea id="exportedData" readonly style="width:100%; height:60px; background:#000; color:#0f0; border:1px solid #333; padding:8px; font-family:monospace; font-size: 11px; resize: vertical;">${data.data}</textarea>
-                        <div style="margin-top:8px; font-size:10px; color:#888;">Lunghezza: ${data.length} caratteri</div>
+                        <div style="margin-bottom: 8px;">
+                            <span class="success">✅ Esportazione ${format.toUpperCase()} ${typeLabel}</span>
+                            ${isPrivate ? '<span style="color:#f44; font-size:10px; margin-left:10px;">⚠️ MANEGGIARE CON CURA!</span>' : ''}
+                        </div>
+                        <div class="export-buttons">
+                            <button class="copy-btn" onclick="copyExportedData()">📋 Copia ${format.toUpperCase()}</button>
+                        </div>
+                        <textarea id="exportedData" readonly style="width:100%; height:60px; background:#000; border:1px solid ${isPrivate ? '#ff0' : '#333'}; padding:8px; font-family:monospace; font-size: 11px; resize: vertical; color: ${isPrivate ? '#ff0' : '#0f0'};">${data.data}</textarea>
+                        <div style="margin-top:8px; font-size:10px; color:#888;">
+                            ${isPrivate ? '🔑 PRIVATA - NON CONDIVIDERE!' : '🔓 PUBBLICA'}
+                        </div>
                     `;
-                    
-                    showOutput(t('export_success', { format: format.toUpperCase() }), 'success');
+                    showOutput(`✅ Esportazione ${format.toUpperCase()} ${typeLabel}`, 'success');
                 } else {
-                    showOutput(t('error') + ': ' + data.error, 'error');
+                    showOutput('❌ ' + data.error, 'error');
                 }
             } catch (error) {
-                showOutput(t('error') + ': ' + error, 'error');
+                showOutput('❌ ' + error, 'error');
             }
         }
         
@@ -894,9 +812,7 @@
                 showOutput('_no_data_to_copy', 'error');
                 return;
             }
-            
             let textToCopy = textarea.value.trim();
-            
             navigator.clipboard.writeText(textToCopy).then(() => {
                 showOutput('_copy_success', 'success');
             }).catch(err => {
@@ -911,42 +827,32 @@
             const file = fileInput.files[0];
             const status = document.getElementById('fileImportStatus');
             const nameInput = document.getElementById('importFileName');
-            
             if (!file) {
                 showOutput('_select_file_first', 'error');
                 return;
             }
-            
             let suggestedName = nameInput.value.trim();
             if (!suggestedName) {
                 const timestamp = new Date().getTime().toString().slice(-6);
                 suggestedName = `imported_${timestamp}`;
             }
-            
             status.innerHTML = t('importing', { format: 'file' });
-            
             const formData = new FormData();
             formData.append('file', file);
             formData.append('suggested_name', suggestedName);
-            
             try {
                 const response = await fetch('/api/identities/import/file', {
                     method: 'POST',
                     body: formData
                 });
-                
                 const data = await response.json();
-                
                 if (data.success) {
                     const importedName = data.name || suggestedName;
                     const rnsHash = data.rns_hash || 'N/D';
                     const shortHash = rnsHash.substring(0, 8);
-                    
                     status.innerHTML = `<span class="success">${t('import_success')}</span>`;
-                    
                     fileInput.value = '';
                     nameInput.value = '';
-                    
                     showOutput(t('identity_imported', { name: importedName, hash: shortHash }), 'success');
                     loadIdentities();
                 } else {
@@ -962,60 +868,55 @@
         async function importFromData(format) {
             const data = document.getElementById('importData').value.trim();
             const nameInput = document.getElementById('importDataName');
-            
             if (!data) {
                 showOutput('_paste_data_first', 'error');
                 return;
             }
-            
             let suggestedName = nameInput.value.trim();
             if (!suggestedName) {
                 const timestamp = new Date().getTime().toString().slice(-6);
                 suggestedName = `imported_${timestamp}`;
             }
-            
-            showOutput(t('importing', { format: format.toUpperCase() }), 'warning');
-            
+            let cleanData = data.replace(/\s+/g, '');
+            showOutput(`📥 Importazione in ${format.toUpperCase()}...`, 'warning');
             try {
                 const response = await fetch('/api/identities/import/data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: data, format: format, suggested_name: suggestedName })
+                    body: JSON.stringify({ 
+                        data: cleanData, 
+                        format: format, 
+                        suggested_name: suggestedName
+                    })
                 });
-                
                 const result = await response.json();
-                
                 if (result.success) {
                     const importedName = result.name || suggestedName;
                     const rnsHash = result.rns_hash || 'N/D';
                     const shortHash = rnsHash.substring(0, 8);
-                    
+                    const typeLabel = result.type === 'private' ? 'PRIVATA' : 'PUBBLICA';
                     document.getElementById('importData').value = '';
                     nameInput.value = '';
-                    
-                    showOutput(t('identity_imported', { name: importedName, hash: shortHash }), 'success');
+                    showOutput(`✅ Identità ${typeLabel} importata come ${importedName} (${shortHash}...)`, 'success');
                     loadIdentities();
                 } else {
-                    showOutput(t('error') + ': ' + result.error, 'error');
+                    showOutput('❌ ' + result.error, 'error');
                 }
             } catch (error) {
-                showOutput(t('error') + ': ' + error, 'error');
+                showOutput('❌ ' + error, 'error');
             }
         }
                 
         async function generateNewIdentity() {
             const name = document.getElementById('newIdentityName').value.trim() || 'New_identity';
             showOutput(t('generating', { name }), 'warning');
-            
             try {
                 const response = await fetch('/api/identities/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name })
                 });
-                
                 const data = await response.json();
-                
                 if (data.success) {
                     showOutput(t('identity_generated', { path: data.path, info: data.info }), 'success');
                     loadIdentities();
@@ -1046,31 +947,24 @@
 
         async function verifyHash() {
             const hashInput = document.getElementById('verifyHashInput').value.trim();
-            
             if (!hashInput) {
                 showOutput('_enter_hash', 'error');
                 return;
             }
-            
             const cleanHash = cleanHashFromAngleBrackets(hashInput);
             const finalHash = cleanHash.replace(/\s+/g, '');
-            
             if (!finalHash) {
                 showOutput('_invalid_hash', 'error');
                 return;
             }
-            
             if (!/^[0-9a-f]{32}$|^[0-9a-f]{64}$/.test(finalHash)) {
                 showOutput(t('invalid_hash') + ` Ricevuti: ${finalHash.length}`, 'error');
                 return;
             }
-            
             showOutput(t('verifying', { hash: finalHash }), 'warning');
-            
             try {
                 const verifyResult = document.getElementById('verifyResult');
                 verifyResult.innerHTML = '<div class="warning">' + t('verifying', { hash: finalHash }) + '</div>';
-                
                 currentVerification = {
                     originalHash: finalHash,
                     rnsHash: null,
@@ -1078,48 +972,36 @@
                     aspects: {},
                     isPublic: true
                 };
-                
                 const aspectCheck = await fetch('/api/rnid', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ command: `rnid -R -i "${finalHash}"` })
                 });
-                
                 const aspectData = await aspectCheck.json();
-                
                 let resultHTML = '';
-                
                 if (aspectData.success) {
                     const output = aspectData.output;
-                    
                     if (output.includes('Recalled Identity <') && output.includes('for destination <')) {
                         currentVerification.type = 'aspect';
-                        
                         const rnsMatch = output.match(/Recalled Identity <([^>]+)> for destination/);
                         if (rnsMatch) currentVerification.rnsHash = rnsMatch[1];
-                        
                         resultHTML += `<div class="success">${t('aspect_rilevato')}</div>`;
                         resultHTML += `<div style="margin-top: 5px;">`;
                         resultHTML += `<div>${t('aspect_hash_originale', { hash: finalHash })}</div>`;
                         resultHTML += `<div>${t('rns_hash_corrispondente', { hash: currentVerification.rnsHash || t('error_sconosciuto') })}</div>`;
                         resultHTML += `</div>`;
-                        
                         if (currentVerification.rnsHash) {
                             resultHTML += await calculateAllAspects(currentVerification.rnsHash);
                         }
-                        
                     } else if (output.includes('Recalled Identity <')) {
                         currentVerification.type = 'identity';
                         currentVerification.rnsHash = finalHash;
-                        
                         resultHTML += `<div class="success">${t('rns_hash_identita')}</div>`;
                         resultHTML += `<div style="margin-top: 5px;">`;
                         resultHTML += `<div>${t('rns_hash_value', { hash: finalHash })}</div>`;
                         resultHTML += `<div>${t('hash_riconosciuto')}</div>`;
                         resultHTML += `</div>`;
-                        
                         resultHTML += await calculateAllAspects(finalHash);
-                        
                     } else {
                         currentVerification.type = 'unknown';
                         resultHTML += `<div class="error">${t('hash_non_riconosciuto')}</div>`;
@@ -1135,13 +1017,10 @@
                     resultHTML += `<div style="margin-top: 5px;">${aspectData.error || t('error_sconosciuto')}</div>`;
                     currentVerification.type = 'error';
                 }
-                
                 const addBtn = document.getElementById('addToIdentitiesBtn');
                 addBtn.style.display = (currentVerification.rnsHash && (currentVerification.type === 'aspect' || currentVerification.type === 'identity')) ? 'block' : 'none';
-                
                 verifyResult.innerHTML = resultHTML;
                 showOutput(t('verify_success', { hash: finalHash }), 'success');
-                
             } catch (error) {
                 console.error('Errore in verifyHash:', error);
                 showOutput(t('error') + ': ' + error.message, 'error');
@@ -1151,10 +1030,8 @@
 
         async function calculateAllAspects(rnsHash) {
             const aspects = ['rnstransport.probe', 'lxmf.delivery', 'nomadnetwork.node', 'lxmf.propagation', 'call.audio', 'lxst.telephony'];
-            
             let html = `<div style="margin-top: 15px;">${t('aspects_calcolati')}</div>`;
             html += `<div style="margin-top: 5px; font-size: 10px; font-family: monospace;">`;
-            
             for (const aspect of aspects) {
                 try {
                     const aspectResult = await fetch('/api/rnid', {
@@ -1162,13 +1039,10 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ command: `rnid -R -i "${rnsHash}" -H "${aspect}"` })
                     });
-                    
                     const aspectData = await aspectResult.json();
-                    
                     if (aspectData.success && aspectData.output) {
                         let aspectHash = null;
                         const pattern = `The ${aspect} destination for this Identity is <`;
-                        
                         for (const line of aspectData.output.split('\n')) {
                             if (line.includes(pattern)) {
                                 const start = line.indexOf('<') + 1;
@@ -1179,7 +1053,6 @@
                                 }
                             }
                         }
-                        
                         if (aspectHash) {
                             currentVerification.aspects[aspect] = aspectHash;
                             html += `<div style="margin-top: 3px;">`;
@@ -1194,7 +1067,6 @@
                     html += `<div style="color:#f00; margin-top: 3px;">${t('aspect_calc_error', { aspect })}</div>`;
                 }
             }
-            
             html += `</div>`;
             return html;
         }
@@ -1204,15 +1076,12 @@
                 showOutput('_error', 'error');
                 return;
             }
-            
             try {
                 const nameInput = document.getElementById('publicIdentityName').value.trim();
                 const defaultName = `public_${currentVerification.rnsHash.substring(0, 8)}`;
                 const finalName = nameInput || defaultName;
-                
                 const publicIdentities = JSON.parse(localStorage.getItem('rns_public_identities') || '[]');
                 const exists = publicIdentities.some(id => id.rns_hash === currentVerification.rnsHash);
-                
                 if (!exists) {
                     const publicIdentity = {
                         name: finalName,
@@ -1223,21 +1092,16 @@
                         added_date: new Date().toISOString(),
                         isPublic: true
                     };
-                    
                     publicIdentities.push(publicIdentity);
                     localStorage.setItem('rns_public_identities', JSON.stringify(publicIdentities));
-                    
                     showOutput(t('public_identity_added', { name: finalName }), 'success');
-                    
                     document.getElementById('publicIdentityName').value = '';
                     loadIdentities();
                     document.getElementById('addToIdentitiesBtn').style.display = 'none';
-                    
                 } else {
                     const existing = publicIdentities.find(id => id.rns_hash === currentVerification.rnsHash);
                     showOutput(t('public_identity_exists', { name: existing.name }), 'warning');
                 }
-                
             } catch (error) {
                 showOutput(t('error') + ': ' + error, 'error');
             }
@@ -1256,13 +1120,11 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             const aspect = document.getElementById('aspectInput').value.trim();
             if (!aspect) {
                 showOutput('_enter_aspect', 'error');
                 return;
             }
-            
             if (selectedIdentity.startsWith('public:')) {
                 const rnsHash = selectedIdentity.replace('public:', '');
                 document.getElementById('commandInput').value = `rnid -R -i "${rnsHash}" -H "${aspect}"`;
@@ -1271,7 +1133,6 @@
                 const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
                 document.getElementById('commandInput').value = `rnid -i ${cmdPath} -H "${aspect}"`;
             }
-            
             executeCommand();
         }
 
@@ -1279,28 +1140,27 @@
             const command = document.getElementById('commandInput').value.trim();
             if (!command) {
                 showOutput('_enter_command', 'error');
-                return;
+                return { success: false, error: 'No command' };
             }
-            
             showOutput(t('command_executing', { command }), 'warning');
-            
             try {
                 const response = await fetch('/api/rnid', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ command })
                 });
-                
                 const data = await response.json();
-                
                 if (data.success) {
                     showOutput(t('command_completed', { output: data.output }), 'success');
+                    return { success: true, output: data.output, data: data };
                 } else {
                     let errorMsg = t('command_error', { code: data.return_code, error: data.error || '', output: data.output || '' });
                     showOutput(errorMsg, 'error');
+                    return { success: false, error: data.error, output: data.output, data: data };
                 }
             } catch (error) {
                 showOutput(t('error') + ': ' + error, 'error');
+                return { success: false, error: error.message };
             }
         }
         
@@ -1309,7 +1169,6 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             if (selectedIdentity.startsWith('public:')) {
                 const rnsHash = selectedIdentity.replace('public:', '');
                 document.getElementById('commandInput').value = `rnid -R -i "${rnsHash}" --print-identity`;
@@ -1318,7 +1177,6 @@
                 const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
                 document.getElementById('commandInput').value = `rnid -i ${cmdPath} --print-identity -P`;
             }
-            
             executeCommand();
         }
 
@@ -1327,13 +1185,11 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             const aspect = document.getElementById('announceAspect').value.trim();
             if (!aspect) {
                 showOutput('_enter_aspect', 'error');
                 return;
             }
-            
             if (selectedIdentity.startsWith('public:')) {
                 const rnsHash = selectedIdentity.replace('public:', '');
                 document.getElementById('commandInput').value = `rnid -R -i "${rnsHash}" -a "${aspect}"`;
@@ -1342,7 +1198,6 @@
                 const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
                 document.getElementById('commandInput').value = `rnid -i ${cmdPath} -a "${aspect}"`;
             }
-            
             executeCommand();
         }
         
@@ -1351,9 +1206,7 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             const aspect = document.getElementById('announceAspect').value.trim() || "rnstransport.probe";
-            
             if (selectedIdentity.startsWith('public:')) {
                 const rnsHash = selectedIdentity.replace('public:', '');
                 document.getElementById('commandInput').value = `rnid -R -i "${rnsHash}" -a "${aspect}"`;
@@ -1362,7 +1215,6 @@
                 const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
                 document.getElementById('commandInput').value = `rnid -i ${cmdPath} -a "${aspect}"`;
             }
-            
             executeCommand();
         }
 
@@ -1370,20 +1222,10 @@
             const fileInput = document.getElementById('cryptoFileInput');
             const file = fileInput.files[0];
             const status = document.getElementById('cryptoFileStatus');
-            
             if (!file) return;
-            
             selectedCryptoFile = file;
             status.innerHTML = `<span class="success">${t('file_selected', { name: file.name, size: file.size })}</span>`;
-            
-            const fileName = file.name;
-            
-            if (fileName.endsWith('.enc')) {
-                const baseName = fileName.substring(0, fileName.length - 4);
-                document.getElementById('outputFileName').value = baseName;
-            } else {
-                document.getElementById('outputFileName').value = fileName + '.enc';
-            }
+            document.getElementById('outputFileName').value = file.name;
         }
 
         async function encryptFile() {
@@ -1391,68 +1233,63 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             if (!selectedCryptoFile) {
                 showOutput('_select_file_first', 'error');
                 return;
             }
-            
             let outputFile = document.getElementById('outputFileName').value.trim();
             if (!outputFile) {
                 showOutput('_enter_output_filename', 'error');
                 return;
             }
-            
             showOutput(t('upload_encrypt'), 'warning');
-            
             try {
-                let command = '';
                 const uploadData = await uploadFileToTemp(selectedCryptoFile, 'encrypt');
-                
                 if (!uploadData.temp_path) throw new Error('Upload failed');
-                
                 const tempPath = uploadData.temp_path;
                 const outputDir = uploadData.output_dir;
-                const outputPath = outputDir + '/' + outputFile;
-                
+                let outputPath = outputDir + '/' + outputFile;
+                if (!outputPath.endsWith('.rfe')) {
+                    outputPath = outputPath + '.rfe';
+                }
+                let rnsHash = null;
                 if (selectedIdentity.startsWith('public:')) {
-                    const rnsHash = selectedIdentity.replace('public:', '');
-                    command = `rnid -R -i "${rnsHash}" -e "${tempPath}" -w "${outputPath}" -f`;
+                    rnsHash = selectedIdentity.replace('public:', '');
                 } else {
                     showOutput(t('extracting_hash'), 'warning');
-                    
                     const hasSpaces = selectedIdentity.includes(' ');
                     const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
-                    
                     const hashResponse = await fetch('/api/rnid', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ command: `rnid -i ${cmdPath} --print-identity` })
                     });
-                    
                     const hashData = await hashResponse.json();
-                    let rnsHash = null;
-                    
                     if (hashData.success && hashData.output) {
                         const match = hashData.output.match(/Loaded Identity <([0-9a-f]+)>/);
-                        if (match) {
-                            rnsHash = match[1];
-                            showOutput(t('hash_found', { hash: rnsHash }), 'success');
-                        }
+                        if (match) rnsHash = match[1];
                     }
-                    
-                    if (rnsHash) {
-                        command = `rnid -R -i "${rnsHash}" -e "${tempPath}" -w "${outputPath}" -f`;
-                    } else {
+                    if (!rnsHash) {
                         throw new Error('Impossibile ottenere hash RNS pubblico');
                     }
                 }
-                
-                document.getElementById('commandInput').value = command;
-                showOutput(t('command_ready', { command, path: outputPath }), 'success');
-                executeCommand();
+                const encryptCommand = `rnid -R -i "${rnsHash}" -e "${tempPath}" -f`;
+                document.getElementById('commandInput').value = encryptCommand;
+                showOutput(`🔒 Cifratura in corso...`, 'warning');
+                const result1 = await executeCommand();
+                if (!result1.success) {
+                    throw new Error('Cifratura fallita');
+                }
+                const rfeFile = tempPath + '.rfe';
+                const moveCommand = `mv "${rfeFile}" "${outputPath}"`;
+                document.getElementById('commandInput').value = moveCommand;
+                showOutput(`📦 Spostamento file in ${outputPath}...`, 'warning');
+                const result2 = await executeCommand();
+                if (!result2.success) {
+                    throw new Error('Spostamento fallito');
+                }
+                showOutput(`✅ File cifrato salvato in: ${outputPath}`, 'success');
                 setTimeout(() => cleanupTempFile(tempPath), 10000);
-                
             } catch (error) {
                 showOutput(t('error') + ': ' + error.message, 'error');
             }
@@ -1463,40 +1300,53 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             if (!selectedCryptoFile) {
                 showOutput('_select_file_first', 'error');
                 return;
             }
-            
             let outputFile = document.getElementById('outputFileName').value.trim();
             if (!outputFile) {
                 showOutput('_enter_output_filename', 'error');
                 return;
             }
-            
             if (selectedIdentity.startsWith('public:')) {
                 showOutput('_private_identity_needed', 'error');
                 return;
             }
-            
             showOutput(t('upload_decrypt'), 'warning');
-            
             try {
                 const uploadData = await uploadFileToTemp(selectedCryptoFile, 'decrypt');
+                if (!uploadData.temp_path) throw new Error('Upload failed');
                 const tempPath = uploadData.temp_path;
                 const outputDir = uploadData.output_dir;
-                const outputPath = outputDir + '/' + outputFile;
+                
+                let outputFileClean = outputFile;
+                if (outputFileClean.endsWith('.rfe')) {
+                    outputFileClean = outputFileClean.substring(0, outputFileClean.length - 4);
+                }
+                const outputPath = outputDir + '/' + outputFileClean;
                 
                 const hasSpaces = selectedIdentity.includes(' ');
                 const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
-                const command = `rnid -i ${cmdPath} -d "${tempPath}" -w "${outputPath}" -f`;
                 
-                document.getElementById('commandInput').value = command;
-                showOutput(t('command_ready', { command, path: outputPath }), 'success');
-                executeCommand();
+                const decryptCommand = `rnid -i ${cmdPath} -d "${tempPath}" -f`;
+                document.getElementById('commandInput').value = decryptCommand;
+                showOutput(`🔓 Decifratura in corso...`, 'warning');
+                const result1 = await executeCommand();
+                if (!result1.success) {
+                    throw new Error('Decifratura fallita');
+                }
+                
+                const baseName = tempPath.replace(/\.rfe$/, '');
+                const moveCommand = `mv "${baseName}" "${outputPath}"`;
+                document.getElementById('commandInput').value = moveCommand;
+                showOutput(`📦 Spostamento file in ${outputPath}...`, 'warning');
+                const result2 = await executeCommand();
+                if (!result2.success) {
+                    throw new Error('Spostamento fallito');
+                }
+                showOutput(`✅ File decifrato salvato in: ${outputPath}`, 'success');
                 setTimeout(() => cleanupTempFile(tempPath), 10000);
-                
             } catch (error) {
                 showOutput(t('error') + ': ' + error.message, 'error');
             }
@@ -1517,17 +1367,18 @@
             document.getElementById('cryptoEncryptedResult').style.display = 'none';
             document.getElementById('cryptoDecryptedResult').style.display = 'none';
             
-            const cleanCommand = 'rm -f /tmp/web_input.txt /tmp/web_encrypted.enc';
-            const escapedText = text.replace(/"/g, '\\"');
+            const cleanCommand = 'rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe';
+            const escapedText = text.replace(/"/g, '\\"').replace(/\$/g, '\\$');
             const writeCommand = `echo "${escapedText}" > /tmp/web_input.txt`;
             
             let command = '';
+            let rnsHash = null;
             
             if (selectedIdentity.startsWith('public:')) {
-                const rnsHash = selectedIdentity.replace('public:', '');
-                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e /tmp/web_input.txt -w /tmp/web_encrypted.enc -f`;
+                rnsHash = selectedIdentity.replace('public:', '');
+                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e /tmp/web_input.txt -f`;
             } else {
-                showOutput(t('extracting_hash'), 'warning');
+                showOutput('🔍 Estraggo hash RNS pubblico...', 'warning');
                 
                 const hasSpaces = selectedIdentity.includes(' ');
                 const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
@@ -1539,94 +1390,72 @@
                 });
                 
                 const hashData = await hashResponse.json();
-                let rnsHash = null;
                 
                 if (hashData.success && hashData.output) {
                     const match = hashData.output.match(/Loaded Identity <([0-9a-f]+)>/);
                     if (match) {
                         rnsHash = match[1];
-                        showOutput(t('hash_found', { hash: rnsHash }), 'success');
+                        showOutput(`✅ Hash RNS: ${rnsHash}`, 'success');
                     }
                 }
                 
-                if (rnsHash) {
-                    command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e /tmp/web_input.txt -w /tmp/web_encrypted.enc -f`;
-                } else {
-                    showOutput('_error', 'error');
+                if (!rnsHash) {
+                    showOutput('❌ Impossibile ottenere hash RNS pubblico', 'error');
                     return;
                 }
+                
+                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e /tmp/web_input.txt -f`;
             }
             
-            const fullCommand = `${command} && base64 /tmp/web_encrypted.enc`;
-            showOutput(t('encrypting'), 'warning');
+            document.getElementById('commandInput').value = command;
+            showOutput('🔒 Cifratura in corso...', 'warning');
+            const result1 = await executeCommand();
+            if (!result1.success) {
+                showOutput('❌ Errore cifratura: ' + (result1.error || result1.output), 'error');
+                return;
+            }
             
-            try {
-                const response = await fetch('/api/rnid', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: fullCommand })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showOutput(t('success') + ' ' + data.output, 'success');
-                    
-                    const outputLines = data.output.trim().split('\n');
-                    let base64Lines = [];
-                    let foundBase64 = false;
-                    
-                    for (const line of outputLines) {
-                        const trimmedLine = line.trim();
-                        
-                        if (trimmedLine && !trimmedLine.includes(' ') && /^[A-Za-z0-9+/=]+$/.test(trimmedLine)) {
-                            base64Lines.push(trimmedLine);
-                            foundBase64 = true;
-                        }
-                        else if (foundBase64 && trimmedLine && !trimmedLine.includes('Loaded Identity') && !trimmedLine.includes('Encrypting') && !trimmedLine.includes('File') && !trimmedLine.includes('rm -f') && !trimmedLine.includes('echo') && !trimmedLine.includes('base64') && !trimmedLine.includes('rnid')) {
-                            base64Lines.push(trimmedLine);
-                        }
-                    }
-                    
-                    let encryptedBase64 = base64Lines.join('');
-                    
-                    if (!encryptedBase64) {
-                        const lines = data.output.split('\n');
-                        let startCollecting = false;
-                        let collectedLines = [];
-                        
-                        for (const line of lines) {
-                            if (line.includes('base64 /tmp/web_encrypted.enc')) {
-                                startCollecting = true;
-                                continue;
-                            }
-                            if (startCollecting && line.trim()) {
-                                collectedLines.push(line.trim());
-                            }
-                        }
-                        encryptedBase64 = collectedLines.join('');
-                    }
-                    
-                    encryptedBase64 = encryptedBase64.replace(/\s+/g, '');
-                    
-                    document.getElementById('cryptoEncryptedOutput').value = encryptedBase64;
-                    document.getElementById('cryptoEncryptedResult').style.display = 'block';
-                    
-                    setTimeout(() => {
-                        const outputField = document.getElementById('cryptoEncryptedOutput');
-                        outputField.select();
-                        outputField.focus();
-                    }, 100);
-                    
-                } else {
-                    let errorMsg = t('error') + ` (code: ${data.return_code})\n`;
-                    if (data.error) errorMsg += data.error + '\n';
-                    if (data.output) errorMsg += data.output;
-                    showOutput(errorMsg, 'error');
+            const readCommand = `base64 /tmp/web_input.txt.rfe`;
+            document.getElementById('commandInput').value = readCommand;
+            showOutput('📖 Lettura file cifrato...', 'warning');
+            const result2 = await executeCommand();
+            if (!result2.success) {
+                showOutput('❌ Errore lettura file cifrato', 'error');
+                return;
+            }
+            
+            const lines = result2.output.split('\n');
+            let base64Data = '';
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed && /^[A-Za-z0-9+/=]+$/.test(trimmed)) {
+                    base64Data += trimmed;
                 }
-            } catch (error) {
-                showOutput(t('error') + ': ' + error.message, 'error');
             }
+            
+            if (!base64Data) {
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed && trimmed.length > 50 && !trimmed.includes(' ')) {
+                        base64Data = trimmed;
+                        break;
+                    }
+                }
+            }
+            
+            if (base64Data) {
+                document.getElementById('cryptoEncryptedOutput').value = base64Data;
+                document.getElementById('cryptoEncryptedResult').style.display = 'block';
+                showOutput(`✅ Testo cifrato (${base64Data.length} caratteri base64)`, 'success');
+            } else {
+                showOutput('❌ Impossibile estrarre il dato cifrato', 'error');
+            }
+            
+            fetch('/api/rnid', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: 'rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe' })
+            }).catch(() => {});
         }
 
         async function decryptText() {
@@ -1634,84 +1463,78 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             const text = document.getElementById('cryptoTextInput').value.trim();
             if (!text) {
                 showOutput('_enter_text', 'error');
                 return;
             }
-            
             if (selectedIdentity.startsWith('public:')) {
-                showOutput('_private_identity_needed', 'error');
+                showOutput('❌ Per DECIFRARE serve un\'identità PRIVATA!', 'error');
                 return;
             }
-            
             document.getElementById('cryptoEncryptedResult').style.display = 'none';
             document.getElementById('cryptoDecryptedResult').style.display = 'none';
-            
+            const cleanInput = text.replace(/\s+/g, '');
+            if (!/^[A-Za-z0-9+/=]+$/.test(cleanInput)) {
+                showOutput('❌ Il testo non sembra essere in formato base64 valido!', 'error');
+                return;
+            }
             const hasSpaces = selectedIdentity.includes(' ');
             const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
-            const cleanInput = text.replace(/\s+/g, '');
-            
-            const fullCommand = `rm -f /tmp/web_encrypted.enc /tmp/web_decrypted.txt && ` +
-                               `echo "${cleanInput}" | base64 -d > /tmp/web_encrypted.enc && ` +
-                               `rnid -i ${cmdPath} -d /tmp/web_encrypted.enc -w /tmp/web_decrypted.txt -f && ` +
-                               `cat /tmp/web_decrypted.txt && rm -f /tmp/web_encrypted.enc /tmp/web_decrypted.txt`;
-            
-            showOutput(t('decrypting'), 'warning');
-            
+            const fullCommand = `rm -f /tmp/web_input.txt.rfe /tmp/web_input.txt && ` +
+                               `echo "${cleanInput}" | base64 -d > /tmp/web_input.txt.rfe && ` +
+                               `rnid -i ${cmdPath} -d /tmp/web_input.txt.rfe -f && ` +
+                               `cat /tmp/web_input.txt`;
+            showOutput('🔓 Decifratura in corso...', 'warning');
             try {
                 const response = await fetch('/api/rnid', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ command: fullCommand })
                 });
-                
                 const data = await response.json();
-                
+                fetch('/api/rnid', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: 'rm -f /tmp/web_input.txt.rfe /tmp/web_input.txt' })
+                }).catch(() => {});
                 if (data.success) {
-                    const output = data.output;
-                    showOutput(t('success') + ' ' + output, 'success');
-                    
-                    const lines = output.split('\n');
-                    let decryptedLines = [];
-                    
+                    const lines = data.output.split('\n');
+                    let decryptedText = '';
                     for (const line of lines) {
-                        const trimmedLine = line.trim();
-                        
-                        if (trimmedLine && !trimmedLine.includes('Loaded Identity') && !trimmedLine.includes('Decrypting') && !trimmedLine.includes('File') && !trimmedLine.includes('rm -f') && !trimmedLine.includes('echo') && !trimmedLine.includes('base64') && !trimmedLine.includes('rnid -i') && !trimmedLine.includes('cat /tmp/web_decrypted.txt') && !trimmedLine.startsWith('[') && !trimmedLine.includes('/tmp/')) {
-                            decryptedLines.push(trimmedLine);
+                        const trimmed = line.trim();
+                        if (trimmed && 
+                            !trimmed.includes('Loaded Identity') && 
+                            !trimmed.includes('File') && 
+                            !trimmed.includes('/tmp/') &&
+                            !trimmed.includes('rm -f') &&
+                            !trimmed.includes('base64') &&
+                            !trimmed.includes('echo') &&
+                            !trimmed.includes('rnid -i') &&
+                            !trimmed.includes('cat /tmp/web_input.txt')) {
+                            decryptedText += (decryptedText ? '\n' : '') + trimmed;
                         }
                     }
-                    
-                    let decryptedText = decryptedLines.join('\n');
-                    
                     if (!decryptedText) {
                         for (let i = lines.length - 1; i >= 0; i--) {
-                            if (lines[i].trim()) {
+                            if (lines[i].trim() && !lines[i].includes('/tmp/')) {
                                 decryptedText = lines[i].trim();
                                 break;
                             }
                         }
                     }
-                    
-                    document.getElementById('cryptoDecryptedOutput').value = decryptedText;
-                    document.getElementById('cryptoDecryptedResult').style.display = 'block';
-                    
-                    setTimeout(() => {
-                        const outputField = document.getElementById('cryptoDecryptedOutput');
-                        outputField.select();
-                        outputField.focus();
-                    }, 100);
-                    
+                    if (decryptedText) {
+                        document.getElementById('cryptoDecryptedOutput').value = decryptedText;
+                        document.getElementById('cryptoDecryptedResult').style.display = 'block';
+                        showOutput(`✅ Testo decifrato (${decryptedText.length} caratteri)`, 'success');
+                    } else {
+                        showOutput('⚠️ Decifratura completata ma nessun testo estratto', 'warning');
+                    }
                 } else {
-                    let errorMsg = t('error') + ` (code: ${data.return_code})\n`;
-                    if (data.error) errorMsg += data.error + '\n';
-                    if (data.output) errorMsg += data.output;
-                    showOutput(errorMsg, 'error');
+                    showOutput(`❌ Errore decifratura: ${data.error || data.output}`, 'error');
                 }
             } catch (error) {
-                showOutput(t('error') + ': ' + error.message, 'error');
+                showOutput(`❌ Errore: ${error.message}`, 'error');
             }
         }
 
@@ -1723,6 +1546,10 @@
             if (!file) return;
             
             selectedSignFile = file;
+            selectedSigFileForVerification = null;
+            document.getElementById('sigFileInput').value = '';
+            document.getElementById('sigFileStatus').innerHTML = '';
+            
             status.innerHTML = `<span class="success">${t('file_selected', { name: file.name, size: file.size })}</span>`;
             document.getElementById('signatureFileName').value = file.name + '.rsg';
         }
@@ -1731,9 +1558,7 @@
             const fileInput = document.getElementById('sigFileInput');
             const file = fileInput.files[0];
             const status = document.getElementById('sigFileStatus');
-            
             if (!file) return;
-            
             selectedSigFileForVerification = file;
             status.innerHTML = `<span class="success">${t('sig_file_selected', { name: file.name })}</span>`;
         }
@@ -1743,31 +1568,24 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             if (!selectedSignFile) {
                 showOutput('_select_file_first', 'error');
                 return;
             }
-            
             if (selectedIdentity.startsWith('public:')) {
                 showOutput('_private_identity_needed', 'error');
                 return;
             }
-            
             showOutput(t('signing', { name: selectedSignFile.name }), 'warning');
-            
             try {
                 const formData = new FormData();
                 formData.append('file', selectedSignFile);
                 formData.append('purpose', 'sign');
-                
                 const response = await fetch('/api/upload/temp', {
                     method: 'POST',
                     body: formData
                 });
-                
                 if (!response.ok) throw new Error(`Upload fallito: ${response.status}`);
-                
                 const uploadData = await response.json();
                 if (!uploadData.success || !uploadData.temp_path) throw new Error(uploadData.error || 'Upload fallito');
                 
@@ -1776,25 +1594,25 @@
                 const fileName = selectedSignFile.name;
                 
                 const originalInDownloads = downloadsDir + '/' + fileName;
-                const sigFileName = document.getElementById('signatureFileName').value.trim() || fileName + '.rsg';
-                const sigInDownloads = downloadsDir + '/' + sigFileName;
+                const copyCommand = `cp "${tempPath}" "${originalInDownloads}"`;
+                document.getElementById('commandInput').value = copyCommand;
+                showOutput(`📦 Copia file in ${originalInDownloads}...`, 'warning');
+                const result1 = await executeCommand();
+                if (!result1.success) {
+                    throw new Error('Copia fallita');
+                }
                 
-                const hasSpaces = selectedIdentity.includes(' ');
-                const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
-                const command = `cp "${tempPath}" "${originalInDownloads}" && rnid -i ${cmdPath} -s "${originalInDownloads}" -w "${sigInDownloads}" -f`;
+                const signCommand = `rnid -i ${selectedIdentity} -s "${originalInDownloads}" -f`;
+                document.getElementById('commandInput').value = signCommand;
+                showOutput(`✍️ Firma in corso...`, 'warning');
+                const result2 = await executeCommand();
+                if (!result2.success) {
+                    throw new Error('Firma fallita');
+                }
                 
-                document.getElementById('commandInput').value = command;
-                showOutput(t('command_ready', { command, path: sigInDownloads }), 'success');
-                executeCommand();
-                
-                setTimeout(() => {
-                    fetch('/api/cleanup/temp', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ temp_path: tempPath })
-                    }).catch(e => console.warn('Cleanup failed:', e));
-                }, 5000);
-                
+                const sigFile = originalInDownloads + '.rsg';
+                showOutput(`✅ File firmato salvato in: ${sigFile}`, 'success');
+                setTimeout(() => cleanupTempFile(tempPath), 5000);
             } catch (error) {
                 showOutput(t('error') + ': ' + error.message, 'error');
             }
@@ -1805,43 +1623,32 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
             if (!selectedSigFileForVerification) {
                 showOutput('_select_sig_file_first', 'error');
                 return;
             }
-            
             const fileName = selectedSigFileForVerification.name;
-            
             if (!fileName.toLowerCase().endsWith('.rsg')) {
                 showOutput(t('error') + `: Il file deve essere una firma (.rsg)!\nRicevuto: ${fileName}`, 'error');
                 return;
             }
-            
             showOutput(t('verifying', { hash: fileName }), 'warning');
-            
             try {
                 const formData = new FormData();
                 formData.append('file', selectedSigFileForVerification);
                 formData.append('purpose', 'verify');
-                
                 const uploadResponse = await fetch('/api/upload/temp', {
                     method: 'POST',
                     body: formData
                 });
-                
                 if (!uploadResponse.ok) throw new Error(`Upload fallito: ${uploadResponse.status}`);
-                
                 const uploadData = await uploadResponse.json();
                 if (!uploadData.success || !uploadData.temp_path) throw new Error(uploadData.error || 'Upload fallito');
-                
                 const tempPath = uploadData.temp_path;
                 const downloadsDir = uploadData.output_dir;
                 const sigFileName = selectedSigFileForVerification.name;
                 const sigInDownloads = downloadsDir + '/' + sigFileName;
-                
                 const copyCommand = `cp "${tempPath}" "${sigInDownloads}"`;
-                
                 let verifyCommand;
                 if (selectedIdentity.startsWith('public:')) {
                     const rnsHash = selectedIdentity.replace('public:', '');
@@ -1851,26 +1658,19 @@
                     const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
                     verifyCommand = `rnid -i ${cmdPath} -V "${sigInDownloads}"`;
                 }
-                
                 const fullCommand = `${copyCommand} && ${verifyCommand}`;
-                
                 const response = await fetch('/api/rnid', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ command: fullCommand })
                 });
-                
                 const data = await response.json();
-                
                 const verifySection = document.getElementById('verifyResultSection');
                 const verifyOutput = document.getElementById('verifyResultOutput');
-                
                 if (verifySection && verifyOutput) {
                     verifySection.style.display = 'block';
-                    
                     if (data.success) {
                         const output = data.output || '';
-                        
                         if (output.includes('is valid') && !output.includes('is invalid')) {
                             verifyOutput.value = t('valid_signature') + '\n\n' + output;
                             showOutput(t('valid_signature'), 'success');
@@ -1886,7 +1686,6 @@
                         showOutput(t('error'), 'error');
                     }
                 }
-                
                 setTimeout(() => {
                     fetch('/api/cleanup/temp', {
                         method: 'POST',
@@ -1894,7 +1693,6 @@
                         body: JSON.stringify({ temp_path: tempPath })
                     }).catch(e => console.warn('Cleanup ignorato:', e));
                 }, 3000);
-                
             } catch (error) {
                 showOutput(t('error') + ': ' + error.message, 'error');
             }
@@ -1906,7 +1704,6 @@
                 showOutput(t('no_data_to_copy'), 'error');
                 return;
             }
-            
             try {
                 output.select();
                 output.setSelectionRange(0, 99999);
@@ -1921,15 +1718,12 @@
             const formData = new FormData();
             formData.append('file', file);
             formData.append('purpose', purpose);
-            
             try {
                 const response = await fetch('/api/upload/temp', {
                     method: 'POST',
                     body: formData
                 });
-                
                 const data = await response.json();
-                
                 if (data.success) {
                     return { success: true, temp_path: data.temp_path, output_dir: data.output_dir, original_name: data.original_name };
                 } else {
@@ -1958,7 +1752,6 @@
                 showOutput(t('no_data_to_copy'), 'error');
                 return;
             }
-            
             try {
                 output.select();
                 output.setSelectionRange(0, 99999);
@@ -1975,7 +1768,22 @@
                 showOutput(t('no_data_to_copy'), 'error');
                 return;
             }
-            
+            try {
+                output.select();
+                output.setSelectionRange(0, 99999);
+                document.execCommand('copy');
+                showOutput(t('copy_success'), 'success');
+            } catch (err) {
+                showOutput(t('copy_error_details', { error: err }), 'error');
+            }
+        }
+
+        function copyCryptoFileResult() {
+            const output = document.getElementById('cryptoFileOutput');
+            if (!output || !output.value.trim()) {
+                showOutput(t('no_data_to_copy'), 'error');
+                return;
+            }
             try {
                 output.select();
                 output.setSelectionRange(0, 99999);
@@ -1992,15 +1800,12 @@
             document.getElementById('cryptoDecryptedOutput').value = '';
             document.getElementById('cryptoEncryptedResult').style.display = 'none';
             document.getElementById('cryptoDecryptedResult').style.display = 'none';
-            
-            const cleanCommand = 'rm -f /tmp/web_input.txt /tmp/web_encrypted.enc /tmp/web_decrypted.txt';
-            
+            const cleanCommand = 'rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe /tmp/web_input.txt';
             fetch('/api/rnid', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ command: cleanCommand })
             }).catch(() => {});
-            
             showOutput(t('cleanup_text'), 'warning');
         }
         

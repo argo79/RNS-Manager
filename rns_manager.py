@@ -61,10 +61,6 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # === INIZIALIZZA MONITOR RNS ===
 # ============================================
 
-# ============================================
-# === INIZIALIZZA MONITOR RNS ===
-# ============================================
-
 # Crea istanza del monitor manager
 monitor_manager = rns_monitor.RNSMonitorManager(
     socket_path=rns_monitor.SOCKET_PATH,
@@ -92,14 +88,13 @@ def redirect_monitor():
 
 class IdentityCache:
     """Cache server-side per le identità"""
-    def __init__(self, cache_duration=300):  # 5 minuti default
+    def __init__(self, cache_duration=300):
         self.cache = {}
         self.timestamps = {}
         self.cache_duration = cache_duration
         self.lock = threading.Lock()
         
     def get(self, key='all_identities'):
-        """Recupera dalla cache se non scaduta"""
         with self.lock:
             if key in self.cache:
                 age = time.time() - self.timestamps.get(key, 0)
@@ -111,14 +106,12 @@ class IdentityCache:
             return None
     
     def set(self, data, key='all_identities'):
-        """Salva in cache"""
         with self.lock:
             self.cache[key] = data
             self.timestamps[key] = time.time()
             print(f"[Cache ID] Salvati {len(data)} elementi per {key}")
     
     def clear(self, key=None):
-        """Pulisce cache"""
         with self.lock:
             if key:
                 self.cache.pop(key, None)
@@ -130,7 +123,6 @@ class IdentityCache:
                 print(f"[Cache ID] Pulita tutta la cache")
     
     def get_stats(self, key='all_identities'):
-        """Statistiche cache"""
         with self.lock:
             if key in self.cache:
                 age = time.time() - self.timestamps[key]
@@ -143,8 +135,7 @@ class IdentityCache:
             return {'exists': False}
 
 # Inizializza cache identità
-identity_cache = IdentityCache(cache_duration=3600)  # 6 ore
-
+identity_cache = IdentityCache(cache_duration=3600)
 
 # ============================================
 # === ROUTE RESET TOTALE ===
@@ -152,19 +143,15 @@ identity_cache = IdentityCache(cache_duration=3600)  # 6 ore
 
 @app.route('/api/monitor/reset-all', methods=['POST'])
 def monitor_reset_all():
-    """Reset totale di storico e cache"""
     try:
         print("\n" + "="*60)
         print("🔄 RESET TOTALE RICHIESTO")
         print("="*60)
         
-        # Usa il monitor_manager per pulire tutto
         monitor_manager.clear_all()
         
         if monitor_manager.announce_cache:
             monitor_manager.announce_cache.clear()
-            
-            # ✅ Usa db_path invece di cache_file
             cache_file = monitor_manager.announce_cache.db_path
             if os.path.exists(cache_file):
                 os.remove(cache_file)
@@ -221,23 +208,17 @@ def execute_rnid():
                 timeout=30
             )
             
-            # ===== PULIZIA OUTPUT =====
             stdout = result.stdout
             stderr = result.stderr
             
-            # Rimuovi caratteri di controllo e backspace
-            stdout = re.sub(r'.\x08', '', stdout)  # Rimuovi backspace
-            stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)  # Caratteri controllo
-            stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)  # Codici ANSI
-            stdout = re.sub(r'[\u2800-\u28FF]', '', stdout)  # Braille
+            stdout = re.sub(r'.\x08', '', stdout)
+            stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)
+            stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)
             
-            # Per output base64/encrypted, mantieni ma formatta meglio
             if len(stdout) > 1000 or '4U+6vC' in stdout:
-                # Suddividi in righe di lunghezza ragionevole
                 lines = []
                 for line in stdout.split('\n'):
                     if len(line) > 80:
-                        # Spezza righe molto lunghe ogni 80 caratteri
                         for i in range(0, len(line), 80):
                             lines.append(line[i:i+80])
                     else:
@@ -247,21 +228,11 @@ def execute_rnid():
             return jsonify({
                 'success': result.returncode == 0,
                 'output': stdout,
-                'error': re.sub(r'.\x08', '', stderr),  # Pulisci anche stderr
+                'error': re.sub(r'.\x08', '', stderr),
                 'return_code': result.returncode
             })
             
-        elif command.startswith(('rm -f ', 'echo ', 'base64 ', 'cat ', 'stat -c%s ', 'cp ', 'mkdir -p ')):
-            allowed_paths = [
-                '/tmp/web_input.txt',
-                '/tmp/web_encrypted.enc', 
-                '/tmp/web_decrypted.txt',
-                '/tmp/rnid_web/',
-                '/tmp/rnid_web_signed/',
-                DOWNLOADS_DIR,
-                CACHE_DIR
-            ]
-            
+        elif command.startswith(('rm -f ', 'echo ', 'base64 ', 'cat ', 'stat -c%s ', 'cp ', 'mkdir -p ', 'mv ')):
             result = subprocess.run(
                 command,
                 shell=True,
@@ -284,10 +255,8 @@ def execute_rnid():
 
 @app.route('/api/identities/list', methods=['GET'])
 def list_identities():
-    # Controlla parametro force
     force_refresh = request.args.get('force', 'false').lower() == 'true'
     
-    # Se non forza refresh, prova a usare cache
     if not force_refresh:
         cached = identity_cache.get()
         if cached is not None:
@@ -350,7 +319,6 @@ def list_identities():
                                             identity['rns_hash'] = line[start:end]
                                             break
                             
-                            # Limita a 10 aspect per performance
                             aspects_to_check = rns_monitor.RNS_ASPECTS[:5]
                             for aspect in aspects_to_check:
                                 try:
@@ -388,7 +356,6 @@ def list_identities():
     
     identities.sort(key=lambda x: (not x['valid'], x['name']))
     
-    # Salva in cache
     identity_cache.set(identities)
     
     return jsonify({
@@ -403,7 +370,6 @@ def list_identities():
 
 @app.route('/api/cache/identities/clear', methods=['POST'])
 def cache_identities_clear():
-    """Pulisce cache identità"""
     identity_cache.clear('all_identities')
     return jsonify({
         'success': True,
@@ -412,7 +378,6 @@ def cache_identities_clear():
 
 @app.route('/api/cache/identities/status')
 def cache_identities_status():
-    """Stato cache identità"""
     stats = identity_cache.get_stats()
     return jsonify({
         'success': True,
@@ -421,7 +386,6 @@ def cache_identities_status():
 
 @app.route('/api/cache/identities/refresh', methods=['POST'])
 def cache_identities_refresh():
-    """Forza refresh cache"""
     identity_cache.clear('all_identities')
     return jsonify({
         'success': True,
@@ -474,6 +438,8 @@ def import_identity_file():
                     rns_hash = line[start:end]
                     break
         
+        identity_cache.clear('all_identities')
+        
         return jsonify({
             'success': True,
             'message': f'Identità importata come {suggested_name}',
@@ -494,6 +460,7 @@ def import_identity_data():
         identity_data = data.get('data', '').strip()
         format_type = data.get('format', 'hex')
         suggested_name = data.get('suggested_name', '').strip()
+        is_private = data.get('private', False)
         
         if not identity_data:
             return jsonify({'success': False, 'error': 'No identity data provided'})
@@ -503,33 +470,44 @@ def import_identity_data():
         
         dest_path = os.path.join(RNS_MANAGER_STORAGE, suggested_name)
         
-        cmd_parts = ['rnid']
-        if format_type == 'base32':
-            cmd_parts.append('-B')
-        elif format_type == 'base64':
-            cmd_parts.append('-b')
+        try:
+            if format_type == 'hex':
+                identity_data = ''.join(identity_data.split())
+                identity_bytes = bytes.fromhex(identity_data)
+            elif format_type == 'base64':
+                identity_bytes = base64.b64decode(identity_data)
+            elif format_type == 'base32':
+                identity_bytes = base64.b32decode(identity_data)
+            else:
+                return jsonify({'success': False, 'error': f'Formato non supportato: {format_type}'})
+            
+            print(f"[DEBUG] Decodificati {len(identity_bytes)} bytes")
+            
+        except Exception as e:
+            return jsonify({
+                'success': False, 
+                'error': f'Errore nella decodifica dei dati: {str(e)}'
+            })
         
-        cmd_parts.extend(['-m', identity_data, '-P', '--print-identity', '--export', '-w', dest_path])
+        if len(identity_bytes) not in [64, 128]:
+            return jsonify({
+                'success': False,
+                'error': f'Dati di {len(identity_bytes)} bytes, deve essere 64 (public) o 128 (private) bytes'
+            })
         
-        result = subprocess.run(
-            cmd_parts,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        actual_is_private = (len(identity_bytes) == 128)
         
-        if result.returncode != 0:
-            return jsonify({'success': False, 'error': f'Import failed: {result.stderr[:200]}'})
+        with open(dest_path, 'wb') as f:
+            f.write(identity_bytes)
         
-        if not os.path.exists(dest_path):
-            return jsonify({'success': False, 'error': f'File non creato in {dest_path}'})
+        print(f"[DEBUG] Identity salvata in {dest_path} ({len(identity_bytes)} bytes)")
         
-        file_size = os.path.getsize(dest_path)
-        if file_size != 64:
-            return jsonify({'success': False, 'error': f'File di {file_size} bytes, deve essere 64 bytes'})
+        verify_cmd = ['rnid', '-i', dest_path, '--print-identity']
+        if actual_is_private:
+            verify_cmd.append('-P')
         
         verify_result = subprocess.run(
-            ['rnid', '-i', dest_path, '--print-identity'],
+            verify_cmd,
             capture_output=True,
             text=True,
             timeout=5
@@ -537,7 +515,10 @@ def import_identity_data():
         
         if verify_result.returncode != 0:
             os.remove(dest_path)
-            return jsonify({'success': False, 'error': 'Il file salvato non è un\'identità valida'})
+            return jsonify({
+                'success': False, 
+                'error': f'I dati non rappresentano un\'identità RNS valida: {verify_result.stderr[:200]}'
+            })
         
         rns_hash = None
         for line in verify_result.stdout.split('\n'):
@@ -548,18 +529,23 @@ def import_identity_data():
                     rns_hash = line[start:end]
                     break
         
+        identity_cache.clear('all_identities')
+        print("[DEBUG] Cache identità invalidata dopo import")
+        
         return jsonify({
             'success': True,
-            'message': f'Identità importata come {suggested_name}',
+            'message': f'Identità {"privata" if actual_is_private else "pubblica"} importata come {suggested_name}',
             'name': suggested_name,
             'path': dest_path,
-            'info': result.stdout,
-            'size': file_size,
+            'info': verify_result.stdout,
+            'size': len(identity_bytes),
             'format': format_type,
-            'rns_hash': rns_hash
+            'rns_hash': rns_hash,
+            'type': 'private' if actual_is_private else 'public'
         })
         
     except Exception as e:
+        print(f"[DEBUG] Errore import: {str(e)}")
         return jsonify({'success': False, 'error': f'Errore: {str(e)}'})
 
 @app.route('/api/identities/export', methods=['POST'])
@@ -568,6 +554,7 @@ def export_identity():
         data = request.json
         identity_path = data.get('path', '')
         format_type = data.get('format', 'hex')
+        export_private = data.get('private', False)
         
         if not os.path.exists(identity_path):
             return jsonify({'success': False, 'error': 'File identità non trovato'})
@@ -576,13 +563,20 @@ def export_identity():
         if file_size != 64:
             return jsonify({'success': False, 'error': f'File di {file_size} bytes, deve essere 64 bytes'})
         
-        cmd = ['rnid']
+        cmd = ['rnid', '-i', identity_path]
+        
+        if export_private:
+            cmd.append('-X')
+            cmd.append('-P')
+        else:
+            cmd.append('-x')
+        
         if format_type == 'base64':
             cmd.append('-b')
         elif format_type == 'base32':
             cmd.append('-B')
         
-        cmd.extend(['-i', identity_path, '--export'])
+        print(f"[DEBUG] Export command: {' '.join(cmd)}")
         
         result = subprocess.run(
             cmd,
@@ -592,32 +586,60 @@ def export_identity():
         )
         
         if result.returncode != 0:
-            return jsonify({'success': False, 'error': f'Errore: {result.stderr[:100]}'})
+            return jsonify({
+                'success': False, 
+                'error': f'Errore: {result.stderr[:200]}'
+            })
         
-        exported_data = result.stdout.strip()
-        lines = exported_data.split('\n')
-        clean_data = ""
+        output = result.stdout
         
-        for line in lines:
-            if "Exported Identity : " in line:
-                clean_line = line.split("Exported Identity : ")[-1].strip()
-                clean_line = re.sub(r'\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]', '', clean_line).strip()
-                clean_data = clean_line
-                break
+        output = re.sub(r'.\x08', '', output)
+        output = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', output)
+        output = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', output)
         
-        if not clean_data and lines:
-            clean_data = lines[-1].strip()
-            clean_data = re.sub(r'\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]', '', clean_data).strip()
+        key_data = None
+        key_type = "Private" if export_private else "Public"
+        
+        for line in output.split('\n'):
+            line = line.strip()
+            if f"{key_type} Identity Keys" in line:
+                if ": " in line:
+                    key_data = line.split(": ", 1)[-1].strip()
+                    break
+        
+        if not key_data:
+            for line in reversed(output.split('\n')):
+                line = line.strip()
+                if line and not line.startswith('Loaded') and not line.startswith('Exported') and not line.startswith('['):
+                    if re.match(r'^[0-9a-fA-F]+$', line) or re.match(r'^[A-Za-z0-9+/=]+$', line):
+                        key_data = line
+                        break
+        
+        if not key_data:
+            for line in reversed(output.split('\n')):
+                line = line.strip()
+                if line and not line.startswith('Loaded') and not line.startswith('Exported'):
+                    key_data = line
+                    break
+        
+        if not key_data:
+            return jsonify({
+                'success': False,
+                'error': f'Impossibile estrarre la chiave {key_type}'
+            })
         
         return jsonify({
             'success': True,
-            'data': clean_data,
+            'data': key_data,
             'format': format_type,
-            'path': identity_path,
-            'length': len(clean_data)
+            'length': len(key_data),
+            'type': 'private' if export_private else 'public'
         })
         
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': 'Timeout del comando'})
     except Exception as e:
+        print(f"[DEBUG] Errore export: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/identities/generate', methods=['POST'])
@@ -644,6 +666,8 @@ def generate_identity():
         file_size = os.path.getsize(dest_path)
         if file_size != 64:
             return jsonify({'success': False, 'error': f'File generato di {file_size} bytes (dovrebbe essere 64)'})
+        
+        identity_cache.clear('all_identities')
         
         return jsonify({
             'success': True,
@@ -728,6 +752,274 @@ def get_identity_info():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+# ============================================
+# === ROUTE PER CIFRATURA TESTO ===
+# ============================================
+
+@app.route('/api/identities/encrypt', methods=['POST'])
+def encrypt_text():
+    try:
+        data = request.json
+        identity_path = data.get('identity_path', '')
+        text = data.get('text', '')
+        
+        if not identity_path or not os.path.exists(identity_path):
+            return jsonify({'success': False, 'error': 'Identità non trovata'})
+        
+        if not text:
+            return jsonify({'success': False, 'error': 'Nessun testo da cifrare'})
+        
+        temp_input = "/tmp/web_input.txt"
+        temp_output = "/tmp/web_input.txt.rfe"
+        
+        subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+        
+        with open(temp_input, 'w') as f:
+            f.write(text)
+        
+        # Cifra usando rnid
+        if identity_path.startswith('public:'):
+            rns_hash = identity_path.replace('public:', '')
+            cmd = ['rnid', '-R', '-i', rns_hash, '-e', temp_input]
+        else:
+            cmd = ['rnid', '-i', identity_path, '-e', temp_input]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode != 0:
+            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            return jsonify({'success': False, 'error': f'Errore cifratura: {result.stderr[:200]}'})
+        
+        if not os.path.exists(temp_output):
+            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            return jsonify({'success': False, 'error': 'File cifrato non creato'})
+        
+        with open(temp_output, 'rb') as f:
+            encrypted_bytes = f.read()
+        encrypted_base64 = base64.b64encode(encrypted_bytes).decode('ascii')
+        
+        subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+        
+        return jsonify({
+            'success': True,
+            'encrypted': encrypted_base64
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# ============================================
+# === ROUTE PER DECIFRATURA TESTO ===
+# ============================================
+
+@app.route('/api/identities/decrypt', methods=['POST'])
+def decrypt_text():
+    try:
+        data = request.json
+        identity_path = data.get('identity_path', '')
+        encrypted_text = data.get('encrypted_text', '')
+        
+        if not identity_path or not os.path.exists(identity_path):
+            return jsonify({'success': False, 'error': 'Identità non trovata'})
+        
+        if not encrypted_text:
+            return jsonify({'success': False, 'error': 'Nessun testo da decifrare'})
+        
+        if identity_path.startswith('public:'):
+            return jsonify({'success': False, 'error': 'Per DECIFRARE serve un\'identità PRIVATA!'})
+        
+        clean_input = encrypted_text.strip()
+        
+        # 🔥 USA .rfe PER IL FILE CIFRATO!
+        temp_input = "/tmp/web_encrypted.rfe"
+        temp_output = "/tmp/web_decrypted.txt"
+        
+        subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+        
+        try:
+            encrypted_bytes = base64.b64decode(clean_input)
+            with open(temp_input, 'wb') as f:
+                f.write(encrypted_bytes)
+        except Exception as e:
+            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            return jsonify({'success': False, 'error': f'Base64 non valido: {str(e)}'})
+        
+        # 🔥 DECIFRA CON .rfe
+        cmd = ['rnid', '-i', identity_path, '-d', temp_input, '-f']
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode != 0:
+            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            return jsonify({'success': False, 'error': f'Errore decifratura: {result.stderr[:200]}'})
+        
+        decrypted_text = ""
+        if os.path.exists(temp_output):
+            with open(temp_output, 'r') as f:
+                decrypted_text = f.read().strip()
+            
+            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            
+            return jsonify({
+                'success': True,
+                'decrypted': decrypted_text
+            })
+        else:
+            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            return jsonify({'success': False, 'error': 'File decifrato non creato'})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# ============================================
+# === ROUTE PER FIRMA ===
+# ============================================
+
+@app.route('/api/identities/sign', methods=['POST'])
+def sign_text():
+    try:
+        data = request.json
+        identity_path = data.get('identity_path', '')
+        text = data.get('text', '')
+        
+        if not identity_path or not os.path.exists(identity_path):
+            return jsonify({'success': False, 'error': 'Identità non trovata'})
+        
+        if not text:
+            return jsonify({'success': False, 'error': 'Nessun testo da firmare'})
+        
+        if identity_path.startswith('public:'):
+            return jsonify({'success': False, 'error': 'Per FIRMARE serve un\'identità PRIVATA!'})
+        
+        temp_file = "/tmp/web_sign.txt"
+        temp_sig = "/tmp/web_sign.txt.rsg"
+        
+        subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+        
+        with open(temp_file, 'w') as f:
+            f.write(text)
+        
+        cmd = ['rnid', '-i', identity_path, '-s', temp_file, '-f']
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode != 0:
+            subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+            return jsonify({'success': False, 'error': f'Errore firma: {result.stderr[:200]}'})
+        
+        if not os.path.exists(temp_sig):
+            subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+            return jsonify({'success': False, 'error': 'File firma non creato'})
+        
+        with open(temp_sig, 'rb') as f:
+            sig_bytes = f.read()
+        sig_base64 = base64.b64encode(sig_bytes).decode('ascii')
+        
+        hash_result = subprocess.run(
+            ['rnid', '-i', identity_path, '--print-identity'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        rns_hash = None
+        if hash_result.returncode == 0:
+            match = re.search(r'Loaded Identity <([0-9a-f]+)>', hash_result.stdout)
+            if match:
+                rns_hash = match.group(1)
+        
+        subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+        
+        return jsonify({
+            'success': True,
+            'signature': sig_base64,
+            'rns_hash': rns_hash,
+            'message': 'Firma creata con successo'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# ============================================
+# === ROUTE PER VERIFICA FIRMA ===
+# ============================================
+
+@app.route('/api/identities/verify', methods=['POST'])
+def verify_signature():
+    try:
+        data = request.json
+        identity_path = data.get('identity_path', '')
+        text = data.get('text', '')
+        signature = data.get('signature', '')
+        
+        if not identity_path:
+            return jsonify({'success': False, 'error': 'Identità non specificata'})
+        
+        if not text:
+            return jsonify({'success': False, 'error': 'Nessun testo da verificare'})
+        
+        if not signature:
+            return jsonify({'success': False, 'error': 'Nessuna firma da verificare'})
+        
+        temp_file = "/tmp/web_verify.txt"
+        temp_sig = "/tmp/web_verify.txt.rsg"
+        
+        subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+        
+        with open(temp_file, 'w') as f:
+            f.write(text)
+        
+        try:
+            sig_bytes = base64.b64decode(signature)
+            with open(temp_sig, 'wb') as f:
+                f.write(sig_bytes)
+        except Exception as e:
+            subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+            return jsonify({'success': False, 'error': f'Firma base64 non valida: {str(e)}'})
+        
+        if identity_path.startswith('public:'):
+            rns_hash = identity_path.replace('public:', '')
+            cmd = ['rnid', '-R', '-i', rns_hash, '-V', temp_sig]
+        else:
+            cmd = ['rnid', '-i', identity_path, '-V', temp_sig]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        
+        subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+        
+        if result.returncode != 0:
+            return jsonify({
+                'success': False,
+                'error': f'Errore verifica: {result.stderr[:200]}',
+                'output': result.stdout
+            })
+        
+        if 'is valid' in result.stdout.lower():
+            return jsonify({
+                'success': True,
+                'valid': True,
+                'message': '✅ FIRMA VALIDA',
+                'output': result.stdout
+            })
+        elif 'is invalid' in result.stdout.lower():
+            return jsonify({
+                'success': True,
+                'valid': False,
+                'message': '❌ FIRMA NON VALIDA',
+                'output': result.stdout
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'valid': None,
+                'message': '⚠️ Verifica completata, risultato ambiguo',
+                'output': result.stdout
+            })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+# ============================================
+# === UPLOAD E CLEANUP ===
+# ============================================
+
 @app.route('/api/upload/temp', methods=['POST'])
 def upload_temp_file():
     try:
@@ -776,7 +1068,6 @@ def cleanup_temp_file():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-
 # ============================================
 # === COMANDI RNS (rnstatus, rnpath, rnprobe) ===
 # ============================================
@@ -806,11 +1097,9 @@ def rns_paths():
         print(f"[DEBUG] rnpath richiesto per destinazione: '{destination}'")
         
         if destination and destination.strip():
-            # rnpath aspetta l'hash come argomento
             cmd = ['rnpath', destination.strip()]
             print(f"[DEBUG] Esecuzione comando: {' '.join(cmd)}")
         else:
-            # Se nessuna destinazione, mostra tutte le route
             cmd = ['rnpath']
             print(f"[DEBUG] Esecuzione comando: rnpath (senza argomenti)")
         
@@ -825,17 +1114,13 @@ def rns_paths():
         print(f"[DEBUG] rnpath stdout: {result.stdout[:200]}...")
         print(f"[DEBUG] rnpath stderr: {result.stderr[:200]}...")
         
-        # ===== PULIZIA OUTPUT =====
         stdout = result.stdout
         stderr = result.stderr
         
-        # Rimuovi caratteri backspace (molto importanti!)
         stdout = re.sub(r'.\x08', '', stdout)
-        stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)  # Caratteri controllo
-        stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)  # Codici ANSI
-        stdout = re.sub(r'[\u2800-\u28FF]', '', stdout)  # Caratteri braille
+        stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)
+        stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)
         
-        # Pulisci anche stderr
         stderr = re.sub(r'.\x08', '', stderr)
         stderr = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stderr)
         
@@ -853,7 +1138,6 @@ def rns_paths():
         print(f"[DEBUG] Errore rnpath: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
-
 @app.route('/api/rns/probe', methods=['POST'])
 def rns_probe():
     try:
@@ -864,7 +1148,6 @@ def rns_probe():
         if not destination:
             return jsonify({'success': False, 'error': 'Nessuna destinazione specificata'})
         
-        # Comando corretto: rnprobe <aspect> <destination>
         cmd = ['rnprobe', aspect, destination]
         
         print(f"[DEBUG] Esecuzione probe: {' '.join(cmd)}")
@@ -879,17 +1162,13 @@ def rns_probe():
         print(f"[DEBUG] Probe returncode: {result.returncode}")
         print(f"[DEBUG] Probe stdout: {result.stdout[:200]}")
         
-        # ===== PULIZIA OUTPUT =====
         stdout = result.stdout
         stderr = result.stderr
         
-        # Rimuovi caratteri backspace (molto importanti!)
         stdout = re.sub(r'.\x08', '', stdout)
-        stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)  # Caratteri controllo
-        stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)  # Codici ANSI
-        stdout = re.sub(r'[\u2800-\u28FF]', '', stdout)  # Caratteri braille
+        stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)
+        stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)
         
-        # Pulisci anche stderr
         stderr = re.sub(r'.\x08', '', stderr)
         stderr = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stderr)
         
@@ -920,7 +1199,6 @@ def rns_probe_aspect():
         if aspect not in rns_monitor.RNS_ASPECTS:
             return jsonify({'success': False, 'error': f'Aspect non valido: {aspect}'})
         
-        # Prima ottieni l'hash dell'aspect
         hash_result = subprocess.run(
             ['rnid', '-i', identity_path, '-H', aspect],
             capture_output=True,
@@ -931,7 +1209,6 @@ def rns_probe_aspect():
         if hash_result.returncode != 0:
             return jsonify({'success': False, 'error': 'Impossibile calcolare hash aspect'})
         
-        # Estrai l'hash
         dest_hash = None
         for line in hash_result.stdout.split('\n'):
             if 'Destination hash:' in line:
@@ -941,7 +1218,6 @@ def rns_probe_aspect():
         if not dest_hash:
             return jsonify({'success': False, 'error': 'Hash non trovato'})
         
-        # Esegui probe
         probe_result = subprocess.run(
             ['rnprobe', dest_hash],
             capture_output=True,
@@ -964,12 +1240,11 @@ def rns_probe_aspect():
 def rns_paths_blackhole():
     try:
         data = request.json
-        identity_hash = data.get('destination', '')  # Qui arriva l'identity hash
+        identity_hash = data.get('destination', '')
         
         if not identity_hash:
             return jsonify({'success': False, 'error': 'Nessuna identità specificata'})
         
-        # Comando rnpath con flag -p usando l'identity hash
         cmd = ['rnpath', '-p', identity_hash]
         
         print(f"[DEBUG] Esecuzione rnpath -p per identità: {identity_hash}")
@@ -998,7 +1273,6 @@ def find_identity_by_hash():
         if not hash_value:
             return jsonify({'success': False, 'error': 'Nessun hash specificato'})
         
-        # Cerca nelle directory storage
         storage_dirs = [
             (RETICULUM_STORAGE, 'reticulum'),
             (NOMADNET_STORAGE, 'nomadnet'),
@@ -1018,7 +1292,6 @@ def find_identity_by_hash():
                     item_path = os.path.join(storage_path, item)
                     
                     if os.path.isfile(item_path) and os.path.getsize(item_path) == 64:
-                        # Verifica se questa identità corrisponde all'hash
                         result = subprocess.run(
                             ['rnid', '-i', item_path, '--print-identity'],
                             capture_output=True,
@@ -1047,7 +1320,6 @@ def find_identity_by_hash():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-
 # ============================================
 # === AVVIO SERVER ===
 # ============================================
@@ -1072,6 +1344,5 @@ if __name__ == '__main__':
         app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
         print("\n🛑 Arresto server...")
-        # Ferma monitor manager
         monitor_manager.stop()
         print("✅ Server fermato")
