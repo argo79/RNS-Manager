@@ -325,18 +325,18 @@ Distribuito sotto licenza MIT.
 
 <h3>🐛 Problemi noti</h3>
 <p>
-    La scansione iniziale delle identità può richiedere 10-30 secondi con molte identità
+    La scansione iniziale delle identità può richiedere 10-30 secondi con molte identità.
     Alcuni aspect potrebbero non essere riconosciuti correttamente
-    Su dispositivi mobili, alcune tabelle potrebbero richiedere scorrimento orizzontale
+    su dispositivi mobili, alcune tabelle potrebbero richiedere scorrimento orizzontale.
 </p>
 
 <h3>🔜 Roadmap</h3>
 <p>
-    Supporto per multiple lingue
-    Esportazione statistiche in CSV/JSON
-    Gestione gruppi di identità
-    Integrazione con Nomad Network per messaggistica
-    Autenticazione e multi-utente
-    Dark/light mode toggle
+    -Supporto per multiple lingue
+    -Esportazione statistiche in CSV/JSON
+    -Gestione gruppi di identità
+    -Integrazione con Nomad Network per messaggistica
+    -Autenticazione e multi-utente
+    -Dark/light mode toggle
 </p>
 
