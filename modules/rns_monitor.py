@@ -12,10 +12,30 @@ import queue
 import socket
 import multiprocessing
 import sqlite3
+import sys
 from datetime import datetime, timedelta
 
-# Costanti
-SOCKET_PATH = os.path.expanduser("~/.rns_manager/rns_monitor.sock")
+# ============================================
+# === DETECTION SISTEMA OPERATIVO ===
+# ============================================
+IS_WINDOWS = sys.platform == 'win32'
+print(f"[DEBUG] Sistema operativo: {'Windows' if IS_WINDOWS else 'Linux/Unix'}")
+
+# ============================================
+# === SOCKET PATH ===
+# ============================================
+if IS_WINDOWS:
+    # Su Windows usa TCP su localhost (porta 5011)
+    SOCKET_HOST = '127.0.0.1'
+    SOCKET_PORT = 5011
+    SOCKET_PATH = None  # Non usato su Windows
+    print(f"[DEBUG] Socket TCP: {SOCKET_HOST}:{SOCKET_PORT}")
+else:
+    # Su Linux/Unix usa socket UNIX
+    SOCKET_PATH = os.path.expanduser("~/.rns_manager/rns_monitor.sock")
+    SOCKET_HOST = None
+    SOCKET_PORT = None
+    print(f"[DEBUG] Socket UNIX: {SOCKET_PATH}")
 
 # Aspect uguali all'originale
 RNS_ASPECTS = [
@@ -496,7 +516,7 @@ class SQLiteAnnounceCache:
 # ============================================
 # === PROCESSO MONITOR ===
 # ============================================
-def run_rns_monitor(socket_path, aspects):
+def run_rns_monitor(socket_path, aspects, host=None, port=None):
     """Processo separato con il monitor RNS - ORA CON DATI RADIO COMPLETI"""
     import RNS
     import socket
@@ -665,21 +685,34 @@ def run_rns_monitor(socket_path, aspects):
             return "unknown"
     
     try:
-        os.unlink(socket_path)
+        if not IS_WINDOWS and socket_path and os.path.exists(socket_path):
+            os.unlink(socket_path)
     except OSError:
         pass
 
-    socket_dir = os.path.dirname(socket_path)
-    if socket_dir and not os.path.exists(socket_dir):
-        os.makedirs(socket_dir, exist_ok=True)
+    # === CREAZIONE SOCKET (UNIX su Linux, TCP su Windows) ===
+    if IS_WINDOWS:
+        # Windows: TCP socket
+        socket_dir = os.path.dirname(socket_path) if socket_path else None
+        if socket_dir and not os.path.exists(socket_dir):
+            os.makedirs(socket_dir, exist_ok=True)
+        
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((host, port))
+        server.listen(1)
+        print(f"[MONITOR] In attesa su TCP {host}:{port}...")
+    else:
+        # Linux/Unix: UNIX socket
+        socket_dir = os.path.dirname(socket_path)
+        if socket_dir and not os.path.exists(socket_dir):
+            os.makedirs(socket_dir, exist_ok=True)
 
-    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    server.bind(socket_path)
-
-    server.listen(1)
-    os.chmod(socket_path, 0o666)
-    
-    print(f"[MONITOR] In attesa di connessione Flask su {socket_path}...")
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(socket_path)
+        server.listen(1)
+        os.chmod(socket_path, 0o666)
+        print(f"[MONITOR] In attesa di connessione Flask su {socket_path}...")
     
     try:
         client_socket, _ = server.accept()
@@ -715,10 +748,13 @@ def run_rns_monitor(socket_path, aspects):
 class RNSMonitorManager:
     """Gestore per Flask con contatori centralizzati - ORA CON SQLITE"""
     
-    def __init__(self, socket_path, aspects, cache_dir, max_history=1000):
+    def __init__(self, socket_path, aspects, cache_dir, max_history=1000, host=None, port=None):
         self.socket_path = socket_path
         self.aspects = aspects
         self.max_history = max_history
+        self.host = host
+        self.port = port
+        self.is_windows = IS_WINDOWS
         
         # Processi e thread
         self.monitor_process = None
@@ -734,18 +770,22 @@ class RNSMonitorManager:
         # Cache SQLite
         self.announce_cache = SQLiteAnnounceCache(cache_dir) if cache_dir else None
         
-        print(f"[MonitorManager] Inizializzato con SQLite: {cache_dir}")
+        if self.is_windows:
+            print(f"[MonitorManager] Inizializzato con SQLite: {cache_dir} (Windows TCP)")
+        else:
+            print(f"[MonitorManager] Inizializzato con SQLite: {cache_dir}")
     
     def start_monitor_process(self):
         """Avvia il processo monitor separato"""
-        try:
-            os.unlink(self.socket_path)
-        except OSError:
-            pass
+        if not self.is_windows:
+            try:
+                os.unlink(self.socket_path)
+            except OSError:
+                pass
         
         self.monitor_process = multiprocessing.Process(
             target=run_rns_monitor,
-            args=(self.socket_path, self.aspects),
+            args=(self.socket_path, self.aspects, self.host, self.port),
             daemon=True
         )
         self.monitor_process.start()
@@ -771,11 +811,20 @@ class RNSMonitorManager:
         while self.running:
             try:
                 if sock is None:
-                    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                    sock.settimeout(5)
-                    sock.connect(self.socket_path)
-                    sock.settimeout(None)
-                    print("[MonitorManager] ✅ Connesso al monitor socket")
+                    if self.is_windows:
+                        # Windows: TCP
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(5)
+                        sock.connect((self.host, self.port))
+                        sock.settimeout(None)
+                        print(f"[MonitorManager] ✅ Connesso al monitor TCP {self.host}:{self.port}")
+                    else:
+                        # Linux/Unix: UNIX socket
+                        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                        sock.settimeout(5)
+                        sock.connect(self.socket_path)
+                        sock.settimeout(None)
+                        print("[MonitorManager] ✅ Connesso al monitor socket")
                 
                 data = sock.recv(16384).decode('utf-8')
                 if not data:
@@ -1060,11 +1109,12 @@ class RNSMonitorManager:
             self.monitor_process.terminate()
             self.monitor_process.join(timeout=5)
         
-        # Rimuovi socket
-        try:
-            os.unlink(self.socket_path)
-        except:
-            pass
+        # Rimuovi socket (solo su Linux)
+        if not self.is_windows:
+            try:
+                os.unlink(self.socket_path)
+            except:
+                pass
         
         print("[MonitorManager] Monitor fermato")
 
@@ -1496,7 +1546,9 @@ def init_monitor(app, cache_dir):
     manager = RNSMonitorManager(
         socket_path=SOCKET_PATH,
         aspects=RNS_ASPECTS,
-        cache_dir=cache_dir
+        cache_dir=cache_dir,
+        host=SOCKET_HOST,
+        port=SOCKET_PORT
     )
     
     # Avvia processi
