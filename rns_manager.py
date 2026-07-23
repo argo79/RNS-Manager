@@ -1425,8 +1425,8 @@ def open_browser():
     """Apre il browser dopo un breve ritardo"""
     time.sleep(2)
     try:
-        webbrowser.open('http://127.0.0.1:5000')
-        print("🌐 Browser aperto su http://127.0.0.1:5000")
+        webbrowser.open('http://127.0.0.1:5010')
+        print("🌐 Browser aperto su http://127.0.0.1:5010")
     except Exception as e:
         print(f"[!] Impossibile aprire il browser: {e}")
 
@@ -1451,8 +1451,8 @@ if __name__ == '__main__':
         print(f"  {key}: {expanded}")
     
     print("\n🌐 Accesso:")
-    print(f"  http://localhost:5000/ - Identity Manager")
-    print(f"  http://localhost:5000/monitor - Aspect Monitor")
+    print(f"  http://localhost:5010/ - Identity Manager")
+    print(f"  http://localhost:5010/monitor - Aspect Monitor")
     print("\n🚀 Avvio server...")
     print("   Premi Ctrl+C per fermare\n")
     
@@ -1461,7 +1461,7 @@ if __name__ == '__main__':
     browser_thread.start()
     
     try:
-        app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False, threaded=True)
+        app.run(host='127.0.0.1', port=5010, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
         signal_handler(signal.SIGINT, None)
     except Exception as e:

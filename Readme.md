@@ -69,9 +69,9 @@ oppure
 
 Poi apri il browser su:
 
-    Identity Manager: http://localhost:5000/
+    Identity Manager: http://localhost:5010/
 
-    Aspect Monitor: http://localhost:5000/monitor
+    Aspect Monitor: http://localhost:5010/monitor
 ```
 
 
@@ -242,7 +242,7 @@ oppure
     Aprire il browser su Android e puntare su
 </p>
 <pre><code>
-http://127.0.0.1:5000
+http://127.0.0.1:5010
 </code></pre>
 
 ![RNID_GUI](img/arab-RNID.jpg)
