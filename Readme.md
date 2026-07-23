@@ -1,4 +1,4 @@
-<h1 align="center">
+<h1 align="center"> 
  🔑  RNS Identity Manager & Monitor 🌐
 </h1>
 
