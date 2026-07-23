@@ -1031,9 +1031,11 @@
                 let resultHTML = '';
                 if (aspectData.success) {
                     const output = aspectData.output;
-                    if (output.includes('Recalled Identity <') && output.includes('for destination <')) {
+                    // Riconosce sia "Received" che "Recalled"
+                    if ((output.includes('Received Identity <') || output.includes('Recalled Identity <')) && output.includes('for destination <')) {
                         currentVerification.type = 'aspect';
-                        const rnsMatch = output.match(/Recalled Identity <([^>]+)> for destination/);
+                        let rnsMatch = output.match(/Received Identity <([^>]+)> for destination/);
+                        if (!rnsMatch) rnsMatch = output.match(/Recalled Identity <([^>]+)> for destination/);
                         if (rnsMatch) currentVerification.rnsHash = rnsMatch[1];
                         resultHTML += `<div class="success">${t('aspect_rilevato')}</div>`;
                         resultHTML += `<div style="margin-top: 5px;">`;
@@ -1043,7 +1045,7 @@
                         if (currentVerification.rnsHash) {
                             resultHTML += await calculateAllAspects(currentVerification.rnsHash);
                         }
-                    } else if (output.includes('Recalled Identity <')) {
+                    } else if (output.includes('Received Identity <') || output.includes('Recalled Identity <')) {
                         currentVerification.type = 'identity';
                         currentVerification.rnsHash = finalHash;
                         resultHTML += `<div class="success">${t('rns_hash_identita')}</div>`;

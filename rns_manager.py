@@ -333,9 +333,16 @@ def execute_rnid():
             stdout = result.stdout
             stderr = result.stderr
             
+            # PULIZIA COMPLETA
             stdout = re.sub(r'.\x08', '', stdout)
             stdout = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', stdout)
             stdout = re.sub(r'\x1B\[[0-9;]*[a-zA-Z]', '', stdout)
+            stdout = re.sub(r'[\u2800-\u28FF]', '', stdout)      # Rimuove caratteri braille
+            stdout = re.sub(r'[\u2580-\u259F]', '', stdout)      # Rimuove caratteri blocchi
+            
+            stderr = re.sub(r'.\x08', '', stderr)
+            stderr = re.sub(r'[\u2800-\u28FF]', '', stderr)      # Rimuove caratteri braille
+            stderr = re.sub(r'[\u2580-\u259F]', '', stderr)      # Rimuove caratteri blocchi
             
             if len(stdout) > 1000 or '4U+6vC' in stdout:
                 lines = []
@@ -350,7 +357,7 @@ def execute_rnid():
             return jsonify({
                 'success': result.returncode == 0,
                 'output': stdout,
-                'error': re.sub(r'.\x08', '', stderr),
+                'error': stderr,
                 'return_code': result.returncode
             })
             
@@ -362,16 +369,17 @@ def execute_rnid():
                 text=True,
                 timeout=10
             )
+            return jsonify({
+                'success': result.returncode == 0,
+                'output': result.stdout,
+                'error': result.stderr,
+                'return_code': result.returncode
+            })
         else:
             return jsonify({'success': False, 'error': 'Comando non permesso'})
         
-        return jsonify({
-            'success': result.returncode == 0,
-            'output': result.stdout,
-            'error': result.stderr,
-            'return_code': result.returncode
-        })
-        
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'error': 'Timeout del comando'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
