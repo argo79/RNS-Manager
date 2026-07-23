@@ -309,6 +309,8 @@ Distribuito sotto licenza MIT.
   <i>❤️ Grazie a tutti coloro che contribuiscono al progetto, segnalano bug e suggeriscono miglioramenti!</i>
 </p>
 
+---
+
 <h3>📧 Contatto</h3>
 
 <p>
