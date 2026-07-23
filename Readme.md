@@ -207,6 +207,7 @@ Comandi RNS
 
     POST /api/rns/probe - rnprobe
 
+---
 
 <h3>📱 Android via Termux </h3>
 
@@ -246,6 +247,8 @@ http://127.0.0.1:5000
     Push al branch (git push origin feature/AmazingFeature)
     Apri una Pull Request
 </p>
+
+---
 
 <h3>📝 Licenza</h3>
 
