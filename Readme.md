@@ -291,10 +291,15 @@ Distribuito sotto licenza MIT.
 
 <h3>📧 Contatto</h3>
 
-Arg0net - arg0netds@gmail.com
+<p>
+  <strong>Email:</strong> arg0netds@gmail.com<br>
+  <strong>GitHub:</strong> <a href="https://github.com/argo79/RNS-Manager">https://github.com/argo79/RNS-Manager</a><br>
+  <strong>RNS Identity:</strong> <code>04511923b68ae34e0fda5721d82f596f</code>
+</p>
 
-Link progetto: https://github.com/argo79/RNS-Manager
-
+<p align="center">
+  <i>📡 Contattami via Reticulum usando l'identity hash sopra!</i>
+</p>
 
 <h3>🐛 Problemi noti</h3>
 <p>
