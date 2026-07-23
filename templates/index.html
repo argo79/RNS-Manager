@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title data-i18n="title">RNID Identity Manager {version}</title>
+    <title>RNID Identity Manager {{ version }}</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/rns_monitor.css">
     <script>
         let translations = {};
         let currentLang = 'it';
         const supportedLangs = ['it', 'en', 'fr', 'es', 'de', 'pt', 'ru', 'zh', 'ja', 'ar', 'hi', 'bn', 'ur', 'tr', 'pl'];
-        const APP_VERSION = "1.1.0";
+        const APP_VERSION = "{{ version }}";
 
         function detectBrowserLanguage() {
             try {
@@ -620,7 +620,44 @@
                 </div>
             </div>
         </div>
-    </div>
+        <!-- ============================================ -->
+        <!-- FOOTER - COMPATTO, IN LINEA                 -->
+        <!-- ============================================ -->
+        <footer style="margin-top: 30px; padding: 10px 15px; border-top: 1px solid #333; text-align: center; font-size: 10px; color: #555; background: #0a0a0a; width: 100%;">
+            
+            <!-- Autore e versione -->
+            <div style="margin-bottom: 4px;">
+                <span style="color: #666;">argo79</span>
+                <span style="color: #333; margin: 0 6px;">·</span>
+                <a href="https://github.com/argo79/RNS-Manager" target="_blank" style="color: #4c4; text-decoration: none;">GitHub</a>
+                <span style="color: #333; margin: 0 6px;">·</span>
+                <span style="color: #444;">v{{ version }}</span>
+                <span style="color: #333; margin: 0 6px;">·</span>
+                <span style="color: #444;">Licenza MIT</span>
+            </div>
+            
+            <!-- Donazioni in linea -->
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 15px; font-size: 11px;">
+                <span style="color: #FF6B00;">☕ Supporta lo sviluppo:</span>
+                
+                <span style="display: inline-flex; align-items: center; gap: 4px;">
+                    <span style="font-weight: bold; color: #00A9FF;">XRP</span>
+                    <code style="background: #111; padding: 1px 6px; border-radius: 2px; font-size: 10px; color: #4c4; font-family: monospace;">rBKbetm51vuQQfg4Yo8fvweRya7gedcr9J</code>
+                </span>
+                
+                <span style="display: inline-flex; align-items: center; gap: 4px;">
+                    <span style="font-weight: bold; color: #FF6600;">XMR</span>
+                    <code style="background: #111; padding: 1px 6px; border-radius: 2px; font-size: 10px; color: #4c4; font-family: monospace;">87jacZEtYvXcgnvEp7wu45gLwRBYpvwMr3N9dqhNipPWV69XwQX658tS73VEdghLopG1wA4STEdMPcGF8Tc3e18eJyQ4kMA</code>
+                </span>
+                
+                <span style="display: inline-flex; align-items: center; gap: 4px;">
+                    <span style="font-weight: bold; color: #3C3C3D;">ETH</span>
+                    <code style="background: #111; padding: 1px 6px; border-radius: 2px; font-size: 10px; color: #4c4; font-family: monospace;">0xd2d85288df96B4162814Ca7492039620371b9D81</code>
+                </span>
+            </div>
+        </footer>
+
+    </div>  <!-- CHIUDE .container -->
 
     <script>
         let selectedIdentity = null;
@@ -1861,5 +1898,26 @@
             }
         }, { passive: false });
     </script>
+
+</div>  <!-- CHIUDE .container -->
+
+
+<!-- Script per copiare indirizzi -->
+<script>
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showOutput('✅ Indirizzo copiato!', 'success');
+        }).catch(() => {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showOutput('✅ Indirizzo copiato!', 'success');
+        });
+    }
+</script>
+
 </body>
 </html>

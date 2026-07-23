@@ -23,6 +23,27 @@ from flask import Flask, request, jsonify, render_template, Response, stream_wit
 # Importa il modulo monitor
 import modules.rns_monitor as rns_monitor
 
+# ============================================
+# === LEGGI VERSIONE DA version.py ===
+# ============================================
+# All'inizio, dopo aver importato version
+try:
+    from version import APP_VERSION, APP_NAME, APP_AUTHOR, APP_URL, DONATION_ADDRESSES
+except ImportError:
+    APP_VERSION = "1.0.0"
+    APP_NAME = "RNS Manager"
+    APP_AUTHOR = "argo79"
+    APP_URL = "https://github.com/argo79/RNS-Manager"
+    DONATION_ADDRESSES = {}
+
+
+
+print(f"[✓] Versione: {APP_VERSION}")
+
+# ============================================
+# === APP FLASK ===
+# ============================================
+
 app = Flask(__name__)
 
 # === CARTELLA LOCALE DI ESECUZIONE ===
@@ -204,9 +225,14 @@ def monitor_reset_all():
 # === TUTTE LE ROUTE IDENTITY MANAGER ===
 # ============================================
 
+# Nella route index:
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', 
+                         version=APP_VERSION,
+                         author=APP_AUTHOR,
+                         repo_url=APP_URL,
+                         donations=DONATION_ADDRESSES)
 
 @app.route('/api/rnid', methods=['POST'])
 def execute_rnid():

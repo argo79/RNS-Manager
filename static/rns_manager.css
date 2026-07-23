@@ -1148,3 +1148,40 @@ select, input {
         max-width: 100%;
     }
 }
+
+/* ============================================
+   FOOTER - FORZATO SOTTO TUTTO
+   ============================================ */
+
+.id-mgr footer {
+    width: 100% !important;
+    clear: both !important;
+    display: block !important;
+    float: none !important;
+    margin-top: 20px !important;
+    padding: 15px 20px !important;
+    border-top: 1px solid var(--border) !important;
+    text-align: center !important;
+    background: var(--bg) !important;
+    box-sizing: border-box !important;
+    flex: 0 0 100% !important;
+    order: 999 !important;
+}
+
+.id-mgr footer div {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.id-mgr footer code {
+    word-break: break-all !important;
+}
+
+/* Forza footer su schermi grandi */
+@media (min-width: 1024px) {
+    .id-mgr footer {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        order: 999 !important;
+    }
+}

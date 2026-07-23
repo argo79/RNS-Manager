@@ -59,7 +59,7 @@
     <div class="container">
         <header>
             <div>
-                <h1>RETICULUM MONITOR 1.0.8</h1>
+                <h1>RETICULUM MONITOR 1.1.0</h1>
                 <div class="header-subtitle">Monitoraggio annunci e identità Reticulum</div>
             </div>
             <div style="display: flex; gap: 10px;">
@@ -77,8 +77,8 @@
             <div class="cache-controls" style="display: flex; gap: 10px; align-items: center;">
                 <span style="color:var(--dim); font-size:11px;">💾 cache:</span>
                 <select id="cache-source-select" style="background:#1a1a1a; color:var(--fg); border:1px solid #333; padding:4px 8px; border-radius:4px;">
-                    <option value="memory">📱 memoria (ultimi 1000)</option>
-                    <option value="cache" selected>💾 disco (ultimi 7 giorni)</option>
+                        <option value="memory" selected>📱 memoria (ultimi 1000)</option>
+                        <option value="cache">💾 disco (ultimi 7 giorni)</option>
                 </select>
                 <button class="btn" id="reset-all-btn" style="background:#550000; color:#ffaa00; font-size:11px; padding:4px 8px;">🔄 RESET TOTALE</button>
             </div>
@@ -197,6 +197,38 @@
             <h3 style="font-size:12px; margin:20px 0 10px; font-weight:normal; color:var(--dim);">top identità</h3>
             <div id="stats-identities" class="grid-2" style="grid-template-columns:repeat(auto-fill, minmax(300px,1fr));"></div>
         </div>
+            <!-- FOOTER QUI! DENTRO IL CONTAINER, DOPO TUTTO -->
+            <footer style="margin-top: 30px; padding: 10px 15px; border-top: 1px solid #333; text-align: center; font-size: 10px; color: #555; background: #0a0a0a; width: 100%;">
+                
+                <div style="margin-bottom: 4px;">
+                    <span style="color: #666;">argo79</span>
+                    <span style="color: #333; margin: 0 6px;">·</span>
+                    <a href="https://github.com/argo79/RNS-Manager" target="_blank" style="color: #4c4; text-decoration: none;">GitHub</a>
+                    <span style="color: #333; margin: 0 6px;">·</span>
+                    <span style="color: #444;">v1.1.0</span>
+                    <span style="color: #333; margin: 0 6px;">·</span>
+                    <span style="color: #444;">Licenza MIT</span>
+                </div>
+                
+                <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 15px; font-size: 11px;">
+                    <span style="color: #FF6B00;">☕ Supporta lo sviluppo:</span>
+                    
+                    <span style="display: inline-flex; align-items: center; gap: 4px;">
+                        <span style="font-weight: bold; color: #00A9FF;">XRP</span>
+                        <code style="background: #111; padding: 1px 6px; border-radius: 2px; font-size: 10px; color: #4c4; font-family: monospace;">rBKbetm51vuQQfg4Yo8fvweRya7gedcr9J</code>
+                    </span>
+                    
+                    <span style="display: inline-flex; align-items: center; gap: 4px;">
+                        <span style="font-weight: bold; color: #FF6600;">XMR</span>
+                        <code style="background: #111; padding: 1px 6px; border-radius: 2px; font-size: 10px; color: #4c4; font-family: monospace;">87jacZEtYvXcgnvEp7wu45gLwRBYpvwMr3N9dqhNipPWV69XwQX658tS73VEdghLopG1wA4STEdMPcGF8Tc3e18eJyQ4kMA</code>
+                    </span>
+                    
+                    <span style="display: inline-flex; align-items: center; gap: 4px;">
+                        <span style="font-weight: bold; color: #3C3C3D;">ETH</span>
+                        <code style="background: #111; padding: 1px 6px; border-radius: 2px; font-size: 10px; color: #4c4; font-family: monospace;">0xd2d85288df96B4162814Ca7492039620371b9D81</code>
+                    </span>
+                </div>
+            </footer>
     </div>
 
     <script>
@@ -257,7 +289,7 @@
             identities: new Map(),
             expandedIdentities: new Set(),
             identitySort: 'count_desc',
-            cacheSource: 'cache',
+            cacheSource: 'memory',
             resetting: false,
             eventSource: null,
             backendStats: { total: 0, unique: 0, cacheSize: 0 },
@@ -2284,7 +2316,7 @@
             
             // Imposta cache come sorgente
             state.cacheSource = 'cache';
-            document.getElementById('cache-source-select').value = 'cache';
+            document.getElementById('cache-source-select').value = 'memory';
             
             // Carica dalla cache
             loadHistory().then(() => {

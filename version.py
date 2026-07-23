@@ -9,6 +9,13 @@ APP_URL = "https://github.com/argo79/RNS-Manager"
 APP_LICENSE = "MIT"
 APP_DESCRIPTION = "RNS Identity Manager & Aspect Monitor"
 
+# Indirizzi per donazioni
+DONATION_ADDRESSES = {
+    "XRP": "rBKbetm51vuQQfg4Yo8fvweRya7gedcr9J",
+    "XMR": "87jacZEtYvXcgnvEp7wu45gLwRBYpvwMr3N9dqhNipPWV69XwQX658tS73VEdghLopG1wA4STEdMPcGF8Tc3e18eJyQ4kMA",
+    "ETH": "0xd2d85288df96B4162814Ca7492039620371b9D81"
+}
+
 def get_version():
     return APP_VERSION
 
