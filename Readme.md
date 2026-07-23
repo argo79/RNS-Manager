@@ -323,6 +323,8 @@ Distribuito sotto licenza MIT.
   <i>📡 Contattami via Reticulum usando l'identity hash sopra!</i>
 </p>
 
+---
+
 <h3>🐛 Problemi noti</h3>
 <p>
     La scansione iniziale delle identità può richiedere 10-30 secondi con molte identità.
@@ -330,13 +332,18 @@ Distribuito sotto licenza MIT.
     su dispositivi mobili, alcune tabelle potrebbero richiedere scorrimento orizzontale.
 </p>
 
-<h3>🔜 Roadmap</h3>
-<p>
-    -Supporto per multiple lingue
-    -Esportazione statistiche in CSV/JSON
-    -Gestione gruppi di identità
-    -Integrazione con Nomad Network per messaggistica
-    -Autenticazione e multi-utente
-    -Dark/light mode toggle
-</p>
+---
 
+<h3>🔜 Roadmap</h3>
+
+<ul>
+  <li>Supporto per multiple lingue</li>
+  <li>Esportazione statistiche in CSV/JSON</li>
+  <li>Gestione gruppi di identità</li>
+  <li>Integrazione con Nomad Network per messaggistica</li>
+  <li>Autenticazione e multi-utente</li>
+  <li>Dark/light mode toggle</li>
+  <li>Client mobile nativo (Android/iOS)</li>
+  <li>Notifiche push per annunci importanti</li>
+  <li>Dashboard con grafici e statistiche avanzate</li>
+</ul>
