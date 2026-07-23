@@ -1,7 +1,3 @@
-[![Donate XRP](https://img.shields.io/badge/Donate-XRP-00A9FF?style=flat&logo=ripple)](https://ripple.com/xrp/)
-[![Donate XMR](https://img.shields.io/badge/Donate-XMR-FF6600?style=flat&logo=monero)](https://www.getmonero.org/)
-[![Donate ETH](https://img.shields.io/badge/Donate-ETH-3C3C3D?style=flat&logo=ethereum)](https://ethereum.org/)
-
 <h1 align="center">
  🔑  RNS Identity Manager & Monitor 🌐
 </h1>
@@ -259,6 +255,9 @@ Distribuito sotto licenza MIT.
 <div align="center">
 
 ### 💰 Donazioni
+[![Donate XRP](https://img.shields.io/badge/Donate-XRP-00A9FF?style=flat&logo=ripple)](https://ripple.com/xrp/)
+[![Donate XMR](https://img.shields.io/badge/Donate-XMR-FF6600?style=flat&logo=monero)](https://www.getmonero.org/)
+[![Donate ETH](https://img.shields.io/badge/Donate-ETH-3C3C3D?style=flat&logo=ethereum)](https://ethereum.org/)
 
 | Cryptovaluta | Indirizzo |
 |--------------|-----------|
