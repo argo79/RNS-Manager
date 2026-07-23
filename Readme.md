@@ -1,3 +1,7 @@
+[![Donate XRP](https://img.shields.io/badge/Donate-XRP-00A9FF?style=flat&logo=ripple)](https://ripple.com/xrp/)
+[![Donate XMR](https://img.shields.io/badge/Donate-XMR-FF6600?style=flat&logo=monero)](https://www.getmonero.org/)
+[![Donate ETH](https://img.shields.io/badge/Donate-ETH-3C3C3D?style=flat&logo=ethereum)](https://ethereum.org/)
+
 <h1 align="center">
  🔑  RNS Identity Manager & Monitor 🌐
 </h1>
@@ -245,6 +249,39 @@ Distribuito sotto licenza MIT.
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)](https://flask.palletsprojects.com/)
 
+<h3>☕ Supporta lo sviluppo</h3>
+
+<p>
+  Se questo progetto ti è utile, considera di offrirmi un caffè virtuale! ☕
+  Ogni contributo, piccolo o grande, aiuta a mantenere vivo lo sviluppo.
+</p>
+
+<div align="center">
+
+### 💰 Donazioni
+
+| Cryptovaluta | Indirizzo |
+|--------------|-----------|
+| **XRP** (Ripple) | `rBKbetm51vuQQfg4Yo8fvweRya7gedcr9J` |
+| **XMR** (Monero) | `87jacZEtYvXcgnvEp7wu45gLwRBYpvwMr3N9dqhNipPWV69XwQX658tS73VEdghLopG1wA4STEdMPcGF8Tc3e18eJyQ4kMA` |
+| **ETH** (Ethereum) | `0xd2d85288df96B4162814Ca7492039620371b9D81` |
+
+</div>
+
+<p align="center">
+  <i>🙏 Grazie per il supporto! Ogni donazione è un incentivo a migliorare e aggiungere nuove funzionalità.</i>
+</p>
+
+---
+
+### 📊 Statistiche progetto
+
+[![Stars](https://img.shields.io/github/stars/argo79/RNS-Manager?style=social)](https://github.com/argo79/RNS-Manager/stargazers)
+[![Forks](https://img.shields.io/github/forks/argo79/RNS-Manager?style=social)](https://github.com/argo79/RNS-Manager/network/members)
+[![Issues](https://img.shields.io/github/issues/argo79/RNS-Manager)](https://github.com/argo79/RNS-Manager/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/argo79/RNS-Manager)](https://github.com/argo79/RNS-Manager/commits/main)
+
+---
 
 <h3>🙏 Ringraziamenti
 
