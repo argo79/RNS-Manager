@@ -245,6 +245,8 @@ Distribuito sotto licenza MIT.
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)](https://flask.palletsprojects.com/)
 
+---
+
 <h3>☕ Supporta lo sviluppo</h3>
 
 <p>
