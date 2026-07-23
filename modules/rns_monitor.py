@@ -1236,6 +1236,13 @@ def create_monitor_blueprint(monitor_manager):
             print(f"❌ Errore salvataggio annuncio: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
+
+    # ============================================
+    # === ROUTE PER CHIUSURA SICURA ===
+    # ============================================
+
+
+
     # ============================================
     # === 🔥 NUOVI ENDPOINT PER SQLITE ===
     # ============================================

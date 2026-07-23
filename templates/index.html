@@ -10,7 +10,7 @@
         let translations = {};
         let currentLang = 'it';
         const supportedLangs = ['it', 'en', 'fr', 'es', 'de', 'pt', 'ru', 'zh', 'ja', 'ar', 'hi', 'bn', 'ur', 'tr', 'pl'];
-        const APP_VERSION = "1.0.3";
+        const APP_VERSION = "1.1.0";
 
         function detectBrowserLanguage() {
             try {
@@ -317,6 +317,10 @@
                     <option value="pl">🇵🇱 Polski</option>
                 </select>
                 <a href="/monitor" class="monitor-button" data-i18n="monitor">📡 APRI MONITOR</a>
+                <button onclick="shutdownServer()" 
+                        style="background:#f44; color:white; border:none; padding:8px 16px; border-radius:3px; cursor:pointer; font-weight:bold;">
+                    🛑 ESCI
+                </button>
             </div>
         </header>
         
@@ -1819,6 +1823,36 @@
         
         function clearCommand() {
             document.getElementById('commandInput').value = '';
+        }
+
+        // ============================================
+        // === CHIUSURA SERVER ===
+        // ============================================
+
+        async function shutdownServer() {
+            if (!confirm('⚠️ Sei sicuro di voler fermare il server?\n\nTutti i processi verranno terminati.')) {
+                return;
+            }
+            
+            showOutput('🛑 Arresto server in corso...', 'warning');
+            
+            try {
+                const response = await fetch('/api/shutdown', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                showOutput('✅ ' + data.message, 'success');
+                
+                // Dopo 2 secondi, prova a chiudere la finestra
+                setTimeout(() => {
+                    window.close();
+                }, 2000);
+                
+            } catch (error) {
+                showOutput('❌ Errore: ' + error.message, 'error');
+            }
         }
         
         document.addEventListener('touchstart', function(event) {

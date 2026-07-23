@@ -14,7 +14,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
 VERSION="1.1.0"
 BRANCH="master"
@@ -25,11 +25,11 @@ BRANCH="master"
 
 if [ ! -f ".gitignore" ]; then
     echo "github_update.sh" > .gitignore
-    echo "✅ .gitignore creato"
+    echo -e "${GREEN}✅ .gitignore creato${NC}"
 else
     if ! grep -q "github_update.sh" .gitignore; then
         echo "github_update.sh" >> .gitignore
-        echo "✅ github_update.sh aggiunto a .gitignore"
+        echo -e "${GREEN}✅ github_update.sh aggiunto a .gitignore${NC}"
     fi
 fi
 
@@ -82,9 +82,9 @@ git push origin $BRANCH
 
 echo ""
 echo -e "${YELLOW}📦 Creare nuova release?${NC}"
-echo "   ${GREEN}1) Nuova release${NC}"
-echo "   ${YELLOW}2) Sovrascrivi esistente${NC}"
-echo "   ${RED}3) Salta${NC}"
+echo -e "   ${GREEN}1) Nuova release${NC}"
+echo -e "   ${YELLOW}2) Sovrascrivi esistente${NC}"
+echo -e "   ${RED}3) Salta${NC}"
 read -p "Scelta (1-3): " RELEASE_CHOICE
 
 if [ "$RELEASE_CHOICE" == "1" ] || [ "$RELEASE_CHOICE" == "2" ]; then
@@ -112,6 +112,7 @@ if [ "$RELEASE_CHOICE" == "1" ] || [ "$RELEASE_CHOICE" == "2" ]; then
     read -p "📝 Note release (Invio per default): " RELEASE_NOTES
     if [ -z "$RELEASE_NOTES" ]; then
         RELEASE_NOTES="## 🚀 Novità
+
 - Aggiornamenti e miglioramenti
 - Bug fix"
     fi

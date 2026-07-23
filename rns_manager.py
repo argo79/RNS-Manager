@@ -1324,7 +1324,53 @@ def find_identity_by_hash():
         return jsonify({'success': False, 'error': str(e)})
 
 # ============================================
-# === GESTIONE CHIUSURA SICURA ===
+# === ROUTE PER CHIUSURA SICURA DAL WEB ===
+# ============================================
+
+@app.route('/api/shutdown', methods=['POST'])
+def shutdown_server():
+    """Ferma il server e tutti i processi in modo sicuro (chiamata dal web)"""
+    print("\n" + "="*60)
+    print("🛑 ARRESTO RICHIESTO DAL WEB")
+    print("="*60)
+    
+    def shutdown():
+        import time
+        time.sleep(1)
+        
+        print("[✓] Arresto server Flask...")
+        
+        # Ferma il monitor manager
+        try:
+            monitor_manager.stop()
+            print("[✓] Monitor fermato")
+        except Exception as e:
+            print(f"[!] Errore fermo monitor: {e}")
+        
+        # Pulisci file temporanei
+        try:
+            subprocess.run("rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe /tmp/web_decrypted.txt /tmp/web_encrypted.rfe /tmp/web_sign.txt /tmp/web_sign.txt.rsg /tmp/web_verify.txt /tmp/web_verify.txt.rsg", shell=True, capture_output=True)
+            print("[✓] File temporanei puliti")
+        except Exception as e:
+            print(f"[!] Errore pulizia file temporanei: {e}")
+        
+        print("="*60)
+        print("✅ Server fermato correttamente")
+        print("="*60)
+        
+        # Ferma il server Flask
+        os._exit(0)
+    
+    # Avvia lo shutdown in un thread separato
+    threading.Thread(target=shutdown, daemon=True).start()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Server in arresto...'
+    })
+
+# ============================================
+# === GESTIONE CHIUSURA SICURA (Ctrl+C) ===
 # ============================================
 
 def signal_handler(sig, frame):
