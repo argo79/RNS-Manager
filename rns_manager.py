@@ -1556,6 +1556,8 @@ def open_browser():
 # ============================================
 
 if __name__ == '__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
     # Registra il gestore di segnali per chiusura sicura
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
