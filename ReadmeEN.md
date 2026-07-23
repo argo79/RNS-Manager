@@ -107,6 +107,7 @@ Cache and downloads:
 
     ~/.rns_manager/Downloads/ - Processed files
 
+---
 
 <h3>🎮 Usage</h3>
 
