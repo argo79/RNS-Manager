@@ -62,6 +62,10 @@ pip install rns
 # Avvia il server
 python3 rns_manager.py
 
+oppure
+
+./dist/rns_manager
+
 
 Poi apri il browser su:
 
@@ -228,6 +232,11 @@ pip install -r requirements.txt --break-system-packages
 
 # Avvia il server
 python3 rns_manager.py
+
+oppure
+
+./dist/rns_manager
+
 </code></pre>
 <p>
     Aprire il browser su Android e puntare su
