@@ -26,7 +26,6 @@ import modules.rns_monitor as rns_monitor
 # ============================================
 # === LEGGI VERSIONE DA version.py ===
 # ============================================
-# All'inizio, dopo aver importato version
 try:
     from version import APP_VERSION, APP_NAME, APP_AUTHOR, APP_URL, DONATION_ADDRESSES
 except ImportError:
@@ -36,18 +35,79 @@ except ImportError:
     APP_URL = "https://github.com/argo79/RNS-Manager"
     DONATION_ADDRESSES = {}
 
-
-
 print(f"[✓] Versione: {APP_VERSION}")
 
 # ============================================
-# === APP FLASK ===
+# === UTILITY PER TROVARE PERCORSI ===
 # ============================================
 
-app = Flask(__name__)
+def get_base_dir():
+    """Restituisce la directory dove si trova l'eseguibile o lo script."""
+    if getattr(sys, 'frozen', False):
+        # Siamo in un eseguibile PyInstaller (.run)
+        return os.path.dirname(sys.executable)
+    else:
+        # Siamo in uno script Python normale
+        return os.path.dirname(os.path.abspath(__file__))
 
+def get_rnid_path():
+    """Restituisce il percorso del comando rnid."""
+    return shutil.which('rnid') or 'rnid'
+
+def get_rnpath_path():
+    """Restituisce il percorso del comando rnpath."""
+    return shutil.which('rnpath') or 'rnpath'
+
+def get_rnprobe_path():
+    """Restituisce il percorso del comando rnprobe."""
+    return shutil.which('rnprobe') or 'rnprobe'
+
+def get_rnstatus_path():
+    """Restituisce il percorso del comando rnstatus."""
+    return shutil.which('rnstatus') or 'rnstatus'
+
+
+def check_rns_commands():
+    """Verifica che i comandi RNS essenziali siano disponibili."""
+    missing = []
+    commands = {
+        'rnid': get_rnid_path(),
+        'rnpath': get_rnpath_path(),
+        'rnprobe': get_rnprobe_path(),
+        'rnstatus': get_rnstatus_path()
+    }
+    
+    for cmd, path in commands.items():
+        # Se il percorso è solo il nome del comando (senza percorso assoluto) e non esiste come eseguibile
+        if path == cmd and shutil.which(cmd) is None:
+            missing.append(cmd)
+    
+    return missing
+
+def print_rns_warning(missing_commands):
+    """Stampa un avviso dettagliato se mancano i comandi RNS."""
+    print("\n" + "=" * 60)
+    print("⚠️  ATTENZIONE: Comandi RNS non trovati!")
+    print("=" * 60)
+    print("\nI seguenti comandi non sono disponibili nel sistema:")
+    for cmd in missing_commands:
+        print(f"  ❌ {cmd}")
+    print("\nPer far funzionare correttamente l'applicazione, è necessario")
+    print("installare Reticulum Network Stack.")
+    print("\n👉 Per installare, esegui:")
+    print("    pip install rns")
+    print("\nOppure, se usi un ambiente virtuale:")
+    print("    source venv/bin/activate")
+    print("    pip install rns")
+    print("\nDopo l'installazione, riavvia l'applicazione.")
+    print("=" * 60)
+    print()
+
+# ============================================
 # === CARTELLA LOCALE DI ESECUZIONE ===
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# ============================================
+
+BASE_DIR = get_base_dir()
 LOCAL_TMP = os.path.join(BASE_DIR, "tmp")
 LOCAL_DOWNLOADS = os.path.join(BASE_DIR, "downloads")
 LOCAL_CACHE = os.path.join(BASE_DIR, "cache")
@@ -62,7 +122,10 @@ print(f"[DEBUG] LOCAL_TMP: {LOCAL_TMP}")
 print(f"[DEBUG] LOCAL_DOWNLOADS: {LOCAL_DOWNLOADS}")
 print(f"[DEBUG] LOCAL_CACHE: {LOCAL_CACHE}")
 
+# ============================================
 # === PERCORSI CONFIGURATI DALL'UTENTE ===
+# ============================================
+
 USER_DIRECTORIES = {
     'reticulum': "~/.reticulum",
     'nomadnet': "~/.nomadnetwork", 
@@ -97,6 +160,12 @@ CACHE_DIR = LOCAL_CACHE
 
 print(f"[✓] Downloads: {DOWNLOADS_DIR}")
 print(f"[✓] Cache: {CACHE_DIR}")
+
+# ============================================
+# === APP FLASK ===
+# ============================================
+
+app = Flask(__name__)
 
 # ============================================
 # === INIZIALIZZA MONITOR RNS ===
@@ -225,14 +294,15 @@ def monitor_reset_all():
 # === TUTTE LE ROUTE IDENTITY MANAGER ===
 # ============================================
 
-# Nella route index:
 @app.route('/')
 def index():
+    missing = check_rns_commands()
     return render_template('index.html', 
                          version=APP_VERSION,
                          author=APP_AUTHOR,
                          repo_url=APP_URL,
-                         donations=DONATION_ADDRESSES)
+                         donations=DONATION_ADDRESSES,
+                         rns_missing=missing)
 
 @app.route('/api/rnid', methods=['POST'])
 def execute_rnid():
@@ -252,8 +322,9 @@ def execute_rnid():
             if parts[0] == 'rnid':
                 parts = parts[1:]
             
+            rnid_cmd = get_rnid_path()
             result = subprocess.run(
-                ['rnid'] + parts,
+                [rnid_cmd] + parts,
                 capture_output=True,
                 text=True,
                 timeout=30
@@ -352,8 +423,9 @@ def list_identities():
                         }
                         
                         try:
+                            rnid_cmd = get_rnid_path()
                             result = subprocess.run(
-                                ['rnid', '-i', item_path, '--print-identity'],
+                                [rnid_cmd, '-i', item_path, '--print-identity'],
                                 capture_output=True,
                                 text=True,
                                 timeout=3
@@ -374,7 +446,7 @@ def list_identities():
                             for aspect in aspects_to_check:
                                 try:
                                     hash_result = subprocess.run(
-                                        ['rnid', '-i', item_path, '-H', aspect],
+                                        [rnid_cmd, '-i', item_path, '-H', aspect],
                                         capture_output=True,
                                         text=True,
                                         timeout=2
@@ -469,8 +541,9 @@ def import_identity_file():
             os.remove(dest_path)
             return jsonify({'success': False, 'error': f'File di {file_size} bytes, deve essere 64 bytes'})
         
+        rnid_cmd = get_rnid_path()
         result = subprocess.run(
-            ['rnid', '-i', dest_path, '--print-identity'],
+            [rnid_cmd, '-i', dest_path, '--print-identity'],
             capture_output=True,
             text=True,
             timeout=5
@@ -553,7 +626,7 @@ def import_identity_data():
         
         print(f"[DEBUG] Identity salvata in {dest_path} ({len(identity_bytes)} bytes)")
         
-        verify_cmd = ['rnid', '-i', dest_path, '--print-identity']
+        verify_cmd = [get_rnid_path(), '-i', dest_path, '--print-identity']
         if actual_is_private:
             verify_cmd.append('-P')
         
@@ -614,7 +687,8 @@ def export_identity():
         if file_size != 64:
             return jsonify({'success': False, 'error': f'File di {file_size} bytes, deve essere 64 bytes'})
         
-        cmd = ['rnid', '-i', identity_path]
+        rnid_cmd = get_rnid_path()
+        cmd = [rnid_cmd, '-i', identity_path]
         
         if export_private:
             cmd.append('-X')
@@ -704,8 +778,9 @@ def generate_identity():
         
         dest_path = os.path.join(RNS_MANAGER_STORAGE, name)
         
+        rnid_cmd = get_rnid_path()
         result = subprocess.run(
-            ['rnid', '-g', dest_path, '--print-identity', '-P'],
+            [rnid_cmd, '-g', dest_path, '--print-identity', '-P'],
             capture_output=True,
             text=True,
             timeout=10
@@ -745,8 +820,9 @@ def get_identity_info():
         if file_size != 64:
             return jsonify({'success': False, 'error': f'File di {file_size} bytes, deve essere 64 bytes'})
         
+        rnid_cmd = get_rnid_path()
         result = subprocess.run(
-            ['rnid', '-i', identity_path, '--print-identity', '-P'],
+            [rnid_cmd, '-i', identity_path, '--print-identity', '-P'],
             capture_output=True,
             text=True,
             timeout=5
@@ -769,7 +845,7 @@ def get_identity_info():
         
         if aspect and aspect in rns_monitor.RNS_ASPECTS:
             hash_result = subprocess.run(
-                ['rnid', '-i', identity_path, '-H', aspect],
+                [rnid_cmd, '-i', identity_path, '-H', aspect],
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -829,11 +905,12 @@ def encrypt_text():
             f.write(text)
         
         # Cifra usando rnid
+        rnid_cmd = get_rnid_path()
         if identity_path.startswith('public:'):
             rns_hash = identity_path.replace('public:', '')
-            cmd = ['rnid', '-R', '-i', rns_hash, '-e', temp_input]
+            cmd = [rnid_cmd, '-R', '-i', rns_hash, '-e', temp_input]
         else:
-            cmd = ['rnid', '-i', identity_path, '-e', temp_input]
+            cmd = [rnid_cmd, '-i', identity_path, '-e', temp_input]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
@@ -894,7 +971,8 @@ def decrypt_text():
             subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
             return jsonify({'success': False, 'error': f'Base64 non valido: {str(e)}'})
         
-        cmd = ['rnid', '-i', identity_path, '-d', temp_input, '-f']
+        rnid_cmd = get_rnid_path()
+        cmd = [rnid_cmd, '-i', identity_path, '-d', temp_input, '-f']
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
         if result.returncode != 0:
@@ -947,7 +1025,8 @@ def sign_text():
         with open(temp_file, 'w') as f:
             f.write(text)
         
-        cmd = ['rnid', '-i', identity_path, '-s', temp_file, '-f']
+        rnid_cmd = get_rnid_path()
+        cmd = [rnid_cmd, '-i', identity_path, '-s', temp_file, '-f']
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
         if result.returncode != 0:
@@ -963,7 +1042,7 @@ def sign_text():
         sig_base64 = base64.b64encode(sig_bytes).decode('ascii')
         
         hash_result = subprocess.run(
-            ['rnid', '-i', identity_path, '--print-identity'],
+            [rnid_cmd, '-i', identity_path, '--print-identity'],
             capture_output=True,
             text=True,
             timeout=5
@@ -1023,11 +1102,12 @@ def verify_signature():
             subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
             return jsonify({'success': False, 'error': f'Firma base64 non valida: {str(e)}'})
         
+        rnid_cmd = get_rnid_path()
         if identity_path.startswith('public:'):
             rns_hash = identity_path.replace('public:', '')
-            cmd = ['rnid', '-R', '-i', rns_hash, '-V', temp_sig]
+            cmd = [rnid_cmd, '-R', '-i', rns_hash, '-V', temp_sig]
         else:
-            cmd = ['rnid', '-i', identity_path, '-V', temp_sig]
+            cmd = [rnid_cmd, '-i', identity_path, '-V', temp_sig]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
@@ -1125,8 +1205,9 @@ def cleanup_temp_file():
 @app.route('/api/rns/status')
 def rns_status():
     try:
+        rnstatus_cmd = get_rnstatus_path()
         result = subprocess.run(
-            ['rnstatus'],
+            [rnstatus_cmd],
             capture_output=True,
             text=True,
             timeout=10
@@ -1146,11 +1227,12 @@ def rns_paths():
         
         print(f"[DEBUG] rnpath richiesto per destinazione: '{destination}'")
         
+        rnpath_cmd = get_rnpath_path()
         if destination and destination.strip():
-            cmd = ['rnpath', destination.strip()]
+            cmd = [rnpath_cmd, destination.strip()]
             print(f"[DEBUG] Esecuzione comando: {' '.join(cmd)}")
         else:
-            cmd = ['rnpath']
+            cmd = [rnpath_cmd]
             print(f"[DEBUG] Esecuzione comando: rnpath (senza argomenti)")
         
         result = subprocess.run(
@@ -1198,7 +1280,8 @@ def rns_probe():
         if not destination:
             return jsonify({'success': False, 'error': 'Nessuna destinazione specificata'})
         
-        cmd = ['rnprobe', aspect, destination]
+        rnprobe_cmd = get_rnprobe_path()
+        cmd = [rnprobe_cmd, aspect, destination]
         
         print(f"[DEBUG] Esecuzione probe: {' '.join(cmd)}")
         
@@ -1249,8 +1332,9 @@ def rns_probe_aspect():
         if aspect not in rns_monitor.RNS_ASPECTS:
             return jsonify({'success': False, 'error': f'Aspect non valido: {aspect}'})
         
+        rnid_cmd = get_rnid_path()
         hash_result = subprocess.run(
-            ['rnid', '-i', identity_path, '-H', aspect],
+            [rnid_cmd, '-i', identity_path, '-H', aspect],
             capture_output=True,
             text=True,
             timeout=5
@@ -1268,8 +1352,9 @@ def rns_probe_aspect():
         if not dest_hash:
             return jsonify({'success': False, 'error': 'Hash non trovato'})
         
+        rnprobe_cmd = get_rnprobe_path()
         probe_result = subprocess.run(
-            ['rnprobe', dest_hash],
+            [rnprobe_cmd, dest_hash],
             capture_output=True,
             text=True,
             timeout=30
@@ -1295,7 +1380,8 @@ def rns_paths_blackhole():
         if not identity_hash:
             return jsonify({'success': False, 'error': 'Nessuna identità specificata'})
         
-        cmd = ['rnpath', '-p', identity_hash]
+        rnpath_cmd = get_rnpath_path()
+        cmd = [rnpath_cmd, '-p', identity_hash]
         
         print(f"[DEBUG] Esecuzione rnpath -p per identità: {identity_hash}")
         
@@ -1336,6 +1422,7 @@ def find_identity_by_hash():
         if MESHCHAT_STORAGE and os.path.exists(MESHCHAT_STORAGE):
             storage_dirs.append((MESHCHAT_STORAGE, 'meshchat'))
         
+        rnid_cmd = get_rnid_path()
         for storage_path, app_name in storage_dirs:
             if storage_path and os.path.exists(storage_path):
                 for item in os.listdir(storage_path):
@@ -1343,7 +1430,7 @@ def find_identity_by_hash():
                     
                     if os.path.isfile(item_path) and os.path.getsize(item_path) == 64:
                         result = subprocess.run(
-                            ['rnid', '-i', item_path, '--print-identity'],
+                            [rnid_cmd, '-i', item_path, '--print-identity'],
                             capture_output=True,
                             text=True,
                             timeout=3
@@ -1465,6 +1552,13 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    # Controlla i comandi RNS
+    missing = check_rns_commands()
+    if missing:
+        print_rns_warning(missing)
+    else:
+        print("✅ Tutti i comandi RNS trovati.")
+
     print("=" * 60)
     print("RNID Web Interface + RNS Aspect Monitor")
     print("=" * 60)

@@ -324,6 +324,15 @@
             </div>
         </header>
         
+        {% if rns_missing %}
+        <div style="background:#442222; border:1px solid #ff4444; color:#ff8888; padding:10px; margin-bottom:15px; border-radius:4px; text-align:center; font-size:13px;">
+            ⚠️ <strong>Comandi RNS mancanti:</strong> {{ rns_missing|join(', ') }}. 
+            Installa Reticulum con <code style="background:#222; padding:2px 6px; border-radius:3px;">pip install rns</code> 
+            e riavvia l'applicazione.
+        </div>
+        {% endif %}
+
+        
         <div class="row">
             <div class="col">
                 <div class="section">
