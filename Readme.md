@@ -282,12 +282,32 @@ Distribuito sotto licenza MIT.
 
 ---
 
-<h3>🙏 Ringraziamenti
+<h3>🙏 Ringraziamenti</h3>
 
-    Reticulum Network Stack - Il fantastico stack di rete
+<p>Questo progetto non sarebbe stato possibile senza il lavoro di:</p>
 
-    Flask - Framework web leggero
+<ul>
+  <li>
+    <strong>Reticulum Network Stack</strong> - Il fantastico stack di rete decentralizzato che rende possibile tutto questo.<br>
+    <a href="https://reticulum.network/">🌐 reticulum.network</a> · 
+    <a href="https://github.com/markqvist/Reticulum">📦 GitHub</a>
+  </li>
+  <li>
+    <strong>Flask</strong> - Il framework web leggero e potente che alimenta l'interfaccia.<br>
+    <a href="https://flask.palletsprojects.com/">🌐 flask.palletsprojects.com</a> · 
+    <a href="https://github.com/pallets/flask">📦 GitHub</a>
+  </li>
+  <li>
+    <strong>Mark Qvist</strong> - Per aver creato Reticulum e tutto l'ecosistema che lo circonda. 🙌
+  </li>
+  <li>
+    <strong>La comunità Reticulum</strong> - Per il supporto, i test e le idee che hanno plasmato questo strumento.
+  </li>
+</ul>
 
+<p align="center">
+  <i>❤️ Grazie a tutti coloro che contribuiscono al progetto, segnalano bug e suggeriscono miglioramenti!</i>
+</p>
 
 <h3>📧 Contatto</h3>
 
