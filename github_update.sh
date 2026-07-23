@@ -108,15 +108,24 @@ read -p "Scelta (1-3): " RELEASE_CHOICE
 
 if [ "$RELEASE_CHOICE" == "1" ] || [ "$RELEASE_CHOICE" == "2" ]; then
     
-    # Mostra versione attuale e precompila
     echo ""
     echo -e "${BLUE}📌 Versione attuale: v${CURRENT_VERSION}${NC}"
-    echo -e "${GREEN}   Prossima: $NEXT_VERSION${NC}"
-    echo ""
     
-    read -p "📌 Versione (es. v1.0.0) [default: $NEXT_VERSION]: " RELEASE_VERSION
+    # Determina versione di default in base alla scelta
+    if [ "$RELEASE_CHOICE" == "1" ]; then
+        # Nuova release -> prossima versione
+        DEFAULT_VERSION="$NEXT_VERSION"
+        echo -e "${GREEN}   Prossima: $NEXT_VERSION${NC}"
+    else
+        # Sovrascrivi -> stessa versione
+        DEFAULT_VERSION="v$CURRENT_VERSION"
+        echo -e "${YELLOW}   (sovrascrivi v$CURRENT_VERSION)${NC}"
+    fi
+    
+    echo ""
+    read -p "📌 Versione [default: $DEFAULT_VERSION]: " RELEASE_VERSION
     if [ -z "$RELEASE_VERSION" ]; then
-        RELEASE_VERSION="$NEXT_VERSION"
+        RELEASE_VERSION="$DEFAULT_VERSION"
     fi
     
     # Precompila titolo con versione
@@ -127,7 +136,8 @@ if [ "$RELEASE_CHOICE" == "1" ] || [ "$RELEASE_CHOICE" == "2" ]; then
     fi
     
     # Precompila note con changelog
-    DEFAULT_NOTES="## 🚀 Novità v$RELEASE_VERSION
+    if [ "$RELEASE_CHOICE" == "1" ]; then
+        DEFAULT_NOTES="## 🚀 Novità v$RELEASE_VERSION
 
 ### ✨ Aggiunte
 - 
@@ -142,6 +152,21 @@ if [ "$RELEASE_CHOICE" == "1" ] || [ "$RELEASE_CHOICE" == "2" ]; then
 - Aggiornate dipendenze
 
 ---"
+    else
+        DEFAULT_NOTES="## 🔄 Sovrascrittura v$RELEASE_VERSION
+
+### ✨ Aggiunte
+- 
+
+### 🐛 Bug Fix
+- 
+
+### 🔧 Miglioramenti
+- 
+
+---"
+    fi
+    
     echo ""
     echo -e "${BLUE}📝 Note release (modifica se necessario):${NC}"
     echo -e "${YELLOW}   (premi Invio per usare il template)${NC}"
