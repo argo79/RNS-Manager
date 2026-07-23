@@ -1371,16 +1371,16 @@
             document.getElementById('cryptoEncryptedResult').style.display = 'none';
             document.getElementById('cryptoDecryptedResult').style.display = 'none';
             
-            const cleanCommand = 'rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe';
+            const cleanCommand = 'rm -f ./tmp/web_input.txt ./tmp/web_input.txt.rfe';
             const escapedText = text.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-            const writeCommand = `echo "${escapedText}" > /tmp/web_input.txt`;
+            const writeCommand = `echo "${escapedText}" > ./tmp/web_input.txt`;
             
             let command = '';
             let rnsHash = null;
             
             if (selectedIdentity.startsWith('public:')) {
                 rnsHash = selectedIdentity.replace('public:', '');
-                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e /tmp/web_input.txt -f`;
+                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e ./tmp/web_input.txt -f`;
             } else {
                 showOutput('🔍 Estraggo hash RNS pubblico...', 'warning');
                 
@@ -1408,7 +1408,7 @@
                     return;
                 }
                 
-                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e /tmp/web_input.txt -f`;
+                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e ./tmp/web_input.txt -f`;
             }
             
             document.getElementById('commandInput').value = command;
@@ -1419,7 +1419,7 @@
                 return;
             }
             
-            const readCommand = `base64 /tmp/web_input.txt.rfe`;
+            const readCommand = `base64 ./tmp/web_input.txt.rfe`;
             document.getElementById('commandInput').value = readCommand;
             showOutput('📖 Lettura file cifrato...', 'warning');
             const result2 = await executeCommand();
@@ -1458,7 +1458,7 @@
             fetch('/api/rnid', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command: 'rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe' })
+                body: JSON.stringify({ command: 'rm -f ./tmp/web_input.txt ./tmp/web_input.txt.rfe' })
             }).catch(() => {});
         }
 
@@ -1485,10 +1485,10 @@
             }
             const hasSpaces = selectedIdentity.includes(' ');
             const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
-            const fullCommand = `rm -f /tmp/web_input.txt.rfe /tmp/web_input.txt && ` +
-                               `echo "${cleanInput}" | base64 -d > /tmp/web_input.txt.rfe && ` +
-                               `rnid -i ${cmdPath} -d /tmp/web_input.txt.rfe -f && ` +
-                               `cat /tmp/web_input.txt`;
+            const fullCommand = `rm -f ./tmp/web_input.txt.rfe ./tmp/web_input.txt && ` +
+                               `echo "${cleanInput}" | base64 -d > ./tmp/web_input.txt.rfe && ` +
+                               `rnid -i ${cmdPath} -d ./tmp/web_input.txt.rfe -f && ` +
+                               `cat ./tmp/web_input.txt`;
             showOutput('🔓 Decifratura in corso...', 'warning');
             try {
                 const response = await fetch('/api/rnid', {
@@ -1500,7 +1500,7 @@
                 fetch('/api/rnid', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: 'rm -f /tmp/web_input.txt.rfe /tmp/web_input.txt' })
+                    body: JSON.stringify({ command: 'rm -f ./tmp/web_input.txt.rfe ./tmp/web_input.txt' })
                 }).catch(() => {});
                 if (data.success) {
                     const lines = data.output.split('\n');
@@ -1510,18 +1510,18 @@
                         if (trimmed && 
                             !trimmed.includes('Loaded Identity') && 
                             !trimmed.includes('File') && 
-                            !trimmed.includes('/tmp/') &&
+                            !trimmed.includes('./tmp/') &&
                             !trimmed.includes('rm -f') &&
                             !trimmed.includes('base64') &&
                             !trimmed.includes('echo') &&
                             !trimmed.includes('rnid -i') &&
-                            !trimmed.includes('cat /tmp/web_input.txt')) {
+                            !trimmed.includes('cat ./tmp/web_input.txt')) {
                             decryptedText += (decryptedText ? '\n' : '') + trimmed;
                         }
                     }
                     if (!decryptedText) {
                         for (let i = lines.length - 1; i >= 0; i--) {
-                            if (lines[i].trim() && !lines[i].includes('/tmp/')) {
+                            if (lines[i].trim() && !lines[i].includes('./tmp/')) {
                                 decryptedText = lines[i].trim();
                                 break;
                             }
@@ -1804,7 +1804,7 @@
             document.getElementById('cryptoDecryptedOutput').value = '';
             document.getElementById('cryptoEncryptedResult').style.display = 'none';
             document.getElementById('cryptoDecryptedResult').style.display = 'none';
-            const cleanCommand = 'rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe /tmp/web_input.txt';
+            const cleanCommand = 'rm -f ./tmp/web_input.txt ./tmp/web_input.txt.rfe ./tmp/web_input.txt';
             fetch('/api/rnid', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

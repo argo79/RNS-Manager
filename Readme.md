@@ -48,15 +48,15 @@ Questo progetto fornisce un'interfaccia web intuitiva per:
 
 ### Installazione
 
-```bash
-# Clona il repository
-git clone git@github.com:argo79/RNS-Manager.git
+```
+# Clona il repository via HTTPS
+git clone https://github.com/argo79/RNS-Manager.git
 cd RNS-Manager
 
 # Installa le dipendenze
 pip install flask
 
-# R省i sicuro che Reticulum sia installato
+# Assicurati che Reticulum sia installato
 pip install rns
 
 # Avvia il server
@@ -74,17 +74,22 @@ Poi apri il browser su:
 <h3>📁 Struttura del progetto</h3>
 
 ```ini
-rns-identity-manager/
-├── manager.py                 # Server Flask principale
-├── Readme.md                  # This file
+RNS-Manager/
+├── rns_manager.py           # Server Flask principale
+├── requirements.txt
+├── README.md                # Questo file
 ├── modules/
-│   ├── rns_monitor.py             # Modulo RNS Monitor
+│   └── rns_monitor.py       # Modulo RNS Monitor
 ├── static/
-│   └── rns_monitor.css        # Stili CSS
+│   └── rns_monitor.css      # Stili CSS
 ├── templates/
-│   ├── index.html              # Identity Manager
-│   └── monitor.html            # Aspect Monitor
-└── README.md
+│   ├── index.html           # Identity Manager
+│   └── monitor.html         # Aspect Monitor
+├── tmp/                     # File temporanei (creato automaticamente)
+│   └── uploads/             # Upload file
+├── downloads/               # Downloads (creato automaticamente)
+├── cache/                   # Cache (creato automaticamente)
+└── rns_monitor.sock         # Socket UNIX (creato automaticamente)
 ```
 
 
@@ -213,9 +218,14 @@ Comandi RNS
     Entrare su Termux e scaricare il repo!
 </p>
 <pre><code class="language-bash">
+# Clona il repository via HTTPS
 git clone https://github.com/argo79/RNS-Manager.git
 cd RNS-Manager/
+
+# Installa le dipendenze
 pip install -r requirements.txt --break-system-packages
+
+# Avvia il server
 python3 rns_manager.py
 </code></pre>
 <p>

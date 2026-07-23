@@ -25,6 +25,22 @@ import modules.rns_monitor as rns_monitor
 
 app = Flask(__name__)
 
+# === CARTELLA LOCALE DI ESECUZIONE ===
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_TMP = os.path.join(BASE_DIR, "tmp")
+LOCAL_DOWNLOADS = os.path.join(BASE_DIR, "downloads")
+LOCAL_CACHE = os.path.join(BASE_DIR, "cache")
+
+# Crea tutte le cartelle necessarie
+os.makedirs(LOCAL_TMP, exist_ok=True)
+os.makedirs(LOCAL_DOWNLOADS, exist_ok=True)
+os.makedirs(LOCAL_CACHE, exist_ok=True)
+
+print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
+print(f"[DEBUG] LOCAL_TMP: {LOCAL_TMP}")
+print(f"[DEBUG] LOCAL_DOWNLOADS: {LOCAL_DOWNLOADS}")
+print(f"[DEBUG] LOCAL_CACHE: {LOCAL_CACHE}")
+
 # === PERCORSI CONFIGURATI DALL'UTENTE ===
 USER_DIRECTORIES = {
     'reticulum': "~/.reticulum",
@@ -54,15 +70,21 @@ for key, path in USER_DIRECTORIES.items():
 
 globals().update(execution_vars)
 
-# Crea directory per Downloads e Cache
-DOWNLOADS_DIR = os.path.expanduser("~/.rns_manager/Downloads")
-CACHE_DIR = os.path.expanduser("~/.rns_manager/Cache")
-os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-os.makedirs(CACHE_DIR, exist_ok=True)
+# === USA CARTELLE LOCALI PER DOWNLOAD E CACHE ===
+DOWNLOADS_DIR = LOCAL_DOWNLOADS
+CACHE_DIR = LOCAL_CACHE
+
+print(f"[✓] Downloads: {DOWNLOADS_DIR}")
+print(f"[✓] Cache: {CACHE_DIR}")
 
 # ============================================
 # === INIZIALIZZA MONITOR RNS ===
 # ============================================
+
+# Socket in cartella locale
+if hasattr(rns_monitor, 'SOCKET_PATH'):
+    rns_monitor.SOCKET_PATH = os.path.join(BASE_DIR, "rns_monitor.sock")
+    print(f"[✓] Socket path: {rns_monitor.SOCKET_PATH}")
 
 # Crea istanza del monitor manager
 monitor_manager = rns_monitor.RNSMonitorManager(
@@ -772,8 +794,8 @@ def encrypt_text():
         if not text:
             return jsonify({'success': False, 'error': 'Nessun testo da cifrare'})
         
-        temp_input = "/tmp/web_input.txt"
-        temp_output = "/tmp/web_input.txt.rfe"
+        temp_input = os.path.join(LOCAL_TMP, "web_input.txt")
+        temp_output = os.path.join(LOCAL_TMP, "web_input.txt.rfe")
         
         subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
         
@@ -833,9 +855,8 @@ def decrypt_text():
         
         clean_input = encrypted_text.strip()
         
-        # 🔥 USA .rfe PER IL FILE CIFRATO!
-        temp_input = "/tmp/web_encrypted.rfe"
-        temp_output = "/tmp/web_decrypted.txt"
+        temp_input = os.path.join(LOCAL_TMP, "web_encrypted.rfe")
+        temp_output = os.path.join(LOCAL_TMP, "web_decrypted.txt")
         
         subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
         
@@ -847,7 +868,6 @@ def decrypt_text():
             subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
             return jsonify({'success': False, 'error': f'Base64 non valido: {str(e)}'})
         
-        # 🔥 DECIFRA CON .rfe
         cmd = ['rnid', '-i', identity_path, '-d', temp_input, '-f']
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
@@ -893,8 +913,8 @@ def sign_text():
         if identity_path.startswith('public:'):
             return jsonify({'success': False, 'error': 'Per FIRMARE serve un\'identità PRIVATA!'})
         
-        temp_file = "/tmp/web_sign.txt"
-        temp_sig = "/tmp/web_sign.txt.rsg"
+        temp_file = os.path.join(LOCAL_TMP, "web_sign.txt")
+        temp_sig = os.path.join(LOCAL_TMP, "web_sign.txt.rsg")
         
         subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
         
@@ -961,8 +981,8 @@ def verify_signature():
         if not signature:
             return jsonify({'success': False, 'error': 'Nessuna firma da verificare'})
         
-        temp_file = "/tmp/web_verify.txt"
-        temp_sig = "/tmp/web_verify.txt.rsg"
+        temp_file = os.path.join(LOCAL_TMP, "web_verify.txt")
+        temp_sig = os.path.join(LOCAL_TMP, "web_verify.txt.rsg")
         
         subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
         
@@ -1033,7 +1053,8 @@ def upload_temp_file():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
         
-        temp_dir = os.path.join(tempfile.gettempdir(), 'rnid_web')
+        # USA LA CARTELLA LOCALE
+        temp_dir = os.path.join(LOCAL_TMP, 'uploads')
         os.makedirs(temp_dir, exist_ok=True)
         
         unique_id = str(uuid.uuid4())[:8]
@@ -1049,8 +1070,8 @@ def upload_temp_file():
             'success': True,
             'temp_path': temp_path,
             'original_name': original_name,
-            'output_dir': DOWNLOADS_DIR,
-            'message': 'File salvato temporaneamente'
+            'output_dir': LOCAL_DOWNLOADS,
+            'message': f'File salvato in: {temp_path}'
         })
         
     except Exception as e:
@@ -1349,8 +1370,9 @@ def shutdown_server():
         
         # Pulisci file temporanei
         try:
-            subprocess.run("rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe /tmp/web_decrypted.txt /tmp/web_encrypted.rfe /tmp/web_sign.txt /tmp/web_sign.txt.rsg /tmp/web_verify.txt /tmp/web_verify.txt.rsg", shell=True, capture_output=True)
-            print("[✓] File temporanei puliti")
+            if os.path.exists(LOCAL_TMP):
+                shutil.rmtree(LOCAL_TMP)
+                print(f"[✓] Cartella temporanea pulita: {LOCAL_TMP}")
         except Exception as e:
             print(f"[!] Errore pulizia file temporanei: {e}")
         
@@ -1388,8 +1410,9 @@ def signal_handler(sig, frame):
     
     # Pulisci file temporanei
     try:
-        subprocess.run("rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe /tmp/web_decrypted.txt /tmp/web_encrypted.rfe /tmp/web_sign.txt /tmp/web_sign.txt.rsg /tmp/web_verify.txt /tmp/web_verify.txt.rsg", shell=True, capture_output=True)
-        print("[✓] File temporanei puliti")
+        if os.path.exists(LOCAL_TMP):
+            shutil.rmtree(LOCAL_TMP)
+            print(f"[✓] Cartella temporanea pulita: {LOCAL_TMP}")
     except Exception as e:
         print(f"[!] Errore pulizia file temporanei: {e}")
     
@@ -1419,13 +1442,14 @@ if __name__ == '__main__':
     print("=" * 60)
     print("RNID Web Interface + RNS Aspect Monitor")
     print("=" * 60)
+    print(f"\n📁 Directory temporanea locale: {LOCAL_TMP}")
+    print(f"📁 Downloads: {LOCAL_DOWNLOADS}")
+    print(f"📁 Cache: {LOCAL_CACHE}")
     print("\n📁 Directory configurate:")
     for key, path in USER_DIRECTORIES.items():
         expanded = os.path.expanduser(path)
         print(f"  {key}: {expanded}")
     
-    print(f"\n📁 Downloads: {DOWNLOADS_DIR}")
-    print(f"📁 Cache: {CACHE_DIR}")
     print("\n🌐 Accesso:")
     print(f"  http://localhost:5000/ - Identity Manager")
     print(f"  http://localhost:5000/monitor - Aspect Monitor")
