@@ -14,6 +14,9 @@ import json
 import re
 import multiprocessing
 import socket
+import signal
+import sys
+import webbrowser
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, render_template, Response, stream_with_context
 
@@ -1321,10 +1324,52 @@ def find_identity_by_hash():
         return jsonify({'success': False, 'error': str(e)})
 
 # ============================================
+# === GESTIONE CHIUSURA SICURA ===
+# ============================================
+
+def signal_handler(sig, frame):
+    """Gestisce Ctrl+C e SIGTERM per fermare il server in modo sicuro"""
+    print("\n" + "=" * 60)
+    print("🛑 Arresto server in corso...")
+    print("=" * 60)
+    
+    # Ferma il monitor manager
+    try:
+        monitor_manager.stop()
+        print("[✓] Monitor fermato")
+    except Exception as e:
+        print(f"[!] Errore fermo monitor: {e}")
+    
+    # Pulisci file temporanei
+    try:
+        subprocess.run("rm -f /tmp/web_input.txt /tmp/web_input.txt.rfe /tmp/web_decrypted.txt /tmp/web_encrypted.rfe /tmp/web_sign.txt /tmp/web_sign.txt.rsg /tmp/web_verify.txt /tmp/web_verify.txt.rsg", shell=True, capture_output=True)
+        print("[✓] File temporanei puliti")
+    except Exception as e:
+        print(f"[!] Errore pulizia file temporanei: {e}")
+    
+    print("=" * 60)
+    print("✅ Server fermato correttamente")
+    print("=" * 60)
+    sys.exit(0)
+
+def open_browser():
+    """Apre il browser dopo un breve ritardo"""
+    time.sleep(2)
+    try:
+        webbrowser.open('http://127.0.0.1:5000')
+        print("🌐 Browser aperto su http://127.0.0.1:5000")
+    except Exception as e:
+        print(f"[!] Impossibile aprire il browser: {e}")
+
+# ============================================
 # === AVVIO SERVER ===
 # ============================================
 
 if __name__ == '__main__':
+    # Registra il gestore di segnali per chiusura sicura
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     print("=" * 60)
     print("RNID Web Interface + RNS Aspect Monitor")
     print("=" * 60)
@@ -1338,11 +1383,17 @@ if __name__ == '__main__':
     print("\n🌐 Accesso:")
     print(f"  http://localhost:5000/ - Identity Manager")
     print(f"  http://localhost:5000/monitor - Aspect Monitor")
-    print("\n🚀 Avvio server...\n")
+    print("\n🚀 Avvio server...")
+    print("   Premi Ctrl+C per fermare\n")
+    
+    # Avvia il thread per aprire il browser
+    browser_thread = threading.Thread(target=open_browser, daemon=True)
+    browser_thread.start()
     
     try:
         app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False, threaded=True)
     except KeyboardInterrupt:
-        print("\n🛑 Arresto server...")
-        monitor_manager.stop()
-        print("✅ Server fermato")
+        signal_handler(signal.SIGINT, None)
+    except Exception as e:
+        print(f"\n[!] Errore imprevisto: {e}")
+        signal_handler(signal.SIGTERM, None)

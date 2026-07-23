@@ -1,0 +1,75 @@
+# Ambiente virtuale
+venv/
+env/
+.env/
+.venv/
+
+# Build e distribuzione
+build/
+dist/
+*.spec
+*.egg-info/
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.so
+
+# File eseguibili generati
+rns_manager
+rns_manager_linux
+rns_manager_mac
+rns_manager_windows.exe
+start_services.sh
+
+# Directory di sistema
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+
+# Directory specifiche dell'app
+.rns_manager/
+~/.rns_manager/
+Downloads/
+Cache/
+storage/
+
+# File di configurazione locali
+*.local
+*.secret
+*.key
+*.pem
+*.crt
+
+# Backup
+*.bak
+*.backup
+*.old
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# File di log
+logs/
+*.log
+
+# File temporanei
+/tmp/
+/tmp/*
+/rnid_web/
+
+# File di identità (se non vuoi condividerli)
+*.key
+*.rns
+*.identitygithub_update.sh
