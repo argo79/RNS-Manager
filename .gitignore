@@ -29,12 +29,20 @@ Thumbs.db
 *.tmp
 *.temp
 
-# Directory specifiche dell'app
+# Directory specifiche dell'app (cartelle locali create in esecuzione)
+tmp/
+downloads/
+cache/
+uploads/
+tmp/uploads/
+
+# Directory standard Reticulum (non sincronizzare)
 .rns_manager/
 ~/.rns_manager/
 Downloads/
 Cache/
 storage/
+*.rns_manager/
 
 # File di configurazione locali
 *.local
@@ -72,4 +80,11 @@ logs/
 # File di identità (se non vuoi condividerli)
 *.key
 *.rns
-*.identitygithub_update.sh
+*.identity
+
+# Script di aggiornamento locale (ignorato da git)
+github_update.sh
+
+# Socket UNIX
+*.sock
+rns_monitor.sock
