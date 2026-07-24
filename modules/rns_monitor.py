@@ -15,6 +15,12 @@ import sqlite3
 import sys
 from datetime import datetime, timedelta
 
+try:
+    multiprocessing.set_start_method('fork', force=True)
+except RuntimeError:
+    pass
+# ======================================
+
 # ============================================
 # === DETECTION SISTEMA OPERATIVO ===
 # ============================================
