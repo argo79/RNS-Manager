@@ -147,7 +147,18 @@
         "enter_command": "❌ Inserisci un comando!",
         "enter_output_filename": "❌ Inserisci un nome per il file output!",
         "private_badge": "PRIVATA",
-        "verify_badge": "VERIFICATA"
+        "verify_badge": "VERIFICATA",
+        "export_types_private": "PRIVATA",
+        "export_types_public": "PUBBLICA",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ Esportazione {format} {type}",
+        "export_result_copy_button": "📋 Copia {format}",
+        "export_result_private_warning": "⚠️ MANEGGIARE CON CURA!",
+        "export_result_private_label": "🔑 PRIVATE - DO NOT SHARE!",
+        "export_result_public_label": "🔓 PUBBLICA",
+        "export_result_error": "❌ {error}"
     },
     "en": {
         "title": "RNID Identity Manager {version}",
@@ -297,7 +308,18 @@
         "enter_command": "❌ Enter a command!",
         "enter_output_filename": "❌ Enter an output filename!",            
         "private_badge": "PRIVATE",
-        "verify_badge": "VERIFY"
+        "verify_badge": "VERIFY",
+        "export_types_private": "PRIVATE",
+        "export_types_public": "PUBLIC",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ Export {format} {type}",
+        "export_result_copy_button": "📋 Copy {format}",
+        "export_result_private_warning": "⚠️ HANDLE WITH CARE!",
+        "export_result_private_label": "🔑 PRIVATE - DO NOT SHARE!",
+        "export_result_public_label": "🔓 PUBLIC",
+        "export_result_error": "❌ {error}"
     },
     "fr": {
         "title": "RNID Identity Manager {version}",
@@ -447,7 +469,18 @@
         "enter_command": "❌ Entrez une commande!",
         "enter_output_filename": "❌ Entrez un nom de fichier de sortie!",
         "private_badge": "PRIVÉE",
-        "verify_badge": "VÉRIF"
+        "verify_badge": "VÉRIF",
+        "export_types_private": "PRIVÉE",
+        "export_types_public": "PUBLIQUE",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ Exportation {format} {type}",
+        "export_result_copy_button": "📋 Copier {format}",
+        "export_result_private_warning": "⚠️ À MANIPULER AVEC PRÉCAUTION!",
+        "export_result_private_label": "🔑 PRIVÉ - NE PAS PARTAGER!",
+        "export_result_public_label": "🔓 PUBLIC",
+        "export_result_error": "❌ {error}"
     },
     "es": {
         "title": "RNID Identity Manager {version}",
@@ -597,7 +630,18 @@
         "enter_command": "❌ ¡Ingrese un comando!",
         "enter_output_filename": "❌ ¡Ingrese un nombre de archivo de salida!",
         "private_badge": "PRIVADA",
-        "verify_badge": "VERIF"
+        "verify_badge": "VERIF",
+        "export_types_private": "PRIVADA",
+        "export_types_public": "PÚBLICA",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ Exportación {format} {type}",
+        "export_result_copy_button": "📋 Copiar {format}",
+        "export_result_private_warning": "⚠️ ¡MANEJAR CON CUIDADO!",
+        "export_result_private_label": "🔑 PRIVADO - ¡NO COMPARTIR!",
+        "export_result_public_label": "🔓 PÚBLICA",
+        "export_result_error": "❌ {error}"
     },
     "de": {
         "title": "RNID Identity Manager {version}",
@@ -747,7 +791,18 @@
         "enter_command": "❌ Geben Sie einen Befehl ein!",
         "enter_output_filename": "❌ Geben Sie einen Ausgabedateinamen ein!",
         "private_badge": "PRIVAT",
-        "verify_badge": "PRÜF"
+        "verify_badge": "PRÜF",
+        "export_types_private": "PRIVAT",
+        "export_types_public": "ÖFFENTLICH",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ {format}-Export {type}",
+        "export_result_copy_button": "📋 {format} kopieren",
+        "export_result_private_warning": "⚠️ VORSICHT!",
+        "export_result_private_label": "🔑 PRIVAT - NICHT TEILEN!",
+        "export_result_public_label": "🔓 ÖFFENTLICH",
+        "export_result_error": "❌ {error}"
     },
     "pt": {
         "title": "RNID Identity Manager {version}",
@@ -897,7 +952,18 @@
         "enter_command": "❌ Insira um comando!",
         "enter_output_filename": "❌ Insira um nome para o arquivo de saída!",
         "private_badge": "PRIVADA",
-        "verify_badge": "VERIF"
+        "verify_badge": "VERIF",
+        "export_types_private": "PRIVADA",
+        "export_types_public": "PÚBLICA",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ Exportação {format} {type}",
+        "export_result_copy_button": "📋 Copiar {format}",
+        "export_result_private_warning": "⚠️ MANUSEAR COM CUIDADO!",
+        "export_result_private_label": "🔑 PRIVADO - NÃO COMPARTILHAR!",
+        "export_result_public_label": "🔓 PÚBLICA",
+        "export_result_error": "❌ {error}"
     },
     "ru": {
         "title": "RNID Identity Manager {version}",
@@ -1047,7 +1113,18 @@
         "enter_command": "❌ Введите команду!",
         "enter_output_filename": "❌ Введите имя выходного файла!",
         "private_badge": "ЧАСТНАЯ",
-        "verify_badge": "ПРОВ"
+        "verify_badge": "ПРОВ",
+        "export_types_private": "ЧАСТНАЯ",
+        "export_types_public": "ПУБЛИЧНАЯ",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ Экспорт {format} {type}",
+        "export_result_copy_button": "📋 Копировать {format}",
+        "export_result_private_warning": "⚠️ ОСТОРОЖНО!",
+        "export_result_private_label": "🔑 ЧАСТНЫЙ - НЕ РАСПРОСТРАНЯТЬ!",
+        "export_result_public_label": "🔓 ПУБЛИЧНЫЙ",
+        "export_result_error": "❌ {error}"
     },
     "zh": {
         "title": "RNID Identity Manager {version}",
@@ -1197,7 +1274,18 @@
         "enter_command": "❌ 请输入命令！",
         "enter_output_filename": "❌ 请输入输出文件名！",
         "private_badge": "私有",
-        "verify_badge": "验证"
+        "verify_badge": "验证",
+        "export_types_private": "私有",
+        "export_types_public": "公共",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ 导出 {format} {type}",
+        "export_result_copy_button": "📋 复制 {format}",
+        "export_result_private_warning": "⚠️ 小心处理！",
+        "export_result_private_label": "🔑 私有 - 请勿分享！",
+        "export_result_public_label": "🔓 公共",
+        "export_result_error": "❌ {error}"
     },
     "ja": {
         "title": "RNID Identity Manager {version}",
@@ -1347,7 +1435,18 @@
         "enter_command": "❌ コマンドを入力してください！",
         "enter_output_filename": "❌ 出力ファイル名を入力してください！",
         "private_badge": "秘密",
-        "verify_badge": "検証"
+        "verify_badge": "検証",
+        "export_types_private": "秘密",
+        "export_types_public": "公開",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ {format} {type} エクスポート",
+        "export_result_copy_button": "📋 {format} コピー",
+        "export_result_private_warning": "⚠️ 注意！",
+        "export_result_private_label": "🔑 秘密 - 共有しないでください！",
+        "export_result_public_label": "🔓 公開",
+        "export_result_error": "❌ {error}"
     },
     "ar": {
         "title": "RNID Identity Manager {version}",
@@ -1497,7 +1596,18 @@
         "enter_command": "❌ أدخل أمراً!",
         "enter_output_filename": "❌ أدخل اسم ملف الإخراج!",
         "private_badge": "خاصة",
-        "verify_badge": "تحقق"
+        "verify_badge": "تحقق",
+        "export_types_private": "خاصة",
+        "export_types_public": "عامة",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ تصدير {format} {type}",
+        "export_result_copy_button": "📋 نسخ {format}",
+        "export_result_private_warning": "⚠️ تعامل بحذر!",
+        "export_result_private_label": "🔑 خاص - لا تشارك!",
+        "export_result_public_label": "🔓 عام",
+        "export_result_error": "❌ {error}"
     },
     "hi": {
         "title": "RNID Identity Manager {version}",
@@ -1647,7 +1757,18 @@
         "enter_command": "❌ एक कमांड दर्ज करें!",
         "enter_output_filename": "❌ आउटपुट फ़ाइल नाम दर्ज करें!",
         "private_badge": "निजी",
-        "verify_badge": "सत्यापन"
+        "verify_badge": "सत्यापन",
+        "export_types_private": "निजी",
+        "export_types_public": "सार्वजनिक",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ {format} {type} निर्यात",
+        "export_result_copy_button": "📋 {format} कॉपी करें",
+        "export_result_private_warning": "⚠️ सावधानी से संभालें!",
+        "export_result_private_label": "🔑 निजी - साझा न करें!",
+        "export_result_public_label": "🔓 सार्वजनिक",
+        "export_result_error": "❌ {error}"
     },
     "bn": {
         "title": "RNID Identity Manager {version}",
@@ -1797,7 +1918,18 @@
         "enter_command": "❌ একটি কমান্ড লিখুন!",
         "enter_output_filename": "❌ আউটপুট ফাইলের নাম লিখুন!",
         "private_badge": "ব্যক্তিগত",
-        "verify_badge": "যাচাই"
+        "verify_badge": "যাচাই",
+        "export_types_private": "ব্যক্তিগত",
+        "export_types_public": "পাবলিক",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ {format} {type} রপ্তানি",
+        "export_result_copy_button": "📋 {format} কপি করুন",
+        "export_result_private_warning": "⚠️ সাবধান!",
+        "export_result_private_label": "🔑 ব্যক্তিগত - শেয়ার করবেন না!",
+        "export_result_public_label": "🔓 পাবলিক",
+        "export_result_error": "❌ {error}"
     },
     "ur": {
         "title": "RNID Identity Manager {version}",
@@ -1947,7 +2079,18 @@
         "enter_command": "❌ ایک حکم درج کریں!",
         "enter_output_filename": "❌ خروجی فائل کا نام درج کریں!",
         "private_badge": "نجی",
-        "verify_badge": "تصدیق"
+        "verify_badge": "تصدیق",
+        "export_types_private": "نجی",
+        "export_types_public": "عوامی",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ {format} {type} برآمد",
+        "export_result_copy_button": "📋 {format} نقل کریں",
+        "export_result_private_warning": "⚠️ احتیاط!",
+        "export_result_private_label": "🔑 نجی - شیئر نہ کریں!",
+        "export_result_public_label": "🔓 عوامی",
+        "export_result_error": "❌ {error}"
     },
     "tr": {
         "title": "RNID Identity Manager {version}",
@@ -2097,7 +2240,18 @@
         "enter_command": "❌ Bir komut girin!",
         "enter_output_filename": "❌ Bir çıktı dosya adı girin!",
         "private_badge": "ÖZEL",
-        "verify_badge": "DOĞRULA"
+        "verify_badge": "DOĞRULA",
+        "export_types_private": "ÖZEL",
+        "export_types_public": "GENEL",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ {format} {type} dışa aktarıldı",
+        "export_result_copy_button": "📋 {format} Kopyala",
+        "export_result_private_warning": "⚠️ DİKKATLİ KULLAN!",
+        "export_result_private_label": "🔑 ÖZEL - PAYLAŞMAYIN!",
+        "export_result_public_label": "🔓 GENEL",
+        "export_result_error": "❌ {error}"
     },
     "pl": {
         "title": "RNID Identity Manager {version}",
@@ -2247,7 +2401,17 @@
         "enter_command": "❌ Wprowadź polecenie!",
         "enter_output_filename": "❌ Wprowadź nazwę pliku wyjściowego!",
         "private_badge": "PRYWATNA",
-        "verify_badge": "WERYF"
+        "verify_badge": "WERYF",
+        "export_types_private": "PRYWATNA",
+        "export_types_public": "PUBLICZNA",
+        "export_formats_hex": "HEX",
+        "export_formats_base32": "BASE32",
+        "export_formats_base64": "BASE64",
+        "export_result_success": "✅ Eksport {format} {type}",
+        "export_result_copy_button": "📋 Kopiuj {format}",
+        "export_result_private_warning": "⚠️ OSTROŻNIE!",
+        "export_result_private_label": "🔑 PRYWATNY - NIE UDOSTĘPNIAJ!",
+        "export_result_public_label": "🔓 PUBLICZNY",
+        "export_result_error": "❌ {error}"
     }
-
 }

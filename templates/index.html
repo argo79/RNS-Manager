@@ -817,8 +817,11 @@
                 return;
             }
             const isPrivate = !selectedIdentity.startsWith('public:');
-            const typeLabel = isPrivate ? 'PRIVATA' : 'PUBBLICA';
-            showOutput(`📤 Esportazione ${typeLabel} in ${format.toUpperCase()}...`, 'warning');
+            const typeLabel = isPrivate ? t('export_types_private') : t('export_types_public');
+            const formatLabel = t('export_formats_' + format);
+            
+            showOutput(t('exporting', { format: formatLabel }), 'warning');
+            
             try {
                 const response = await fetch('/api/identities/export', {
                     method: 'POST',
@@ -830,29 +833,31 @@
                     })
                 });
                 const data = await response.json();
+                
                 if (data.success) {
                     lastExportedData = { format: format, data: data.data, type: data.type };
                     const output = document.getElementById('exportResult');
-                    const typeColor = isPrivate ? '#ff0' : '#0f0';
+                    
                     output.innerHTML = `
                         <div style="margin-bottom: 8px;">
-                            <span class="success">✅ Esportazione ${format.toUpperCase()} ${typeLabel}</span>
-                            ${isPrivate ? '<span style="color:#f44; font-size:10px; margin-left:10px;">⚠️ MANEGGIARE CON CURA!</span>' : ''}
+                            <span class="success">${t('export_result_success', { format: formatLabel, type: typeLabel })}</span>
+                            ${isPrivate ? `<span style="color:#f44; font-size:10px; margin-left:10px;">${t('export_result_private_warning')}</span>` : ''}
                         </div>
                         <div class="export-buttons">
-                            <button class="copy-btn" onclick="copyExportedData()">📋 Copia ${format.toUpperCase()}</button>
+                            <button class="copy-btn" onclick="copyExportedData()">${t('export_result_copy_button', { format: formatLabel })}</button>
                         </div>
                         <textarea id="exportedData" readonly style="width:100%; height:60px; background:#000; border:1px solid ${isPrivate ? '#ff0' : '#333'}; padding:8px; font-family:monospace; font-size: 11px; resize: vertical; color: ${isPrivate ? '#ff0' : '#0f0'};">${data.data}</textarea>
                         <div style="margin-top:8px; font-size:10px; color:#888;">
-                            ${isPrivate ? '🔑 PRIVATA - NON CONDIVIDERE!' : '🔓 PUBBLICA'}
+                            ${isPrivate ? t('export_result_private_label') : t('export_result_public_label')}
                         </div>
                     `;
-                    showOutput(`✅ Esportazione ${format.toUpperCase()} ${typeLabel}`, 'success');
+                    
+                    showOutput(t('export_result_success', { format: formatLabel, type: typeLabel }), 'success');
                 } else {
-                    showOutput('❌ ' + data.error, 'error');
+                    showOutput(t('export_result_error', { error: data.error }), 'error');
                 }
             } catch (error) {
-                showOutput('❌ ' + error, 'error');
+                showOutput(t('export_result_error', { error: error }), 'error');
             }
         }
         
