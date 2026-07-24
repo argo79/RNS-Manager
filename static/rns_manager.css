@@ -1185,3 +1185,8 @@ select, input {
         order: 999 !important;
     }
 }
+
+.map-btn#toggle-cluster-btn.active {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.2);
+}
