@@ -1414,105 +1414,40 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
-            
+
             const text = document.getElementById('cryptoTextInput').value.trim();
             if (!text) {
                 showOutput('_enter_text', 'error');
                 return;
             }
-            
+
             document.getElementById('cryptoEncryptedResult').style.display = 'none';
             document.getElementById('cryptoDecryptedResult').style.display = 'none';
-            
-            const cleanCommand = 'rm -f ./tmp/web_input.txt ./tmp/web_input.txt.rfe';
-            const escapedText = text.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-            const writeCommand = `echo "${escapedText}" > ./tmp/web_input.txt`;
-            
-            let command = '';
-            let rnsHash = null;
-            
-            if (selectedIdentity.startsWith('public:')) {
-                rnsHash = selectedIdentity.replace('public:', '');
-                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e ./tmp/web_input.txt -f`;
-            } else {
-                showOutput('🔍 Estraggo hash RNS pubblico...', 'warning');
-                
-                const hasSpaces = selectedIdentity.includes(' ');
-                const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
-                
-                const hashResponse = await fetch('/api/rnid', {
+            showOutput('🔒 Cifratura in corso...', 'warning');
+
+            try {
+                // Endpoint JSON: usa LOCAL_TMP assoluto lato server, nessuna shell
+                const response = await fetch('/api/identities/encrypt', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: `rnid -i ${cmdPath} --print-identity` })
+                    body: JSON.stringify({
+                        identity_path: selectedIdentity,
+                        text: text
+                    })
                 });
-                
-                const hashData = await hashResponse.json();
-                
-                if (hashData.success && hashData.output) {
-                    const match = hashData.output.match(/Loaded Identity <([0-9a-f]+)>/);
-                    if (match) {
-                        rnsHash = match[1];
-                        showOutput(`✅ Hash RNS: ${rnsHash}`, 'success');
-                    }
-                }
-                
-                if (!rnsHash) {
-                    showOutput('❌ Impossibile ottenere hash RNS pubblico', 'error');
+                const data = await response.json();
+
+                if (!data.success) {
+                    showOutput('❌ Errore cifratura: ' + (data.error || 'errore sconosciuto'), 'error');
                     return;
                 }
-                
-                command = `${cleanCommand} && ${writeCommand} && rnid -R -i "${rnsHash}" -e ./tmp/web_input.txt -f`;
-            }
-            
-            document.getElementById('commandInput').value = command;
-            showOutput('🔒 Cifratura in corso...', 'warning');
-            const result1 = await executeCommand();
-            if (!result1.success) {
-                showOutput('❌ Errore cifratura: ' + (result1.error || result1.output), 'error');
-                return;
-            }
-            
-            const readCommand = `base64 ./tmp/web_input.txt.rfe`;
-            document.getElementById('commandInput').value = readCommand;
-            showOutput('📖 Lettura file cifrato...', 'warning');
-            const result2 = await executeCommand();
-            if (!result2.success) {
-                showOutput('❌ Errore lettura file cifrato', 'error');
-                return;
-            }
-            
-            const lines = result2.output.split('\n');
-            let base64Data = '';
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed && /^[A-Za-z0-9+/=]+$/.test(trimmed)) {
-                    base64Data += trimmed;
-                }
-            }
-            
-            if (!base64Data) {
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (trimmed && trimmed.length > 50 && !trimmed.includes(' ')) {
-                        base64Data = trimmed;
-                        break;
-                    }
-                }
-            }
-            
-            if (base64Data) {
-                document.getElementById('cryptoEncryptedOutput').value = base64Data;
+
+                document.getElementById('cryptoEncryptedOutput').value = data.encrypted;
                 document.getElementById('cryptoEncryptedResult').style.display = 'block';
-                showOutput(`✅ Testo cifrato (${base64Data.length} caratteri base64)`, 'success');
-            } else {
-                showOutput('❌ Impossibile estrarre il dato cifrato', 'error');
+                showOutput(`✅ Testo cifrato (${data.encrypted.length} caratteri base64)`, 'success');
+            } catch (error) {
+                showOutput('❌ Errore cifratura: ' + error.message, 'error');
             }
-            
-            fetch('/api/rnid', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command: 'rm -f ./tmp/web_input.txt ./tmp/web_input.txt.rfe' })
-            }).catch(() => {});
         }
 
         async function decryptText() {
@@ -1520,78 +1455,43 @@
                 showOutput('_select_identity_first', 'error');
                 return;
             }
+
             const text = document.getElementById('cryptoTextInput').value.trim();
             if (!text) {
                 showOutput('_enter_text', 'error');
                 return;
             }
+
             if (selectedIdentity.startsWith('public:')) {
                 showOutput('❌ Per DECIFRARE serve un\'identità PRIVATA!', 'error');
                 return;
             }
+
             document.getElementById('cryptoEncryptedResult').style.display = 'none';
             document.getElementById('cryptoDecryptedResult').style.display = 'none';
-            const cleanInput = text.replace(/\s+/g, '');
-            if (!/^[A-Za-z0-9+/=]+$/.test(cleanInput)) {
-                showOutput('❌ Il testo non sembra essere in formato base64 valido!', 'error');
-                return;
-            }
-            const hasSpaces = selectedIdentity.includes(' ');
-            const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
-            const fullCommand = `rm -f ./tmp/web_input.txt.rfe ./tmp/web_input.txt && ` +
-                               `echo "${cleanInput}" | base64 -d > ./tmp/web_input.txt.rfe && ` +
-                               `rnid -i ${cmdPath} -d ./tmp/web_input.txt.rfe -f && ` +
-                               `cat ./tmp/web_input.txt`;
             showOutput('🔓 Decifratura in corso...', 'warning');
+
             try {
-                const response = await fetch('/api/rnid', {
+                const response = await fetch('/api/identities/decrypt', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: fullCommand })
+                    body: JSON.stringify({
+                        identity_path: selectedIdentity,
+                        encrypted_text: text
+                    })
                 });
                 const data = await response.json();
-                fetch('/api/rnid', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: 'rm -f ./tmp/web_input.txt.rfe ./tmp/web_input.txt' })
-                }).catch(() => {});
-                if (data.success) {
-                    const lines = data.output.split('\n');
-                    let decryptedText = '';
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (trimmed && 
-                            !trimmed.includes('Loaded Identity') && 
-                            !trimmed.includes('File') && 
-                            !trimmed.includes('./tmp/') &&
-                            !trimmed.includes('rm -f') &&
-                            !trimmed.includes('base64') &&
-                            !trimmed.includes('echo') &&
-                            !trimmed.includes('rnid -i') &&
-                            !trimmed.includes('cat ./tmp/web_input.txt')) {
-                            decryptedText += (decryptedText ? '\n' : '') + trimmed;
-                        }
-                    }
-                    if (!decryptedText) {
-                        for (let i = lines.length - 1; i >= 0; i--) {
-                            if (lines[i].trim() && !lines[i].includes('./tmp/')) {
-                                decryptedText = lines[i].trim();
-                                break;
-                            }
-                        }
-                    }
-                    if (decryptedText) {
-                        document.getElementById('cryptoDecryptedOutput').value = decryptedText;
-                        document.getElementById('cryptoDecryptedResult').style.display = 'block';
-                        showOutput(`✅ Testo decifrato (${decryptedText.length} caratteri)`, 'success');
-                    } else {
-                        showOutput('⚠️ Decifratura completata ma nessun testo estratto', 'warning');
-                    }
-                } else {
-                    showOutput(`❌ Errore decifratura: ${data.error || data.output}`, 'error');
+
+                if (!data.success) {
+                    showOutput('❌ Errore decifratura: ' + (data.error || 'errore sconosciuto'), 'error');
+                    return;
                 }
+
+                document.getElementById('cryptoDecryptedOutput').value = data.decrypted;
+                document.getElementById('cryptoDecryptedResult').style.display = 'block';
+                showOutput(`✅ Testo decifrato (${data.decrypted.length} caratteri)`, 'success');
             } catch (error) {
-                showOutput(`❌ Errore: ${error.message}`, 'error');
+                showOutput('❌ Errore decifratura: ' + error.message, 'error');
             }
         }
 
@@ -1857,15 +1757,9 @@
             document.getElementById('cryptoDecryptedOutput').value = '';
             document.getElementById('cryptoEncryptedResult').style.display = 'none';
             document.getElementById('cryptoDecryptedResult').style.display = 'none';
-            const cleanCommand = 'rm -f ./tmp/web_input.txt ./tmp/web_input.txt.rfe ./tmp/web_input.txt';
-            fetch('/api/rnid', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command: cleanCommand })
-            }).catch(() => {});
             showOutput(t('cleanup_text'), 'warning');
         }
-        
+
         function showOutput(message, type = '') {
             const output = document.getElementById('output');
             const escapedMessage = message.replace(/</g, '&lt;').replace(/>/g, '&gt;');

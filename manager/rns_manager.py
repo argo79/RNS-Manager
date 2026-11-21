@@ -898,7 +898,11 @@ def encrypt_text():
         identity_path = data.get('identity_path', '')
         text = data.get('text', '')
         
-        if not identity_path or not os.path.exists(identity_path):
+        if not identity_path:
+            return jsonify({'success': False, 'error': 'Identità non trovata'})
+
+        # Le identità pubbliche hanno formato "public:<hash>": non sono file su disco
+        if not identity_path.startswith('public:') and not os.path.exists(identity_path):
             return jsonify({'success': False, 'error': 'Identità non trovata'})
         
         if not text:
@@ -967,7 +971,8 @@ def decrypt_text():
         clean_input = encrypted_text.strip()
         
         temp_input = os.path.join(LOCAL_TMP, "web_encrypted.rfe")
-        temp_output = os.path.join(LOCAL_TMP, "web_decrypted.txt")
+        # rnid -d rimuove l'estensione .rfe: l'output è "web_encrypted"
+        temp_output = os.path.join(LOCAL_TMP, "web_encrypted")
         
         subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
         

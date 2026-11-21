@@ -358,6 +358,25 @@ class SQLiteAnnounceCache:
         conn.close()
         
         return count
+
+    def get_max_announce_id(self):
+        """Restituisce l'ID massimo presente in cache (0 se vuota).
+
+        Serve a mantenere il contatore degli annunci monotono anche dopo
+        un riavvio del server: il frontend usa l'ID per capire quali
+        annunci sono nuovi.
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+            c.execute("SELECT COALESCE(MAX(announce_id), 0) FROM announces")
+            row = c.fetchone()
+            conn.close()
+            return int(row[0]) if row and row[0] is not None else 0
+        except Exception as e:
+            print(f"[SQLiteCache] Impossibile leggere MAX(announce_id): {e}")
+            return 0
+
     
     def get_stats(self):
         """Statistiche database"""
@@ -775,14 +794,28 @@ class RNSMonitorManager:
         self.listener_thread = None
         self.running = False
         
+        # Cache SQLite
+        self.announce_cache = SQLiteAnnounceCache(cache_dir) if cache_dir else None
+
         # DATI CENTRALIZZATI - unico contatore per TUTTO
-        self.announce_counter = 0  # Contatore unico globale
+        # Riprende l'ID massimo dalla cache: così gli ID restano monotoni
+        # anche dopo un riavvio (il frontend usa l'ID per il gate SSE).
+        self.announce_counter = 0
+        if self.announce_cache:
+            try:
+                self.announce_counter = self.announce_cache.get_max_announce_id()
+                print(f"[MonitorManager] Contatore ripreso da ID {self.announce_counter}")
+            except Exception as e:
+                print(f"[MonitorManager] Impossibile riprendere il contatore: {e}")
+
         self.announce_history = []  # Memoria recente (ridotta a 100)
         self.history_lock = threading.Lock()
         self.announce_queue = queue.Queue(maxsize=1000)
-        
-        # Cache SQLite
-        self.announce_cache = SQLiteAnnounceCache(cache_dir) if cache_dir else None
+
+        # Sottoscrittori SSE: una coda per client, broadcast a tutti
+        self.subscribers = set()
+        self.subscribers_lock = threading.Lock()
+
         
         if self.is_windows:
             print(f"[MonitorManager] Inizializzato con SQLite: {cache_dir} (Windows TCP)")
@@ -870,11 +903,9 @@ class RNSMonitorManager:
                                 if self.announce_cache:
                                     self.announce_cache.add_announce(announce)
                             
-                            # Metti in coda per lo streaming
-                            try:
-                                self.announce_queue.put_nowait(announce)
-                            except queue.Full:
-                                pass
+                            # Broadcast a tutti i client SSE connessi
+                            self._broadcast(announce)
+
                             
                             rssi = announce.get('rssi')
                             snr = announce.get('snr')
@@ -897,7 +928,24 @@ class RNSMonitorManager:
                     sock.close()
                     sock = None
                 time.sleep(2)
-    
+
+    def _broadcast(self, announce):
+        """Invia un annuncio a tutti i client SSE connessi.
+
+        Ogni client ha la propria coda: in questo modo più schede aperte
+        ricevono tutte lo stesso annuncio (la vecchia coda singola
+        distribuiva gli eventi a un solo consumatore).
+        """
+        with self.subscribers_lock:
+            subscribers = list(self.subscribers)
+
+        for client_queue in subscribers:
+            try:
+                client_queue.put_nowait(announce)
+            except queue.Full:
+                # Client lento: scarta l'evento per non bloccare il monitor
+                pass
+
     def get_stats(self):
         """Restituisce statistiche unificate - ORA CON DATI SQLITE"""
         with self.history_lock:
@@ -1193,33 +1241,42 @@ def create_monitor_blueprint(monitor_manager):
         def generate():
             client_id = str(uuid.uuid4())[:8]
             last_id = 0
-            
+            client_queue = queue.Queue(maxsize=200)
+
+            # Registra questo client: riceverà il broadcast degli annunci
+            with monitor_manager.subscribers_lock:
+                monitor_manager.subscribers.add(client_queue)
+
             print(f"[Stream:{client_id}] Nuovo client connesso")
-            
-            # Invia header SSE
-            yield "retry: 1000\n\n"
-            
-            # Invia storico recente
-            with monitor_manager.history_lock:
-                recent = list(reversed(monitor_manager.announce_history[-20:]))
-            
-            for announce in recent:
-                if announce.get('id', 0) > last_id:
-                    last_id = announce.get('id', 0)
-                    yield f"data: {json.dumps(announce)}\n\n"
-            
-            # Streaming in tempo reale
-            while True:
-                try:
-                    announce = monitor_manager.announce_queue.get(timeout=30)
+
+            try:
+                # Invia header SSE
+                yield "retry: 1000\n\n"
+
+                # Invia storico recente
+                with monitor_manager.history_lock:
+                    recent = list(reversed(monitor_manager.announce_history[-20:]))
+
+                for announce in recent:
                     if announce.get('id', 0) > last_id:
                         last_id = announce.get('id', 0)
                         yield f"data: {json.dumps(announce)}\n\n"
-                except queue.Empty:
-                    yield ": heartbeat\n\n"
-                except GeneratorExit:
-                    print(f"[Stream:{client_id}] Client disconnesso")
-                    break
+
+                # Streaming in tempo reale (coda dedicata a questo client)
+                while True:
+                    try:
+                        announce = client_queue.get(timeout=30)
+                        if announce.get('id', 0) > last_id:
+                            last_id = announce.get('id', 0)
+                            yield f"data: {json.dumps(announce)}\n\n"
+                    except queue.Empty:
+                        yield ": heartbeat\n\n"
+            except GeneratorExit:
+                print(f"[Stream:{client_id}] Client disconnesso")
+            finally:
+                with monitor_manager.subscribers_lock:
+                    monitor_manager.subscribers.discard(client_queue)
+
         
         return Response(
             stream_with_context(generate()),

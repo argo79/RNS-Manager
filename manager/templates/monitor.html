@@ -1931,7 +1931,10 @@
                     state.eventSource = es;
                     state.connecting = false;
                     state.reconnectAttempt = 1;
-                    
+                    // Riallinea il gate dopo un riavvio del server: la
+                    // deduplica per packet_hash evita i doppioni del replay.
+                    state.lastId = 0;
+
                     refreshBackendStats();
                 };
                 
@@ -1948,10 +1951,9 @@
                                 if (!window._liveAnnounces) window._liveAnnounces = [];
                                 
                                 // Controllo esistenza in _allAnnounces
-                                const existsInAll = window._allAnnounces.some(a => 
-                                    a.id === ann.id || 
-                                    a.packet_hash === ann.packet_hash ||
-                                    (a.identity_hash === ann.identity_hash && a.timestamp === ann.timestamp)
+                                const existsInAll = window._allAnnounces.some(a =>
+                                    (ann.packet_hash && a.packet_hash === ann.packet_hash) ||
+                                    (ann.identity_hash && a.identity_hash === ann.identity_hash && a.timestamp === ann.timestamp)
                                 );
                                 
                                 if (!existsInAll) {
@@ -2319,19 +2321,23 @@
             state.cacheSource = 'cache';
             document.getElementById('cache-source-select').value = 'memory';
             
+            // Apri subito lo stream SSE: non deve dipendere dal caricamento cache
+            connectSSE();
+
             // Carica dalla cache
             loadHistory().then(() => {
                 console.log('✅ Caricamento completato, header aggiornato');
-                connectSSE();
                 refreshBackendStats();
                 updateSortIndicators();
             }).catch(err => {
                 console.error('❌ Errore caricamento iniziale:', err);
-                connectSSE();
             });
             
             // Intervalli di aggiornamento
             setInterval(saveIdentitiesToStorage, 5000);
+
+            // Fallback: se SSE non è connesso, ricarica dalla cache ogni 10s
+            let sseFallbackTicks = 0;
             setInterval(() => {
                 if (state.view === 'identities') renderIdentities();
                 if (state.view === 'stats') renderStats();
@@ -2339,6 +2345,18 @@
                     applyCurrentSortAndRender();
                 }
                 refreshBackendStats();
+
+                const sseOnline = state.eventSource && state.eventSource.readyState === EventSource.OPEN;
+                if (!sseOnline) {
+                    sseFallbackTicks++;
+                    if (sseFallbackTicks >= 5) {
+                        sseFallbackTicks = 0;
+                        console.log('⚠️ SSE non connesso: ricarico dalla cache');
+                        loadHistory();
+                    }
+                } else {
+                    sseFallbackTicks = 0;
+                }
             }, 2000);
 
         } else {
