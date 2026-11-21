@@ -15,10 +15,14 @@ import signal
 import uuid
 import tempfile
 import argparse
-from messenger import Messenger, Commands, guess_image_format
+from messenger import Messenger, Commands, guess_image_format, CODEC2_AVAILABLE
 import LXMF
 import RNS
-from messenger import Messenger, Commands, guess_image_format, CODEC2_AVAILABLE
+
+try:
+    from version import APP_VERSION
+except ImportError:
+    APP_VERSION = "1.0.0"
 
 # 🔴 COSTANTI LXMF
 FIELD_TELEMETRY = 0x02
@@ -183,6 +187,7 @@ def create_messenger(identity_file=None):
 # ==================== API ROUTES ====================
 
 @app.route('/')
+@app.route('/chat')
 def index():
     """Serve la pagina principale"""
     return render_template('lxmf_chat.html')
@@ -1291,12 +1296,12 @@ def parse_arguments():
                         help='Percorso al file identità da caricare (es: ~/.rns_manager/storage/Prova1)')
     parser.add_argument('-p', '--port',
                         type=int,
-                        default=5010,
-                        help='Porta su cui avviare il server (default: 5010)')
+                        default=5012,
+                        help='Porta su cui avviare il server (default: 5012)')
     parser.add_argument('--host',
                         type=str,
-                        default='0.0.0.0',
-                        help='Host su cui avviare il server (default: 0.0.0.0)')
+                        default='127.0.0.1',
+                        help='Host su cui avviare il server (default: 127.0.0.1)')
     return parser.parse_args()
 
 # ==================== MAIN ====================
@@ -1349,7 +1354,7 @@ if __name__ == '__main__':
     host = args.host
     
     print("="*50)
-    print("🚀 LXMF WEB SERVER")
+    print(f"🚀 LXMF WEB SERVER v{APP_VERSION}")
     print("="*50)
     print(f"📡 Server in ascolto su http://{host}:{port}")
     if args.identity:

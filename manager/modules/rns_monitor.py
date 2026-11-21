@@ -16,6 +16,11 @@ import sys
 from datetime import datetime, timedelta
 
 try:
+    from version import APP_VERSION
+except ImportError:
+    APP_VERSION = "1.1.2"
+
+try:
     multiprocessing.set_start_method('fork', force=True)
 except RuntimeError:
     pass
@@ -1142,7 +1147,7 @@ def create_monitor_blueprint(monitor_manager):
     
     @monitor_bp.route('')
     def monitor_page():
-        response = make_response(render_template('monitor.html'))
+        response = make_response(render_template('monitor.html', version=APP_VERSION))
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         return response
     
@@ -1411,136 +1416,6 @@ def create_monitor_blueprint(monitor_manager):
             'size_after_mb': round(size_after, 2),
             'reduced_mb': round(size_before - size_after, 2)
         })
-    
-    # ============================================
-    # === ENDPOINT PER LXMF-CHAT ===
-    # ============================================
-
-    @monitor_bp.route('/launch-lxmfchat', methods=['GET'])
-    def launch_lxmfchat():
-        """Avvia LXMF-Chat (rns_lxmf.py) e apre il browser"""
-        print("\n" + "="*60)
-        print("🔴🔴🔴 LAUNCH LXMF-CHAT CHIAMATO 🔴🔴🔴")
-        print("="*60)
-        
-        try:
-            import subprocess
-            import threading
-            import os
-            import sys
-            import time
-            import webbrowser
-            import requests
-            
-            print("📦 Import completati")
-            
-            def run_lxmfchat():
-                try:
-                    print("\n🚀 THREAD AVVIATO")
-                    
-                    # Trova il percorso BASE (dove sta rns_manager.py)
-                    # Risali di un livello da modules/ alla root del progetto
-                    current_dir = os.path.dirname(os.path.abspath(__file__))  # .../modules/
-                    base_dir = os.path.dirname(current_dir)  # .../rnsManagerEvo/
-                    
-                    # Percorso ASSOLUTO a rns_lxmf.py (nella root)
-                    script_path = os.path.join(base_dir, 'rns_lxmf.py')
-                    
-                    print(f"📁 Base dir: {base_dir}")
-                    print(f"📁 Script: {script_path}")
-                    print(f"📁 Esiste: {os.path.exists(script_path)}")
-                    
-                    if not os.path.exists(script_path):
-                        print(f"❌ Script non trovato!")
-                        return
-                    
-                    python_exe = sys.executable
-                    print(f"🐍 Python: {python_exe}")
-                    
-                    # AVVIA IL PROCESSO NELLA DIRECTORY BASE (dove stanno i templates/)
-                    print(f"🚀 Avvio processo in {base_dir}...")
-                    process = subprocess.Popen(
-                        [python_exe, script_path],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        start_new_session=True,
-                        text=True,
-                        bufsize=1,
-                        cwd=base_dir  # ⚠️ LAVORA NELLA ROOT!
-                    )
-                    
-                    print(f"✅ Processo avviato PID: {process.pid}")
-                    
-                    # Trova la porta dall'output
-                    print("\n🔍 Cerco porta nell'output...")
-                    port = None
-                    start_time = time.time()
-                    
-                    while time.time() - start_time < 15:
-                        line = process.stdout.readline()
-                        if not line:
-                            time.sleep(0.1)
-                            continue
-                        
-                        line = line.strip()
-                        print(f"STDOUT: {line}")
-                        
-                        if "http://localhost:" in line:
-                            import re
-                            match = re.search(r'http://localhost:(\d+)/chat', line)
-                            if match:
-                                port = int(match.group(1))
-                                print(f"\n✅ Trovata porta {port}!")
-                                break
-                    
-                    if not port:
-                        print("\n❌ Porta non trovata nell'output")
-                        stderr = process.stderr.read()
-                        if stderr:
-                            print(f"\n📤 STDERR:\n{stderr}")
-                        return
-                    
-                    # Aspetta che il server sia pronto
-                    print(f"\n⏳ Attendo che il server su porta {port} sia pronto...")
-                    start_time = time.time()
-                    
-                    while time.time() - start_time < 30:
-                        try:
-                            r = requests.get(f'http://localhost:{port}/chat', timeout=1)
-                            if r.status_code == 200:
-                                elapsed = time.time() - start_time
-                                print(f"\n✅ Server pronto dopo {elapsed:.1f} secondi!")
-                                break
-                        except:
-                            print(f"   ⏳ Attesa... ({int(time.time()-start_time)}s)")
-                            time.sleep(1)
-                    else:
-                        print(f"\n❌ Server non risponde dopo 30 secondi")
-                        return
-                    
-                    # Apri browser
-                    url = f'http://localhost:{port}/chat'
-                    print(f"\n🌐 Apro browser: {url}")
-                    webbrowser.open(url)
-                    print(f"✅ Browser aperto")
-                    
-                except Exception as e:
-                    print(f"\n💥 ECCEZIONE NEL THREAD: {e}")
-                    import traceback
-                    traceback.print_exc()
-            
-            print("🎯 Avvio thread...")
-            thread = threading.Thread(target=run_lxmfchat, daemon=True)
-            thread.start()
-            print("✅ Thread avviato")
-            
-            return jsonify({'success': True, 'message': 'Avvio LXMF-Chat...'})
-        
-        except Exception as e:
-            print(f"\n💥 ECCEZIONE ENDPOINT: {e}")
-            import traceback
-            traceback.print_exc()
-            return jsonify({'success': False, 'error': str(e)}), 500
     
     return monitor_bp
 

@@ -1,90 +1,65 @@
-# Ambiente virtuale
-venv/
-env/
-.env/
-.venv/
+# =========================================================
+# RNS Manager / RNS Messenger - .gitignore unico del monorepo
+# Non versionare MAI dati runtime, cache, identità o segreti.
+# =========================================================
 
-# Build e distribuzione
-build/
-dist/
-*.spec
-*.egg-info/
-*.pyc
+# ---------- Python ----------
 __pycache__/
+*.py[cod]
 *.pyo
 *.pyd
-*.so
+*.egg-info/
+.pytest_cache/
 
-# File eseguibili generati
-rns_manager
-rns_manager_linux
-rns_manager_mac
-rns_manager_windows.exe
-start_services.sh
+# ---------- Ambienti virtuali ----------
+venv/
+env/
+.venv/
+.env/
 
-# Directory di sistema
-.DS_Store
-Thumbs.db
-*.log
-*.tmp
-*.temp
+# ---------- Build e distribuzione ----------
+build/
+dist/
+*.run
+*.pyz
+*.pkg
 
-# Directory specifiche dell'app (cartelle locali create in esecuzione)
-tmp/
-downloads/
+# ---------- Dati runtime delle applicazioni ----------
 cache/
+downloads/
+tmp/
 uploads/
-tmp/uploads/
-
-# Directory standard Reticulum (non sincronizzare)
-.rns_manager/
-~/.rns_manager/
-Downloads/
-Cache/
 storage/
-*.rns_manager/
-
-# File di configurazione locali
-*.local
-*.secret
-*.key
-*.pem
-*.crt
-
-# Backup
-*.bak
-*.backup
-*.old
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Database SQLite
 *.db
 *.sqlite
 *.sqlite3
-
-# File di log
-logs/
-*.log
-
-# File temporanei
-/tmp/
-/tmp/*
-/rnid_web/
-
-# File di identità (se non vuoi condividerli)
-*.key
-*.rns
-*.identity
-
-# Script di aggiornamento locale (ignorato da git)
-github_update.sh
-
-# Socket UNIX
+*.rfe
+*.rsg
 *.sock
 rns_monitor.sock
+
+# ---------- Identità e segreti ----------
+*.key
+*.pem
+*.crt
+*.secret
+*.local
+*.name
+.rns_manager/
+
+# ---------- Artefatti locali ----------
+/RNS
+/gateway_peers.db
+/github_update.sh
+*.log
+*.bak
+*.backup
+
+# ---------- IDE / OS ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

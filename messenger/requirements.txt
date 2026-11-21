@@ -1,0 +1,23 @@
+# RNS Messenger - Requirements
+# Python 3.9+ recommended
+
+# Web framework
+Flask>=2.3,<4
+Flask-SocketIO>=5.3
+
+# Reticulum stack
+rns>=1.0.0
+lxmf>=1.0.0
+lxst>=0.6.0
+
+# Telemetria e audio
+numpy>=1.24
+gpsdclient>=1.3
+psutil>=5.9
+pycodec2>=4.0
+
+# Opzionale: client GPSD per la telemetria di posizione
+# gps>=3.25
+#
+# Nota: la conversione audio OGG/Opus usa il binario esterno ffmpeg,
+#       se disponibile nel PATH.
