@@ -158,7 +158,11 @@
         "export_result_private_warning": "⚠️ MANEGGIARE CON CURA!",
         "export_result_private_label": "🔑 PRIVATE - DO NOT SHARE!",
         "export_result_public_label": "🔓 PUBBLICA",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 ESCI",
+        "plain_data": "📄 DATO PURO:",
+        "encrypted_data_b64": "🔒 DATO CIFRATO (base64):",
+        "decrypted_text_label": "🔓 TESTO DECIFRATO:"
     },
     "en": {
         "title": "RNID Identity Manager {version}",
@@ -319,7 +323,11 @@
         "export_result_private_warning": "⚠️ HANDLE WITH CARE!",
         "export_result_private_label": "🔑 PRIVATE - DO NOT SHARE!",
         "export_result_public_label": "🔓 PUBLIC",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 EXIT",
+        "plain_data": "📄 RAW DATA:",
+        "encrypted_data_b64": "🔒 ENCRYPTED DATA (base64):",
+        "decrypted_text_label": "🔓 DECRYPTED TEXT:"
     },
     "fr": {
         "title": "RNID Identity Manager {version}",
@@ -480,7 +488,11 @@
         "export_result_private_warning": "⚠️ À MANIPULER AVEC PRÉCAUTION!",
         "export_result_private_label": "🔑 PRIVÉ - NE PAS PARTAGER!",
         "export_result_public_label": "🔓 PUBLIC",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 QUITTER",
+        "plain_data": "📄 DONNÉES BRUTES :",
+        "encrypted_data_b64": "🔒 DONNÉES CHIFFRÉES (base64) :",
+        "decrypted_text_label": "🔓 TEXTE DÉCHIFFRÉ :"
     },
     "es": {
         "title": "RNID Identity Manager {version}",
@@ -641,7 +653,11 @@
         "export_result_private_warning": "⚠️ ¡MANEJAR CON CUIDADO!",
         "export_result_private_label": "🔑 PRIVADO - ¡NO COMPARTIR!",
         "export_result_public_label": "🔓 PÚBLICA",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 SALIR",
+        "plain_data": "📄 DATOS SIN PROCESAR:",
+        "encrypted_data_b64": "🔒 DATOS CIFRADOS (base64):",
+        "decrypted_text_label": "🔓 TEXTO DESCIFRADO:"
     },
     "de": {
         "title": "RNID Identity Manager {version}",
@@ -802,7 +818,11 @@
         "export_result_private_warning": "⚠️ VORSICHT!",
         "export_result_private_label": "🔑 PRIVAT - NICHT TEILEN!",
         "export_result_public_label": "🔓 ÖFFENTLICH",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 BEENDEN",
+        "plain_data": "📄 ROHDATEN:",
+        "encrypted_data_b64": "🔒 VERSCHLÜSSELTE DATEN (base64):",
+        "decrypted_text_label": "🔓 ENTSCHLÜSSELTER TEXT:"
     },
     "pt": {
         "title": "RNID Identity Manager {version}",
@@ -963,7 +983,11 @@
         "export_result_private_warning": "⚠️ MANUSEAR COM CUIDADO!",
         "export_result_private_label": "🔑 PRIVADO - NÃO COMPARTILHAR!",
         "export_result_public_label": "🔓 PÚBLICA",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 SAIR",
+        "plain_data": "📄 DADOS BRUTOS:",
+        "encrypted_data_b64": "🔒 DADOS CRIPTOGRAFADOS (base64):",
+        "decrypted_text_label": "🔓 TEXTO DESCRIPTOGRAFADO:"
     },
     "ru": {
         "title": "RNID Identity Manager {version}",
@@ -1124,7 +1148,11 @@
         "export_result_private_warning": "⚠️ ОСТОРОЖНО!",
         "export_result_private_label": "🔑 ЧАСТНЫЙ - НЕ РАСПРОСТРАНЯТЬ!",
         "export_result_public_label": "🔓 ПУБЛИЧНЫЙ",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 ВЫЙТИ",
+        "plain_data": "📄 ИСХОДНЫЕ ДАННЫЕ:",
+        "encrypted_data_b64": "🔒 ЗАШИФРОВАННЫЕ ДАННЫЕ (base64):",
+        "decrypted_text_label": "🔓 РАСШИФРОВАННЫЙ ТЕКСТ:"
     },
     "zh": {
         "title": "RNID Identity Manager {version}",
@@ -1285,7 +1313,11 @@
         "export_result_private_warning": "⚠️ 小心处理！",
         "export_result_private_label": "🔑 私有 - 请勿分享！",
         "export_result_public_label": "🔓 公共",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 退出",
+        "plain_data": "📄 原始数据：",
+        "encrypted_data_b64": "🔒 加密数据（base64）：",
+        "decrypted_text_label": "🔓 解密文本："
     },
     "ja": {
         "title": "RNID Identity Manager {version}",
@@ -1446,7 +1478,11 @@
         "export_result_private_warning": "⚠️ 注意！",
         "export_result_private_label": "🔑 秘密 - 共有しないでください！",
         "export_result_public_label": "🔓 公開",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 終了",
+        "plain_data": "📄 生データ：",
+        "encrypted_data_b64": "🔒 暗号化データ（base64）：",
+        "decrypted_text_label": "🔓 復号化テキスト："
     },
     "ar": {
         "title": "RNID Identity Manager {version}",
@@ -1607,7 +1643,11 @@
         "export_result_private_warning": "⚠️ تعامل بحذر!",
         "export_result_private_label": "🔑 خاص - لا تشارك!",
         "export_result_public_label": "🔓 عام",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 خروج",
+        "plain_data": "📄 بيانات خام:",
+        "encrypted_data_b64": "🔒 بيانات مشفرة (base64):",
+        "decrypted_text_label": "🔓 نص مفكوك التشفير:"
     },
     "hi": {
         "title": "RNID Identity Manager {version}",
@@ -1768,7 +1808,11 @@
         "export_result_private_warning": "⚠️ सावधानी से संभालें!",
         "export_result_private_label": "🔑 निजी - साझा न करें!",
         "export_result_public_label": "🔓 सार्वजनिक",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 बाहर निकलें",
+        "plain_data": "📄 कच्चा डेटा:",
+        "encrypted_data_b64": "🔒 एन्क्रिप्टेड डेटा (base64):",
+        "decrypted_text_label": "🔓 डिक्रिप्ट किया गया टेक्स्ट:"
     },
     "bn": {
         "title": "RNID Identity Manager {version}",
@@ -1929,12 +1973,16 @@
         "export_result_private_warning": "⚠️ সাবধান!",
         "export_result_private_label": "🔑 ব্যক্তিগত - শেয়ার করবেন না!",
         "export_result_public_label": "🔓 পাবলিক",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 প্রস্থান",
+        "plain_data": "📄 কাঁচা ডেটা:",
+        "encrypted_data_b64": "🔒 এনক্রিপ্ট করা ডেটা (base64):",
+        "decrypted_text_label": "🔓 ডিক্রিপ্ট করা টেক্সট:"
     },
     "ur": {
         "title": "RNID Identity Manager {version}",
         "subtitle": "Reticulum شناختی منتظم",
-        "manitor": "📡 مانیٹر کھولیں",
+        "monitor": "📡 مانیٹر کھولیں",
         "identities": "دستیاب شناختیں",
         "load": "🔄 لوڈ کریں",
         "search": "🔍 تلاش کریں",
@@ -2090,7 +2138,11 @@
         "export_result_private_warning": "⚠️ احتیاط!",
         "export_result_private_label": "🔑 نجی - شیئر نہ کریں!",
         "export_result_public_label": "🔓 عوامی",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 باہر نکلیں",
+        "plain_data": "📄 خام ڈیٹا:",
+        "encrypted_data_b64": "🔒 خفیہ کردہ ڈیٹا (base64):",
+        "decrypted_text_label": "🔓 ڈکرپٹ شدہ متن:"
     },
     "tr": {
         "title": "RNID Identity Manager {version}",
@@ -2251,7 +2303,11 @@
         "export_result_private_warning": "⚠️ DİKKATLİ KULLAN!",
         "export_result_private_label": "🔑 ÖZEL - PAYLAŞMAYIN!",
         "export_result_public_label": "🔓 GENEL",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 ÇIKIŞ",
+        "plain_data": "📄 HAM VERİ:",
+        "encrypted_data_b64": "🔒 ŞİFRELENMİŞ VERİ (base64):",
+        "decrypted_text_label": "🔓 ÇÖZÜLMÜŞ METİN:"
     },
     "pl": {
         "title": "RNID Identity Manager {version}",
@@ -2412,6 +2468,10 @@
         "export_result_private_warning": "⚠️ OSTROŻNIE!",
         "export_result_private_label": "🔑 PRYWATNY - NIE UDOSTĘPNIAJ!",
         "export_result_public_label": "🔓 PUBLICZNY",
-        "export_result_error": "❌ {error}"
+        "export_result_error": "❌ {error}",
+        "exit": "🛑 WYJDŹ",
+        "plain_data": "📄 SUROWE DANE:",
+        "encrypted_data_b64": "🔒 ZASZYFROWANE DANE (base64):",
+        "decrypted_text_label": "🔓 ODSZYFROWANY TEKST:"
     }
 }

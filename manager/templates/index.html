@@ -194,7 +194,11 @@
                 "aspect_calc_error": "{aspect}: Errore nel calcolo",
                 "aspect_originale": "← ORIGINALE",
                 "enter_command": "❌ Inserisci un comando!",
-                "enter_output_filename": "❌ Inserisci un nome per il file output!"
+                "enter_output_filename": "❌ Inserisci un nome per il file output!",
+                "exit": "🛑 ESCI",
+                "plain_data": "📄 DATO PURO:",
+                "encrypted_data_b64": "🔒 DATO CIFRATO (base64):",
+                "decrypted_text_label": "🔓 TESTO DECIFRATO:"
             };
         }
         
@@ -317,7 +321,7 @@
                     <option value="pl">🇵🇱 Polski</option>
                 </select>
                 <a href="/monitor" class="monitor-button" data-i18n="monitor">📡 APRI MONITOR</a>
-                <button onclick="shutdownServer()" 
+                <button onclick="shutdownServer()" data-i18n="exit"
                         style="background:#f44; color:white; border:none; padding:8px 16px; border-radius:3px; cursor:pointer; font-weight:bold;">
                     🛑 ESCI
                 </button>
@@ -487,7 +491,7 @@
                         
                         <div id="cryptoFileResult" style="margin-top: 10px; display: none;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                                <label style="margin: 0; font-size: 11px; color:#0f0;">📄 DATO PURO:</label>
+                                <label data-i18n="plain_data" style="margin: 0; font-size: 11px; color:#0f0;">📄 DATO PURO:</label>
                                 <button class="crypto-copy-btn" onclick="copyCryptoFileResult()" data-i18n="copy">📋 Copia</button>
                             </div>
                             <textarea id="cryptoFileOutput" 
@@ -514,7 +518,7 @@
                         
                         <div id="cryptoEncryptedResult" style="margin-top: 10px; display: none;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                                <label style="margin: 0; font-size: 11px; color:#0ff;">🔒 DATO CIFRATO (base64):</label>
+                                <label data-i18n="encrypted_data_b64" style="margin: 0; font-size: 11px; color:#0ff;">🔒 DATO CIFRATO (base64):</label>
                                 <button class="crypto-copy-btn" onclick="copyEncryptedResult()" data-i18n="copy">📋 Copia</button>
                             </div>
                             <textarea id="cryptoEncryptedOutput" 
@@ -525,7 +529,7 @@
                         
                         <div id="cryptoDecryptedResult" style="margin-top: 10px; display: none;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                                <label style="margin: 0; font-size: 11px; color:#0f0;">🔓 TESTO DECIFRATO:</label>
+                                <label data-i18n="decrypted_text_label" style="margin: 0; font-size: 11px; color:#0f0;">🔓 TESTO DECIFRATO:</label>
                                 <button class="crypto-copy-btn" onclick="copyDecryptedResult()" data-i18n="copy">📋 Copia</button>
                             </div>
                             <textarea id="cryptoDecryptedOutput" 
