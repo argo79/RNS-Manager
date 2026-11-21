@@ -45,16 +45,17 @@ else:
 
 # Aspect uguali all'originale
 RNS_ASPECTS = [
-    "lxmf.delivery","nomadnetwork.node","lxst.telephony","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
+    "lxmf.delivery","nomadnetwork.node","lxst.telephony","lxst.room","call.audio","retibbs.bbs","rrc.hub","lxmf.propagation",
     "rnstransport.probe","rnstransport.info.blackhole","rnsh","rncp","rncp.receive","rnsh.listen","rnsh.default",
     "rns_unit_tests.link.establish","atak.cot","haven.status","demo.msg",
-    "rnstransport.discovery.interface",
-    "rnstransport.tunnel.synthesize",
-    "rnstransport.path.request",
+    "rnstransport.discovery.interface","reticulum_console.echo",
+    "rnstransport.tunnel.synthesize","rnx.execute","map-data-v1",
+    "rnstransport.path.request","nostr.relay","microrn.mgmt",
     "rnstransport.remote.management",    
     "rnstransport.network.instance",
-    "rnstransport.network",
-    "styrene.delivery",
+    "rnstransport.network","rns.sofia","aurora.echo","aurora.test","aurora.resorce","aurora.files",
+    "styrene.delivery","r3akt.emergency",
+    "rns.rec.gateway","rns.rec.wallet",
     "example_utilities.minimalsample",
     "example_utilities.echo.request",
     "example_utilities.broadcast",
@@ -66,7 +67,9 @@ RNS_ASPECTS = [
     "example_utilities.ratchet.echo.request",
     "example_utilities.requestexample",
     "example_utilities.resourceexample",
-    "example_utilities.speedtest","discovery.interface",    
+    "example_utilities.speedtest","discovery.interface",
+    "qortal-hub-v3.presence.v3",
+    "qortal-hub-v3.community-stun.v1","qortal-hub-v3.community-masque-relay.v1","qortal-hub-v3.qapp-backend.v1",
 ]
 
 # ============================================
