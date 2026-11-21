@@ -164,6 +164,7 @@ POST /api/rns/paths/blackhole
 ### Sistema
 ```ini
 POST /api/shutdown
+POST /api/files/relocate     # sposta/copia un file da tmp a downloads (sicuro, senza shell)
 ```
 
 ## 📦 Build eseguibile

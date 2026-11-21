@@ -142,6 +142,7 @@ POST /api/monitor/sqlite/cleanup   POST /api/monitor/sqlite/vacuum
 GET  /api/rns/status               GET  /api/rns/paths
 POST /api/rns/probe                POST /api/rns/probe/aspect
 POST /api/rns/paths/blackhole      POST /api/shutdown
+POST /api/files/relocate           # move/copy tmp -> downloads (safe, no shell)
 ```
 
 ## 📦 Standalone build

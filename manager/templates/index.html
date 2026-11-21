@@ -1338,12 +1338,15 @@
                     throw new Error('Cifratura fallita');
                 }
                 const rfeFile = tempPath + '.rfe';
-                const moveCommand = `mv "${rfeFile}" "${outputPath}"`;
-                document.getElementById('commandInput').value = moveCommand;
                 showOutput(`📦 Spostamento file in ${outputPath}...`, 'warning');
-                const result2 = await executeCommand();
-                if (!result2.success) {
-                    throw new Error('Spostamento fallito');
+                const relocateRes = await fetch('/api/files/relocate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'move', source: rfeFile, destination: outputPath })
+                });
+                const relocateData = await relocateRes.json();
+                if (!relocateData.success) {
+                    throw new Error('Spostamento fallito: ' + (relocateData.error || ''));
                 }
                 showOutput(`✅ File cifrato salvato in: ${outputPath}`, 'success');
                 setTimeout(() => cleanupTempFile(tempPath), 10000);
@@ -1395,12 +1398,15 @@
                 }
                 
                 const baseName = tempPath.replace(/\.rfe$/, '');
-                const moveCommand = `mv "${baseName}" "${outputPath}"`;
-                document.getElementById('commandInput').value = moveCommand;
                 showOutput(`📦 Spostamento file in ${outputPath}...`, 'warning');
-                const result2 = await executeCommand();
-                if (!result2.success) {
-                    throw new Error('Spostamento fallito');
+                const relocateRes = await fetch('/api/files/relocate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'move', source: baseName, destination: outputPath })
+                });
+                const relocateData = await relocateRes.json();
+                if (!relocateData.success) {
+                    throw new Error('Spostamento fallito: ' + (relocateData.error || ''));
                 }
                 showOutput(`✅ File decifrato salvato in: ${outputPath}`, 'success');
                 setTimeout(() => cleanupTempFile(tempPath), 10000);
@@ -1551,15 +1557,18 @@
                 const fileName = selectedSignFile.name;
                 
                 const originalInDownloads = downloadsDir + '/' + fileName;
-                const copyCommand = `cp "${tempPath}" "${originalInDownloads}"`;
-                document.getElementById('commandInput').value = copyCommand;
                 showOutput(`📦 Copia file in ${originalInDownloads}...`, 'warning');
-                const result1 = await executeCommand();
-                if (!result1.success) {
-                    throw new Error('Copia fallita');
+                const copyRes = await fetch('/api/files/relocate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'copy', source: tempPath, destination: originalInDownloads })
+                });
+                const copyData = await copyRes.json();
+                if (!copyData.success) {
+                    throw new Error('Copia fallita: ' + (copyData.error || ''));
                 }
                 
-                const signCommand = `rnid -i ${selectedIdentity} -s "${originalInDownloads}" -f`;
+                const signCommand = `rnid -i "${selectedIdentity}" -s "${originalInDownloads}" -f`;
                 document.getElementById('commandInput').value = signCommand;
                 showOutput(`✍️ Firma in corso...`, 'warning');
                 const result2 = await executeCommand();
@@ -1605,7 +1614,15 @@
                 const downloadsDir = uploadData.output_dir;
                 const sigFileName = selectedSigFileForVerification.name;
                 const sigInDownloads = downloadsDir + '/' + sigFileName;
-                const copyCommand = `cp "${tempPath}" "${sigInDownloads}"`;
+                const copyRes = await fetch('/api/files/relocate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'copy', source: tempPath, destination: sigInDownloads })
+                });
+                const copyData = await copyRes.json();
+                if (!copyData.success) {
+                    throw new Error('Copia fallita: ' + (copyData.error || ''));
+                }
                 let verifyCommand;
                 if (selectedIdentity.startsWith('public:')) {
                     const rnsHash = selectedIdentity.replace('public:', '');
@@ -1615,11 +1632,10 @@
                     const cmdPath = hasSpaces ? `"${selectedIdentity}"` : selectedIdentity;
                     verifyCommand = `rnid -i ${cmdPath} -V "${sigInDownloads}"`;
                 }
-                const fullCommand = `${copyCommand} && ${verifyCommand}`;
                 const response = await fetch('/api/rnid', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: fullCommand })
+                    body: JSON.stringify({ command: verifyCommand })
                 });
                 const data = await response.json();
                 const verifySection = document.getElementById('verifyResultSection');

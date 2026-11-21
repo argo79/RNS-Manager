@@ -122,6 +122,44 @@ print(f"[DEBUG] LOCAL_TMP: {LOCAL_TMP}")
 print(f"[DEBUG] LOCAL_DOWNLOADS: {LOCAL_DOWNLOADS}")
 print(f"[DEBUG] LOCAL_CACHE: {LOCAL_CACHE}")
 
+def _unlink(*paths):
+    """Rimuove uno o più file senza passare dalla shell."""
+    for p in paths:
+        try:
+            if p and os.path.exists(p):
+                os.remove(p)
+        except OSError:
+            pass
+
+
+def _relocate(source, destination, action='move'):
+    """Sposta o copia un file limitando i percorsi consentiti.
+
+    La sorgente può essere in LOCAL_TMP o LOCAL_DOWNLOADS; la destinazione
+    deve essere in LOCAL_DOWNLOADS. Nessuna shell, nessun path arbitrario.
+    """
+    src = os.path.realpath(source)
+    dst = os.path.realpath(destination)
+
+    tmp = os.path.realpath(LOCAL_TMP)
+    dld = os.path.realpath(LOCAL_DOWNLOADS)
+
+    if not (src.startswith(tmp + os.sep) or src.startswith(dld + os.sep)):
+        raise ValueError('Sorgente non consentita')
+    if not dst.startswith(dld + os.sep):
+        raise ValueError('Destinazione non consentita')
+    if os.path.isdir(src):
+        raise ValueError('La sorgente non può essere una directory')
+    if os.path.isdir(dst):
+        raise ValueError('La destinazione non può essere una directory')
+
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    if action == 'copy':
+        shutil.copy2(src, dst)
+    else:
+        shutil.move(src, dst)
+    return dst
+
 # ============================================
 # === PERCORSI CONFIGURATI DALL'UTENTE ===
 # ============================================
@@ -361,22 +399,8 @@ def execute_rnid():
                 'return_code': result.returncode
             })
             
-        elif command.startswith(('rm -f ', 'echo ', 'base64 ', 'cat ', 'stat -c%s ', 'cp ', 'mkdir -p ', 'mv ')):
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            return jsonify({
-                'success': result.returncode == 0,
-                'output': result.stdout,
-                'error': result.stderr,
-                'return_code': result.returncode
-            })
         else:
-            return jsonify({'success': False, 'error': 'Comando non permesso'})
+            return jsonify({'success': False, 'error': 'Comando non permesso (sono ammessi solo comandi rnid)'}), 403
         
     except subprocess.TimeoutExpired:
         return jsonify({'success': False, 'error': 'Timeout del comando'})
@@ -911,7 +935,7 @@ def encrypt_text():
         temp_input = os.path.join(LOCAL_TMP, "web_input.txt")
         temp_output = os.path.join(LOCAL_TMP, "web_input.txt.rfe")
         
-        subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+        _unlink(temp_input, temp_output)
         
         with open(temp_input, 'w') as f:
             f.write(text)
@@ -927,18 +951,18 @@ def encrypt_text():
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
         if result.returncode != 0:
-            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            _unlink(temp_input, temp_output)
             return jsonify({'success': False, 'error': f'Errore cifratura: {result.stderr[:200]}'})
         
         if not os.path.exists(temp_output):
-            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            _unlink(temp_input, temp_output)
             return jsonify({'success': False, 'error': 'File cifrato non creato'})
         
         with open(temp_output, 'rb') as f:
             encrypted_bytes = f.read()
         encrypted_base64 = base64.b64encode(encrypted_bytes).decode('ascii')
         
-        subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+        _unlink(temp_input, temp_output)
         
         return jsonify({
             'success': True,
@@ -974,14 +998,14 @@ def decrypt_text():
         # rnid -d rimuove l'estensione .rfe: l'output è "web_encrypted"
         temp_output = os.path.join(LOCAL_TMP, "web_encrypted")
         
-        subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+        _unlink(temp_input, temp_output)
         
         try:
             encrypted_bytes = base64.b64decode(clean_input)
             with open(temp_input, 'wb') as f:
                 f.write(encrypted_bytes)
         except Exception as e:
-            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            _unlink(temp_input, temp_output)
             return jsonify({'success': False, 'error': f'Base64 non valido: {str(e)}'})
         
         rnid_cmd = get_rnid_path()
@@ -989,7 +1013,7 @@ def decrypt_text():
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
         if result.returncode != 0:
-            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            _unlink(temp_input, temp_output)
             return jsonify({'success': False, 'error': f'Errore decifratura: {result.stderr[:200]}'})
         
         decrypted_text = ""
@@ -997,14 +1021,14 @@ def decrypt_text():
             with open(temp_output, 'r') as f:
                 decrypted_text = f.read().strip()
             
-            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            _unlink(temp_input, temp_output)
             
             return jsonify({
                 'success': True,
                 'decrypted': decrypted_text
             })
         else:
-            subprocess.run(f"rm -f {temp_input} {temp_output}", shell=True, capture_output=True)
+            _unlink(temp_input, temp_output)
             return jsonify({'success': False, 'error': 'File decifrato non creato'})
         
     except Exception as e:
@@ -1033,7 +1057,7 @@ def sign_text():
         temp_file = os.path.join(LOCAL_TMP, "web_sign.txt")
         temp_sig = os.path.join(LOCAL_TMP, "web_sign.txt.rsg")
         
-        subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+        _unlink(temp_file, temp_sig)
         
         with open(temp_file, 'w') as f:
             f.write(text)
@@ -1043,11 +1067,11 @@ def sign_text():
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
         if result.returncode != 0:
-            subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+            _unlink(temp_file, temp_sig)
             return jsonify({'success': False, 'error': f'Errore firma: {result.stderr[:200]}'})
         
         if not os.path.exists(temp_sig):
-            subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+            _unlink(temp_file, temp_sig)
             return jsonify({'success': False, 'error': 'File firma non creato'})
         
         with open(temp_sig, 'rb') as f:
@@ -1066,7 +1090,7 @@ def sign_text():
             if match:
                 rns_hash = match.group(1)
         
-        subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+        _unlink(temp_file, temp_sig)
         
         return jsonify({
             'success': True,
@@ -1102,7 +1126,7 @@ def verify_signature():
         temp_file = os.path.join(LOCAL_TMP, "web_verify.txt")
         temp_sig = os.path.join(LOCAL_TMP, "web_verify.txt.rsg")
         
-        subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+        _unlink(temp_file, temp_sig)
         
         with open(temp_file, 'w') as f:
             f.write(text)
@@ -1112,7 +1136,7 @@ def verify_signature():
             with open(temp_sig, 'wb') as f:
                 f.write(sig_bytes)
         except Exception as e:
-            subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+            _unlink(temp_file, temp_sig)
             return jsonify({'success': False, 'error': f'Firma base64 non valida: {str(e)}'})
         
         rnid_cmd = get_rnid_path()
@@ -1124,7 +1148,7 @@ def verify_signature():
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
-        subprocess.run(f"rm -f {temp_file} {temp_sig}", shell=True, capture_output=True)
+        _unlink(temp_file, temp_sig)
         
         if result.returncode != 0:
             return jsonify({
@@ -1210,6 +1234,25 @@ def cleanup_temp_file():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/files/relocate', methods=['POST'])
+def relocate_file():
+    """Sposta/copia un file da tmp a downloads (sicuro, senza shell)."""
+    try:
+        data = request.json or {}
+        action = data.get('action', 'move')
+        source = data.get('source', '')
+        destination = data.get('destination', '')
+
+        if action not in ('move', 'copy'):
+            return jsonify({'success': False, 'error': 'Azione non valida'}), 400
+        if not source or not destination:
+            return jsonify({'success': False, 'error': 'Percorsi mancanti'}), 400
+
+        result = _relocate(source, destination, action)
+        return jsonify({'success': True, 'path': result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 # ============================================
 # === COMANDI RNS (rnstatus, rnpath, rnprobe) ===
