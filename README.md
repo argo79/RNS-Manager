@@ -1,15 +1,17 @@
 # RNS-Manager
 
-Monorepo con due applicazioni Reticulum (RNS) indipendenti:
+**English** | [Русский](README.ru.md)
 
-| Progetto | Descrizione | Porta |
+Monorepo with two independent Reticulum (RNS) applications:
+
+| Project | Description | Port |
 |---|---|---|
-| [**manager/**](manager/) | Identity Manager + Aspect Monitor: gestione identità RNS, cifratura/firma, monitor annunci in tempo reale con cache SQLite | `5010` |
-| [**messenger/**](messenger/) | RNS Messenger: chat LXMF con allegati, audio Codec2/Opus, telemetria, mappa e comandi remoti | `5012` |
+| [**manager/**](manager/) | Identity Manager + Aspect Monitor: RNS identity management, encryption/signing, real-time announce monitoring with SQLite cache | `5010` |
+| [**messenger/**](messenger/) | RNS Messenger: LXMF chat with attachments, Codec2/Opus audio, telemetry, map and remote commands | `5012` |
 
-Le due applicazioni hanno **codice, dipendenze, build e README separati** e condividono soltanto la cartella dati `~/.rns_manager/` (identità, `config.json`, upload, cache annunci).
+The two applications have **separate code, dependencies, builds and documentation** and share only the `~/.rns_manager/` data directory (identities, `config.json`, uploads, announce cache).
 
-## 📁 Struttura del repository
+## 📁 Repository structure
 
 ```ini
 RNS-Manager/
@@ -18,42 +20,42 @@ RNS-Manager/
 │   ├── modules/rns_monitor.py
 │   ├── templates/ static/ img/
 │   ├── requirements.txt
-│   └── README.md / README.en.md
+│   └── README.md / README.ru.md
 ├── messenger/        # Flask-SocketIO LXMF Messenger
 │   ├── lxmf_chat.py
 │   ├── messenger.py
 │   ├── core/
 │   ├── templates/ static/ img/
 │   ├── requirements.txt
-│   └── README.md / README.en.md
-├── legacy/           # materiale storico non utilizzato (non incluso nelle build)
+│   └── README.md / README.ru.md
+├── legacy/           # unused historical material (not included in builds)
 ├── LICENSE
 └── .gitignore
 ```
 
-## 🚀 Avvio rapido
+## 🚀 Quick start
 
 ### Manager (Identity Manager + Monitor)
 
 ```bash
 cd manager
 pip install -r requirements.txt
-python3 rns_manager.py     # oppure ./start.sh
+python3 rns_manager.py     # or ./start.sh
 ```
 
-Aprire <http://127.0.0.1:5010/>.
+Open <http://127.0.0.1:5010/>.
 
 ### Messenger (LXMF Chat)
 
 ```bash
 cd messenger
 pip install -r requirements.txt
-python3 lxmf_chat.py -p 5012     # oppure ./start.sh
+python3 lxmf_chat.py -p 5012     # or ./start.sh
 ```
 
-Aprire <http://127.0.0.1:5012/>.
+Open <http://127.0.0.1:5012/>.
 
-## 📸 Screenshot
+## 📸 Screenshots
 
 | Identity Manager | Aspect Monitor |
 |---|---|
@@ -63,29 +65,29 @@ Aprire <http://127.0.0.1:5012/>.
 |---|---|
 | ![LXMF Chat](messenger/img/lxmf-chat.jpg) | ![Monitor mobile](manager/img/monitor-mobile-live.jpg) |
 
-## 🔒 Dati e privacy
+## 🔒 Data and privacy
 
-Il repository **non contiene** dati personali o di runtime: cache, database SQLite, download, upload, socket, identità e segreti sono esclusi da `.gitignore`.
+The repository **does not contain** personal or runtime data: caches, SQLite databases, downloads, uploads, sockets, identities and secrets are excluded by `.gitignore`.
 
-I dati delle applicazioni restano nella home dell'utente:
+Application data stays in the user's home directory:
 
 ```ini
-~/.rns_manager/storage/     # identità RNS
-~/.rns_manager/config.json  # configurazione del messenger
-~/.rns_manager/uploads/     # allegati caricati
+~/.rns_manager/storage/     # RNS identities
+~/.rns_manager/config.json  # messenger configuration
+~/.rns_manager/uploads/     # uploaded attachments
 ```
 
-## 🧰 Requisiti comuni
+## 🧰 Common requirements
 
 - Python 3.8+ (manager) / 3.9+ (messenger)
-- Reticulum installato (`pip install rns`)
-- Comandi `rnid`, `rnstatus`, `rnpath`, `rnprobe` nel `PATH` per il manager
+- Reticulum installed (`pip install rns`)
+- `rnid`, `rnstatus`, `rnpath`, `rnprobe` available in `PATH` for the manager
 
-## 📝 Licenza
+## 📝 License
 
-Distribuito sotto licenza MIT. Vedi [LICENSE](LICENSE).
+Distributed under the MIT License. See [LICENSE](LICENSE).
 
-## 📧 Contatto
+## 📧 Contact
 
 - Email: <arg0netds@gmail.com>
 - GitHub: <https://github.com/argo79/RNS-Manager>
@@ -93,4 +95,4 @@ Distribuito sotto licenza MIT. Vedi [LICENSE](LICENSE).
 
 ---
 
-English: see [manager/README.en.md](manager/README.en.md) and [messenger/README.en.md](messenger/README.en.md).
+Documentation: [Manager (EN)](manager/README.md) · [Manager (RU)](manager/README.ru.md) · [Messenger (EN)](messenger/README.md) · [Messenger (RU)](messenger/README.ru.md)

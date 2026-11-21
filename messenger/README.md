@@ -1,102 +1,104 @@
 # 💬 RNS Messenger
 
-Web messenger per **LXMF** (Lightweight Extensible Message Format) su Reticulum, con allegati, messaggi audio, telemetria, mappa e comandi remoti.
+**English** | [Русский](README.ru.md)
 
-Progetto separato dal [Manager](../manager/): condivide con esso solo la cartella dati `~/.rns_manager/` (identità, configurazione, upload).
+Web messenger for **LXMF** (Lightweight Extensible Message Format) over Reticulum, with attachments, voice messages, telemetry, map and remote commands.
+
+This is a separate project from the [Manager](../manager/README.md): the only shared resource is the `~/.rns_manager/` data directory (identities, configuration, uploads).
 
 ![LXMF Chat](img/lxmf-chat.jpg)
 
-## ✨ Caratteristiche
+## ✨ Features
 
-- 💬 Chat uno-a-uno su LXMF con cronologia conversazioni persistente
-- 👥 Peer con gruppi/trust (preferiti, casa, lavoro, famiglia, amici, server, bot, monitoraggio, ricerca, pubblico)
-- 📎 Allegati: file, immagini e audio
-- 🎙️ Registrazione audio Opus nel browser e supporto **Codec2** (450–3200 bps) via `pycodec2`
-- 📊 Telemetria: sistema, batteria, pressione, temperatura, umidità, campo magnetico, posizione, link fisico
-- 🗺️ Mappa Leaflet con posizione dei peer e storico telemetria
-- 🎮 Comandi remoti LXMF: telemetria, ping, echo, signal report, rangetest
-- 📡 Nodi di propagazione: configurazione e sincronizzazione messaggi
-- 📣 Invio announce e import peer dalla cache del monitor
-- ⚡ Aggiornamenti in tempo reale via **Socket.IO** (progressi di invio, messaggi in arrivo)
-- 🗃️ Archivio messaggi raw consultabile e scaricabile
+- 💬 One-to-one LXMF chat with persistent conversation history
+- 👥 Peers with groups/trust (favorite, home, work, family, friends, server, bot, monitor, research, public)
+- 📎 Attachments: files, images and audio
+- 🎙️ In-browser Opus recording and **Codec2** support (450–3200 bps) via `pycodec2`
+- 📊 Telemetry: system, battery, pressure, temperature, humidity, magnetic field, location, physical link
+- 🗺️ Leaflet map with peer positions and telemetry history
+- 🎮 LXMF remote commands: telemetry, ping, echo, signal report, rangetest
+- 📡 Propagation nodes: configuration and message synchronisation
+- 📣 Announce sending and peer import from the monitor cache
+- ⚡ Real-time updates via **Socket.IO** (send progress, incoming messages)
+- 🗃️ Browsable and downloadable raw message archive
 
-## 🚀 Installazione
+## 🚀 Installation
 
-### Prerequisiti
+### Requirements
 - Python 3.9+
 - Reticulum (`rns`), `lxmf`, `lxst`
-- Un'identità RNS esistente (creata/importata con il Manager in `~/.rns_manager/storage/`)
+- An existing RNS identity (created/imported with the Manager in `~/.rns_manager/storage/`)
 
-### Dipendenze
+### Dependencies
 
 ```bash
 cd RNS-Manager/messenger
 pip install -r requirements.txt
 ```
 
-Opzionali:
-- `ffmpeg` nel `PATH` per la conversione audio OGG/Opus
-- `pycodec2` + libcodec2 per i messaggi Codec2
-- `gps` / `gpsd` per la telemetria di posizione da GPSD
+Optional:
+- `ffmpeg` in `PATH` for OGG/Opus audio conversion
+- `pycodec2` + libcodec2 for Codec2 messages
+- `gps` / `gpsd` for location telemetry from GPSD
 
-### Avvio
+### Run
 
 ```bash
 ./start.sh
-# oppure
+# or
 python3 lxmf_chat.py -p 5012
 ```
 
-Con un'identità specifica:
+With a specific identity:
 
 ```bash
-python3 lxmf_chat.py -i ~/.rns_manager/storage/<nome_identita> -p 5012
+python3 lxmf_chat.py -i ~/.rns_manager/storage/<identity_name> -p 5012
 ```
 
-Poi aprire <http://127.0.0.1:5012/> (alias: `/chat`).
+Then open <http://127.0.0.1:5012/> (alias: `/chat`).
 
-> Il server ascolta su `127.0.0.1` per impostazione predefinita.
-> Per esporlo in LAN: `python3 lxmf_chat.py --host 0.0.0.0 -p 5012`.
+> The server listens on `127.0.0.1` by default.
+> To expose it on the LAN: `python3 lxmf_chat.py --host 0.0.0.0 -p 5012`.
 
-## 📁 Struttura
+## 📁 Structure
 
 ```ini
 messenger/
-├── lxmf_chat.py          # Web server Flask + Socket.IO (entry point)
-├── messenger.py          # Core LXMF: identità, invio/ricezione, telemetria, comandi
+├── lxmf_chat.py          # Flask + Socket.IO web server (entry point)
+├── messenger.py          # LXMF core: identity, send/receive, telemetry, commands
 ├── audio_codec.py        # Codec2 / Opus (pycodec2 + LXST)
-├── telemetry_provider.py # Sensori di sistema e posizione
+├── telemetry_provider.py # System and location sensors
 ├── core/
-│   └── telemeter.py      # Campi FIELD_TELEMETRY (sensori LXMF)
+│   └── telemeter.py      # FIELD_TELEMETRY fields (LXMF sensors)
 ├── templates/
-│   └── lxmf_chat.html    # Interfaccia web
-├── static/               # CSS, favicon, encoder Opus/WASM
+│   └── lxmf_chat.html    # Web interface
+├── static/               # CSS, favicon, Opus/WASM encoder
 ├── version.py
 ├── requirements.txt
-├── rns_messenger.spec    # Spec PyInstaller
+├── rns_messenger.spec    # PyInstaller spec
 └── build_rns_messenger.sh
 ```
 
-## 🗂️ Dati condivisi con il Manager
+## 🗂️ Data shared with the Manager
 
 ```ini
-~/.rns_manager/storage/          # identità e database peers/conversazioni
-~/.rns_manager/config.json       # configurazione (propagation node, GPSD, ecc.)
-~/.rns_manager/uploads/          # file caricati
+~/.rns_manager/storage/          # identities and peers/conversations databases
+~/.rns_manager/config.json       # configuration (propagation node, GPSD, etc.)
+~/.rns_manager/uploads/          # uploaded files
 ~/.rns_manager/Cache/announces.db
 ```
 
-Le identità importate dal Manager sono selezionabili nel messenger e viceversa.
+Identities imported through the Manager are available in the messenger and vice versa.
 
-## 🎮 Utilizzo
+## 🎮 Usage
 
-1. Seleziona un'identità dalla lista (o avvia con `-i`).
-2. Scegli un peer e invia testo, file, immagini o audio.
-3. Apri il pannello telemetria per richiedere i dati o seguirli sulla mappa.
-4. Usa il pannello comandi per ping/echo/signal report/rangetest.
-5. Configura un nodo di propagazione se i peer non sono raggiungibili direttamente.
+1. Select an identity from the list (or start with `-i`).
+2. Pick a peer and send text, files, images or audio.
+3. Open the telemetry panel to request data or follow it on the map.
+4. Use the command panel for ping/echo/signal report/rangetest.
+5. Configure a propagation node if peers are not directly reachable.
 
-## 📊 API principali
+## 📊 Main APIs
 
 ```ini
 GET  /                            GET  /chat
@@ -117,37 +119,35 @@ GET  /api/favorites               POST /api/favorites/add
 POST /api/favorites/remove        POST /api/peer/update
 ```
 
-Eventi Socket.IO: `connect`, `disconnect`, `ping_server` (client → server); `progress_update`, `message`, `identity_loaded` (server → client).
+Socket.IO events: `connect`, `disconnect`, `ping_server` (client → server); `progress_update`, `message`, `identity_loaded` (server → client).
 
-## 📦 Build eseguibile
+## 📦 Standalone build
 
 ```bash
 cd messenger
 ./build_rns_messenger.sh
-# output: dist/rns_messenger_v<versione>.run
+# output: dist/rns_messenger_v<version>.run
 ```
 
 ## 🔧 Troubleshooting
 
 - **`No module named 'flask_socketio'`** → `pip install -r requirements.txt`
 - **`No module named 'gpsdclient'`** → `pip install gpsdclient`
-- **Nessuna identità disponibile** → importa/crea un'identità con il [Manager](../manager/) o copiala in `~/.rns_manager/storage/`
-- **Audio non convertito** → installa `ffmpeg`; per Codec2 serve `pycodec2` con libcodec2
-- **Mappa vuota** → richiedi la telemetria a un peer che espone la posizione
+- **No identities available** → import/create one with the [Manager](../manager/README.md) or copy it into `~/.rns_manager/storage/`
+- **Audio not converted** → install `ffmpeg`; for Codec2 install `pycodec2` with libcodec2
+- **Empty map** → request telemetry from a peer that exposes its location
 
-## 🔗 Progetti correlati
+## 🔗 Related projects
 
-- **RNS Manager & Monitor** ([`../manager/`](../manager/)): gestione identità e monitor annunci su porta **5010**.
+- **RNS Manager & Monitor** ([`../manager/`](../manager/)): identity management and announce monitor on port **5010**.
 
-## 📝 Licenza
+## 📝 License
 
-Distribuito sotto licenza MIT. Vedi [`../LICENSE`](../LICENSE).
+Distributed under the MIT License. See [`../LICENSE`](../LICENSE).
 
-## 📧 Contatto
+## 📧 Contact
 
 - Email: <arg0netds@gmail.com>
 - GitHub: <https://github.com/argo79/RNS-Manager>
 - RNS Identity: `04511923b68ae34e0fda5721d82f596f`
-
-English version: [README.en.md](README.en.md)
 

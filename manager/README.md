@@ -1,59 +1,62 @@
 # 🔑 RNS Manager & Monitor 🌐
 
-Interfaccia web per la gestione delle identità Reticulum (RNS) e il monitoraggio in tempo reale degli annunci di rete.
+**English** | [Русский](README.ru.md)
 
-Questo è il progetto **Manager**: il messenger LXMF è un progetto separato nella cartella [`../messenger/`](../messenger/).
+Web interface for managing Reticulum (RNS) identities and monitoring network announces in real time.
 
-## 📋 Panoramica
+This is the **Manager** project. The LXMF messenger is a separate project in [`../messenger/`](../messenger/).
+
+## 📋 Overview
 
 ![Identity Manager](img/rnidGUI.jpg)
 
-Funzionalità principali:
+Main features:
 
-- **Gestione identità RNS**: creazione, import, export, visualizzazione, cifratura/firma
-- **Monitor annunci RNS** in tempo reale con filtri, statistiche e cache persistente
-- **Comandi RNS** (`rnstatus`, `rnpath`, `rnprobe`) da interfaccia grafica
-- **Cifratura/decifratura** di file e testo con identità RNS
-- **Firma e verifica** digitale (`.rsg`)
+- **RNS identity management**: create, import, export, view, encrypt/sign
+- **Real-time announce monitor** with filters, statistics and persistent cache
+- **RNS commands** (`rnstatus`, `rnpath`, `rnprobe`) from a graphical interface
+- **File and text encryption/decryption** with RNS identities
+- **Digital signing and verification** (`.rsg`)
+- **Interface available in 15 languages** (it, en, fr, es, de, pt, ru, zh, ja, ar, hi, bn, ur, tr, pl)
 
-## ✨ Caratteristiche
+## ✨ Features
 
 ### Identity Manager
-- ✅ Visualizzazione identità da `reticulum`, `nomadnetwork`, `lxmf`, `rnphone`, `meshchat`, `rns_manager`
-- ✅ Import/export in HEX, Base32, Base64 e file binario
-- ✅ Generazione nuove identità
-- ✅ Analisi hash, calcolo hash aspect, verifica destinazioni
-- ✅ Cifratura/decifratura file e testo
-- ✅ Firma digitale e verifica firme
+- ✅ Identities from `reticulum`, `nomadnetwork`, `lxmf`, `rnphone`, `meshchat`, `rns_manager`
+- ✅ Import/export as HEX, Base32, Base64 and binary file
+- ✅ New identity generation
+- ✅ Hash analysis, aspect hash calculation, destination verification
+- ✅ File and text encryption/decryption
+- ✅ Digital signing and signature verification
 
 ### Aspect Monitor
-- 📡 Annunci in tempo reale via **SSE** (`/api/monitor/stream`)
-- 🔍 Filtri per aspect, ricerca testuale, ordinamento
-- 📊 Statistiche per identità/aspect/interfaccia e dati radio (RSSI, SNR, Q)
-- 🏷️ Riconoscimento automatico dell'aspect con cache per identità
-- 💾 Cache SQLite persistente (`cache/announces.db`, 7 giorni, max 100.000 record)
-- 🖱️ Modali interattive per `rnpath`, `rnprobe` e controllo blackhole
+- 📡 Real-time announces over **SSE** (`/api/monitor/stream`)
+- 🔍 Aspect filters, text search, sorting
+- 📊 Statistics per identity/aspect/interface plus radio data (RSSI, SNR, Q)
+- 🏷️ Automatic aspect recognition with per-identity cache
+- 💾 Persistent SQLite cache (`cache/announces.db`, 7 days, max 100,000 rows)
+- 🖱️ Interactive modals for `rnpath`, `rnprobe` and blackhole checks
 
 ![Aspect Monitor](img/rnsMonitor.jpg)
 
-## 📸 Screenshot
+## 📸 Screenshots
 
 | Desktop | Mobile |
 |---|---|
 | ![Monitor desktop](img/rnsMonitor2.jpg) | ![Monitor mobile](img/monitor-mobile-live.jpg) |
-| ![Statistiche](img/rnsMonitor3.jpg) | ![Statistiche mobile](img/monitor-mobile-stats.jpg) |
-| ![Dettagli aspect](img/monitor-aspect-modal.jpg) | ![Dettagli e rnpath](img/monitor-aspect-details-rnpath.jpg) |
+| ![Statistics](img/rnsMonitor3.jpg) | ![Mobile statistics](img/monitor-mobile-stats.jpg) |
+| ![Aspect details](img/monitor-aspect-modal.jpg) | ![Details and rnpath](img/monitor-aspect-details-rnpath.jpg) |
 
-Altre immagini: `img/rnid-es.jpg` (spagnolo), `img/rnid-ar.jpg` e `img/arab-RNID.jpg` (arabo), `img/rnid-ru.jpg` (russo), `img/monitor-mobile-header.jpg`, `img/monitor-mobile-identity-filter.jpg`, `img/monitor-ID.jpg`, `img/aspect.jpg`.
+More images: `img/rnid-es.jpg` (Spanish UI), `img/rnid-ar.jpg` and `img/arab-RNID.jpg` (Arabic), `img/rnid-ru.jpg` (Russian), `img/monitor-mobile-header.jpg`, `img/monitor-mobile-identity-filter.jpg`, `img/monitor-ID.jpg`, `img/aspect.jpg`.
 
-## 🚀 Installazione
+## 🚀 Installation
 
-### Prerequisiti
+### Requirements
 - Python 3.8+
-- Reticulum installato e configurato
-- Comandi `rnid`, `rnstatus`, `rnpath`, `rnprobe` nel `PATH`
+- Reticulum installed and configured
+- `rnid`, `rnstatus`, `rnpath`, `rnprobe` available in `PATH`
 
-### Avvio
+### Run
 
 ```bash
 git clone https://github.com/argo79/RNS-Manager.git
@@ -63,46 +66,43 @@ pip install -r requirements.txt
 python3 rns_manager.py
 ```
 
-Oppure:
+Or:
 
 ```bash
 ./start.sh
 ```
 
-Poi aprire:
+Then open:
 
 - Identity Manager: <http://127.0.0.1:5010/>
-- Aspect Monitor: <http://127.0.0.1:5010/api/monitor> (redirect da `/monitor`)
+- Aspect Monitor: <http://127.0.0.1:5010/api/monitor> (`/monitor` redirects here)
 
-L'app apre automaticamente il browser all'avvio.
+The browser is opened automatically at startup.
 
-## 📁 Struttura
+## 📁 Project structure
 
 ```ini
 manager/
-├── rns_manager.py            # Server Flask principale
-├── version.py                # Versione del progetto
+├── rns_manager.py            # Main Flask server
+├── version.py
 ├── requirements.txt
 ├── modules/
-│   └── rns_monitor.py        # Monitor annunci (processo + SQLite + blueprint)
+│   └── rns_monitor.py        # Announce monitor (process + SQLite + blueprint)
 ├── templates/
 │   ├── index.html            # Identity Manager
 │   └── monitor.html          # Aspect Monitor
-├── static/                   # CSS, favicon, traduzioni
-├── tools/
-│   ├── check_aspect.py       # Diagnostica aspect via rnid
-│   ├── check_aspect2.py      # Brute-force namespace/aspect
-│   └── rns_announce.py       # Esempio di invio announce
-├── img/                      # Screenshot
-├── rns_manager.spec          # Spec PyInstaller
-└── build_rns_manager.sh      # Build eseguibile standalone
+├── static/                   # CSS, favicon, translations
+├── tools/                    # Aspect diagnostics and announce example
+├── img/                      # Screenshots
+├── rns_manager.spec          # PyInstaller spec
+└── build_rns_manager.sh      # Standalone build
 ```
 
-Cartelle create a runtime dentro `manager/`: `cache/`, `downloads/`, `tmp/` e il socket `rns_monitor.sock`.
+Runtime folders created inside `manager/`: `cache/`, `downloads/`, `tmp/` and `rns_monitor.sock`.
 
-## 🗂️ Directory delle identità
+## 🗂️ Identity directories
 
-Il programma cerca identità in:
+Identities are searched in:
 
 ```ini
 ~/.reticulum/storage/
@@ -113,24 +113,24 @@ Il programma cerca identità in:
 ~/.rns_manager/storage/
 ```
 
-La cartella `~/.rns_manager/storage/` è **condivisa con il Messenger**: le identità importate qui sono disponibili anche nell'altra applicazione.
+`~/.rns_manager/storage/` is **shared with the Messenger**: identities imported here are available to both applications.
 
-## 🎮 Utilizzo
+## 🎮 Usage
 
-**Identity Manager**: premi *Carica* per elencare le identità, seleziona un'identità e usa *Info*, *Annuncia*, *Import/Export*, *Genera*, *Cifra/Decifra*, *Firma/Verifica*.
+**Identity Manager**: press *Load* to list identities, select one and use *Info*, *Announce*, *Import/Export*, *Generate*, *Encrypt/Decrypt*, *Sign/Verify*.
 
-**Aspect Monitor**: usa le tab *Live*, *Identità*, *Statistiche*; clicca sugli hash per aprire i comandi `rnpath`, `rnprobe`, `rnpath -p`.
+**Aspect Monitor**: use the *Live*, *Identities* and *Statistics* tabs; click hashes to open `rnpath`, `rnprobe`, `rnpath -p`.
 
-## 🔧 Configurazione
+## 🔧 Configuration
 
-- **Cache identità**: 5 minuti (in memoria); *Ricerca profonda* forza la scansione.
-- **Cache annunci**: SQLite in `cache/announces.db`, retention 7 giorni.
-- **Aspect riconosciuti**: lista `RNS_ASPECTS` in `modules/rns_monitor.py` **e** array `ASPECTS` in `templates/monitor.html`: vanno mantenuti allineati.
-- **Directory di ricerca**: `USER_DIRECTORIES` in `rns_manager.py`.
+- **Identity cache**: 5 minutes (in memory); *Deep Scan* forces a full scan.
+- **Announce cache**: SQLite in `cache/announces.db`, 7-day retention.
+- **Recognised aspects**: `RNS_ASPECTS` in `modules/rns_monitor.py` **and** the `ASPECTS` array in `templates/monitor.html` must be kept in sync.
+- **Search directories**: `USER_DIRECTORIES` in `rns_manager.py`.
+- **UI translations**: `static/index_translations.json` (15 languages); the default language follows the browser, and the selector is in the header.
 
-## 📊 API principali
+## 📊 Main APIs
 
-### Identità
 ```ini
 GET  /api/identities/list          POST /api/identities/import/file
 POST /api/identities/import/data   POST /api/identities/export
@@ -138,41 +138,23 @@ POST /api/identities/generate      POST /api/identities/info
 POST /api/identities/encrypt       POST /api/identities/decrypt
 POST /api/identities/sign          POST /api/identities/verify
 GET  /api/identities/find/by-hash  POST /api/rnid
-GET  /api/cache/identities/status  POST /api/cache/identities/clear
-POST /api/cache/identities/refresh POST /api/upload/temp
-POST /api/cleanup/temp
-```
-
-### Monitor
-```ini
 GET  /api/monitor                  GET  /api/monitor/stats
 GET  /api/monitor/history          GET  /api/monitor/stream
-GET  /api/monitor/peer/<hash>      POST /api/monitor/clear
-POST /api/monitor/reset-all        POST /api/monitor/announce
 GET  /api/monitor/sqlite/stats     GET  /api/monitor/sqlite/search
-GET  /api/monitor/sqlite/peer/<hash>/stats
+POST /api/monitor/clear            POST /api/monitor/reset-all
 POST /api/monitor/sqlite/cleanup   POST /api/monitor/sqlite/vacuum
-```
-
-### Comandi RNS
-```ini
 GET  /api/rns/status               GET  /api/rns/paths
 POST /api/rns/probe                POST /api/rns/probe/aspect
-POST /api/rns/paths/blackhole
+POST /api/rns/paths/blackhole      POST /api/shutdown
+POST /api/files/relocate           # move/copy tmp -> downloads (safe, no shell)
 ```
 
-### Sistema
-```ini
-POST /api/shutdown
-POST /api/files/relocate     # sposta/copia un file da tmp a downloads (sicuro, senza shell)
-```
-
-## 📦 Build eseguibile
+## 📦 Standalone build
 
 ```bash
 cd manager
 ./build_rns_manager.sh
-# output: dist/rns_manager_v<versione>.run
+# output: dist/rns_manager_v<version>.run
 ```
 
 ## 📱 Android via Termux
@@ -184,36 +166,25 @@ pip install -r requirements.txt --break-system-packages
 python3 rns_manager.py
 ```
 
-Aprire il browser su `http://127.0.0.1:5010`.
+Open `http://127.0.0.1:5010` in the browser.
 
-## 🔗 Progetti correlati
+## 🔗 Related projects
 
-- **RNS Messenger** ([`../messenger/`](../messenger/)): chat LXMF completa con allegati, audio, telemetria e mappa. Si avvia separatamente sulla porta **5012**.
+- **RNS Messenger** ([`../messenger/`](../messenger/)): full LXMF chat with attachments, audio, telemetry and map. Runs separately on port **5012**.
 
-## 🐛 Problemi noti
+## 🐛 Known issues
 
-- La prima scansione delle identità può richiedere 10–30 secondi.
-- Alcuni aspect potrebbero non essere riconosciuti.
-- Su mobile alcune tabelle richiedono scorrimento orizzontale.
+- The first identity scan may take 10–30 seconds.
+- Some aspects may not be recognised.
+- On mobile devices some tables require horizontal scrolling.
 
-## 📝 Licenza
+## 📝 License
 
-Distribuito sotto licenza MIT. Vedi [`../LICENSE`](../LICENSE).
+Distributed under the MIT License. See [`../LICENSE`](../LICENSE).
 
-## ☕ Supporta lo sviluppo
-
-| Crypto | Indirizzo |
-|---|---|
-| **XRP** | `rBKbetm51vuQQfg4Yo8fvweRya7gedcr9J` |
-| **XMR** | `87jacZEtYvXcgnvEp7wu45gLwRBYpvwMr3N9dqhNipPWV69XwQX658tS73VEdghLopG1wA4STEdMPcGF8Tc3e18eJyQ4kMA` |
-| **ETH** | `0xd2d85288df96B4162814Ca7492039620371b9D81` |
-
-## 📧 Contatto
+## 📧 Contact
 
 - Email: <arg0netds@gmail.com>
 - GitHub: <https://github.com/argo79/RNS-Manager>
 - RNS Identity: `04511923b68ae34e0fda5721d82f596f`
-
-English version: [README.en.md](README.en.md)
-
 
