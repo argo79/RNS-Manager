@@ -1,85 +1,85 @@
 # Sideband rangetest plugin
 
-Questo command plugin aggiunge a Sideband il comando LXMF:
+**English** | [Русский](README.ru.md) | [Italiano](README.it.md)
+
+This command plugin adds the following LXMF command to Sideband:
 
 ```text
-rangetest <intervallo> start
+rangetest <interval> start
 rangetest 0 stop
 ```
 
-Il plugin chiede periodicamente la telemetria al peer che ha inviato il
-comando. Sideband salva le risposte nel proprio database; allo stop il plugin
-esporta i punti con coordinate in GPX e KML.
+The plugin periodically requests telemetry from the peer that sent the
+command. Sideband stores the replies in its database; on stop, the plugin
+exports points with coordinates as GPX and KML.
 
-## Installazione
+## Installation
 
-1. In Sideband apri `Settings` → `Plugins`.
-2. Attiva **Enable Plugins**.
-3. Attiva **Enable Command Plugins**.
-4. Seleziona come **Plugins Directory** la cartella `sideband_plugins/` del
-   repository.
+1. In Sideband open `Settings` → `Plugins`.
+2. Enable **Enable Plugins**.
+3. Enable **Enable Command Plugins**.
+4. Select the repository's `sideband_plugins/` folder as **Plugins Directory**.
 
-   In alternativa copia `rangetest.py` in una directory dedicata, ad esempio:
+   Alternatively, copy `rangetest.py` to a dedicated directory, for example:
 
    ```bash
    mkdir -p ~/.config/sideband/plugins
    cp sideband_plugins/rangetest.py ~/.config/sideband/plugins/
    ```
 
-   e seleziona `~/.config/sideband/plugins`.
+   and select `~/.config/sideband/plugins`.
 
-5. Riavvia Sideband.
-6. Verifica nei log che compaia:
+5. Restart Sideband.
+6. Check the logs for:
 
    ```text
    Rangetest command plugin started
    Registered ... as handler for command "rangetest"
    ```
 
-## Uso
+## Usage
 
-Dalla modalità **Send command or request** di Sideband:
+From Sideband's **Send command or request** mode:
 
 ```text
 rangetest 15 start
 ```
 
-e per fermare:
+To stop:
 
 ```text
 rangetest 0 stop
 ```
 
-L’intervallo viene limitato tra 5 e 3600 secondi.
+The interval is clamped between 5 and 3600 seconds.
 
-I file vengono creati in:
+Files are created in:
 
 ```text
 ~/.config/sideband/app_storage/rangetest/
 ```
 
-con nomi:
+with names:
 
 ```text
 rangetest_<peer>_<timestamp>.gpx
 rangetest_<peer>_<timestamp>.kml
 ```
 
-## Permessi
+## Permissions
 
-Per ricevere il comando `rangetest`, Sideband deve autorizzare il peer che lo
-invia. In Sideband verifica le impostazioni dei contatti/trusted peer.
+To receive the `rangetest` command, Sideband must authorize the peer sending
+it. Check the contact/trusted peer settings in Sideband.
 
-Per ricevere le risposte telemetria, il peer remoto deve avere abilitate le
-richieste telemetria:
+To receive telemetry replies, the remote peer must allow telemetry requests:
 
-- `allow_telemetry_requests = true` nel RNS Messenger, oppure
-- `allow_telemetry` abilitato per il peer.
+- `allow_telemetry_requests = true` in RNS Messenger, or
+- `allow_telemetry` enabled for that peer.
 
-## Limiti
+## Limitations
 
-- Vengono esportati solo i punti che contengono una posizione valida.
-- Sideband non memorizza nello stesso record RSSI/SNR/Q della ricezione; il
-  plugin esporta la telemetria disponibile, non le metriche radio del pacchetto.
-- Il plugin usa l’API Sideband `request_latest_telemetry()` e
-  `peer_telemetry()`, disponibile in Sideband 1.5.0.
+- Only points containing a valid location are exported.
+- Sideband does not store RSSI/SNR/Q in the same reception record; the plugin
+  exports available telemetry, not packet radio metrics.
+- The plugin uses Sideband's `request_latest_telemetry()` and
+  `peer_telemetry()` APIs, available in Sideband 1.5.0.
