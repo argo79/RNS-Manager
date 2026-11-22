@@ -29,6 +29,10 @@ RNS-Manager/
 │   ├── requirements.txt
 │   └── README.md / README.ru.md
 ├── legacy/           # неиспользуемые исторические файлы (не входят в сборки)
+├── tests/            # модульные тесты (unittest)
+├── tools/            # вспомогательные скрипты (проверка inline JS)
+├── sideband_plugins/ # command plugin rangetest для Sideband
+├── .github/          # конфигурация CI
 ├── LICENSE
 └── .gitignore
 ```
@@ -55,6 +59,15 @@ python3 lxmf_chat.py -p 5012     # или ./start.sh
 
 Откройте <http://127.0.0.1:5012/>.
 
+## 🧪 Тесты
+
+```bash
+python -m unittest discover -s tests -v
+python tools/check_inline_js.py
+```
+
+CI: `.github/workflows/ci.yml` (компиляция Python, проверка inline JS, модульные тесты).
+
 ## 📸 Скриншоты
 
 | Identity Manager | Монитор аспектов |
@@ -72,9 +85,10 @@ python3 lxmf_chat.py -p 5012     # или ./start.sh
 Данные приложений остаются в домашнем каталоге пользователя:
 
 ```ini
-~/.rns_manager/storage/     # идентичности RNS
-~/.rns_manager/config.json  # конфигурация messenger
-~/.rns_manager/uploads/     # загруженные вложения
+~/.rns_manager/storage/            # идентичности RNS и базы пиров
+~/.rns_manager/config.json        # конфигурация messenger
+~/.rns_manager/uploads/           # загруженные вложения
+~/.rns_manager/cache/announces.db # кэш анонсов, общий для Manager и Messenger
 ```
 
 ## 🧰 Общие требования

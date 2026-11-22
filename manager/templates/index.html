@@ -210,10 +210,20 @@
             let text = translations[key];
             Object.keys(params).forEach(param => {
                 const regex = new RegExp(`\\{${param}\\}`, 'g');
-                text = text.replace(regex, params[param]);
+                text = text.replace(regex, escapeHtml(String(params[param])));
             });
             text = text.replace(/\{version\}/g, APP_VERSION);
             return text;
+        }
+
+        function escapeHtml(value) {
+            if (value === undefined || value === null) return '';
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
         
         function translatePage() {
@@ -739,7 +749,7 @@
                 translateDynamicContent();
             } catch (error) {
                 console.error('Errore loadIdentities:', error);
-                list.innerHTML = `<div class="error">${t('error')}: ${error}</div>`;
+                list.innerHTML = `<div class="error">${t('error')}: ${escapeHtml(error && error.message ? error.message : error)}</div>`;
             }
         }
 
@@ -747,34 +757,47 @@
             const validClass = isPublic ? 'success' : (identity.valid ? 'success' : 'warning');
             let sizeInfo = '';
             if (identity.size) {
-                sizeInfo = identity.size === 64 ? '64 bytes ✓' : `${identity.size} bytes`;
+                sizeInfo = identity.size === 64 ? '64 bytes ✓' : `${Number(identity.size)} bytes`;
             } else {
                 sizeInfo = isPublic ? '32 bytes (pubblica)' : '? bytes';
             }
-            const name = identity.name || (isPublic ? `public_${identity.rns_hash?.substring(0, 8)}` : 'unknown');
-            const app = identity.app || (isPublic ? 'public' : 'unknown');
+
+            const rnsHashRaw = String(identity.rns_hash || identity.rnsHash || '');
+            const safeHash = /^[0-9a-fA-F]{8,64}$/.test(rnsHashRaw) ? rnsHashRaw : '';
+            const rawName = identity.name || (isPublic ? `public_${safeHash.substring(0, 8)}` : 'unknown');
+            const name = escapeHtml(rawName);
+            const app = escapeHtml(identity.app || (isPublic ? 'public' : 'unknown'));
+
             let hashInfo = '';
-            const rnsHash = identity.rns_hash || identity.rnsHash;
-            if (rnsHash) {
-                const shortHash = rnsHash.length > 32 ? rnsHash.substring(0, 32) + '...' : rnsHash;
+            if (safeHash) {
+                const shortHash = escapeHtml(safeHash.length > 32 ? safeHash.substring(0, 32) + '...' : safeHash);
                 hashInfo = `<div style="font-size: 10px; color: #0ff; font-family: monospace; margin-top: 2px;">RNS: ${shortHash}</div>`;
             }
+
             let aspectInfo = '';
             const rnsAspects = ['rnstransport.probe', 'lxmf.delivery', 'nomadnetwork.node', 'lxmf.propagation', 'call.audio', 'lxst.telephony'];
             const aspectHashes = identity.aspect_hashes || identity.aspects || {};
             rnsAspects.forEach(aspect => {
                 if (aspectHashes[aspect]) {
-                    const hash = aspectHashes[aspect];
-                    const shortHash = hash.length > 32 ? hash.substring(0, 32) + '...' : hash;
-                    aspectInfo += `<div style="font-size: 9px; color: ${isPublic ? '#8f8' : '#888'}; margin-top: 1px;">${aspect.split('.').pop()}: ${shortHash}</div>`;
+                    const hash = escapeHtml(String(aspectHashes[aspect]).substring(0, 40));
+                    aspectInfo += `<div style="font-size: 9px; color: ${isPublic ? '#8f8' : '#888'}; margin-top: 1px;">${escapeHtml(aspect.split('.').pop())}: ${hash}</div>`;
                 }
             });
+
             let deleteButton = '';
-            if (isPublic && rnsHash) {
-                deleteButton = `<button onclick="event.stopPropagation(); removePublicIdentity('${rnsHash}')" style="background: #f44; color: white; border: none; padding: 2px 5px; font-size: 9px; border-radius: 2px; margin-left: 5px; cursor: pointer; vertical-align: middle;">✕</button>`;
+            if (isPublic && safeHash) {
+                deleteButton = `<button data-hash="${safeHash}" onclick="event.stopPropagation(); removePublicIdentity(this.dataset.hash)" style="background: #f44; color: white; border: none; padding: 2px 5px; font-size: 9px; border-radius: 2px; margin-left: 5px; cursor: pointer; vertical-align: middle;">✕</button>`;
             }
+
+            const dataAttr = isPublic
+                ? `data-hash="${safeHash}"`
+                : `data-path="${escapeHtml(identity.path || '')}"`;
+            const clickHandler = isPublic
+                ? 'selectPublicIdentity(this.dataset.hash, this)'
+                : 'selectIdentity(this.dataset.path, this)';
+
             return `
-                <div class="identity-item" onclick="${isPublic ? `selectPublicIdentity('${rnsHash}', this)` : `selectIdentity('${identity.path}', this)`}">
+                <div class="identity-item" ${dataAttr} onclick="${clickHandler}">
                     <div style="flex: 1;">
                         <div class="identity-name">${name} ${isPublic ? '🌐' : '🔑'} ${deleteButton}</div>
                         <div class="identity-info">${sizeInfo} • ${app} ${hashInfo} ${aspectInfo}</div>
@@ -850,7 +873,7 @@
                         <div class="export-buttons">
                             <button class="copy-btn" onclick="copyExportedData()">${t('export_result_copy_button', { format: formatLabel })}</button>
                         </div>
-                        <textarea id="exportedData" readonly style="width:100%; height:60px; background:#000; border:1px solid ${isPrivate ? '#ff0' : '#333'}; padding:8px; font-family:monospace; font-size: 11px; resize: vertical; color: ${isPrivate ? '#ff0' : '#0f0'};">${data.data}</textarea>
+                        <textarea id="exportedData" readonly style="width:100%; height:60px; background:#000; border:1px solid ${isPrivate ? '#ff0' : '#333'}; padding:8px; font-family:monospace; font-size: 11px; resize: vertical; color: ${isPrivate ? '#ff0' : '#0f0'};">${escapeHtml(data.data)}</textarea>
                         <div style="margin-top:8px; font-size:10px; color:#888;">
                             ${isPrivate ? t('export_result_private_label') : t('export_result_public_label')}
                         </div>
@@ -915,11 +938,11 @@
                     showOutput(t('identity_imported', { name: importedName, hash: shortHash }), 'success');
                     loadIdentities();
                 } else {
-                    status.innerHTML = `<span class="error">${t('error')}: ${data.error}</span>`;
+                    status.innerHTML = `<span class="error">${t('error')}: ${escapeHtml(data.error || '')}</span>`;
                     showOutput(t('error') + ': ' + data.error, 'error');
                 }
             } catch (error) {
-                status.innerHTML = `<span class="error">${t('error')}: ${error}</span>`;
+                status.innerHTML = `<span class="error">${t('error')}: ${escapeHtml(error && error.message ? error.message : error)}</span>`;
                 showOutput(t('error') + ': ' + error, 'error');
             }
         }
@@ -1075,7 +1098,7 @@
                     }
                 } else {
                     resultHTML += `<div class="error">${t('error_verifica')}</div>`;
-                    resultHTML += `<div style="margin-top: 5px;">${aspectData.error || t('error_sconosciuto')}</div>`;
+                    resultHTML += `<div style="margin-top: 5px;">${escapeHtml(aspectData.error || t('error_sconosciuto'))}</div>`;
                     currentVerification.type = 'error';
                 }
                 const addBtn = document.getElementById('addToIdentitiesBtn');

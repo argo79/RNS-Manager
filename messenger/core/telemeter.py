@@ -45,6 +45,10 @@ class Telemeter:
             Sensor.SID_TEMPERATURE: Temperature,
             Sensor.SID_HUMIDITY: Humidity,
             Sensor.SID_MAGNETIC_FIELD: MagneticField,
+            Sensor.SID_AMBIENT_LIGHT: AmbientLight,
+            Sensor.SID_PROCESSOR: Processor,
+            Sensor.SID_RAM: Ram,
+            Sensor.SID_NVM: Nvm,
         }
         self.available = {
             "time": Sensor.SID_TIME,
@@ -57,6 +61,10 @@ class Telemeter:
             "temperature": Sensor.SID_TEMPERATURE,
             "humidity": Sensor.SID_HUMIDITY,
             "magnetic_field": Sensor.SID_MAGNETIC_FIELD,
+            "ambient_light": Sensor.SID_AMBIENT_LIGHT,
+            "processor": Sensor.SID_PROCESSOR,
+            "ram": Sensor.SID_RAM,
+            "nvm": Sensor.SID_NVM,
         }
         self.names = {v: k for k, v in self.available.items()}
         self.from_packed = from_packed
@@ -109,8 +117,12 @@ class Sensor:
     SID_TEMPERATURE       = 0x07
     SID_HUMIDITY          = 0x08
     SID_MAGNETIC_FIELD    = 0x09
+    SID_AMBIENT_LIGHT     = 0x0A
     SID_INFORMATION       = 0x0F
     SID_RECEIVED          = 0x10
+    SID_PROCESSOR         = 0x13
+    SID_RAM               = 0x14
+    SID_NVM               = 0x15
 
     def __init__(self, sid=None):
         self._telemeter = None
@@ -211,9 +223,49 @@ class Pressure(Sensor):
     def __init__(self):
         super().__init__(type(self).SID)
     def pack(self):
-        return self.data["mbar"] if self.data else None
+        return self.data
     def unpack(self, packed):
-        return {"mbar": packed} if packed is not None else None
+        return float(packed) if packed is not None else None
+
+
+class AmbientLight(Sensor):
+    SID = Sensor.SID_AMBIENT_LIGHT
+    def __init__(self):
+        super().__init__(type(self).SID)
+    def pack(self):
+        return self.data
+    def unpack(self, packed):
+        return float(packed) if packed is not None else None
+
+
+class Processor(Sensor):
+    SID = Sensor.SID_PROCESSOR
+    def __init__(self):
+        super().__init__(type(self).SID)
+    def pack(self):
+        return self.data
+    def unpack(self, packed):
+        return float(packed) if packed is not None else None
+
+
+class Ram(Sensor):
+    SID = Sensor.SID_RAM
+    def __init__(self):
+        super().__init__(type(self).SID)
+    def pack(self):
+        return self.data
+    def unpack(self, packed):
+        return float(packed) if packed is not None else None
+
+
+class Nvm(Sensor):
+    SID = Sensor.SID_NVM
+    def __init__(self):
+        super().__init__(type(self).SID)
+    def pack(self):
+        return self.data
+    def unpack(self, packed):
+        return float(packed) if packed is not None else None
 
 class Location(Sensor):
     SID = Sensor.SID_LOCATION
@@ -237,16 +289,34 @@ class Location(Sensor):
     def unpack(self, packed):
         if packed and len(packed) >= 7:
             try:
+                # Sideband 19.98 may send accuracy as 4 bytes (newer format),
+                # while older clients use 2 bytes. Accept both variants.
+                accuracy_raw = packed[5]
+                if isinstance(accuracy_raw, (bytes, bytearray)):
+                    if len(accuracy_raw) >= 2:
+                        accuracy = struct.unpack("!H", accuracy_raw[:2])[0] / 1e2
+                    else:
+                        accuracy = None
+                elif accuracy_raw is not None:
+                    accuracy = float(accuracy_raw) / 1e2
+                else:
+                    accuracy = None
+
+                last_update = packed[6]
+                if isinstance(last_update, (int, float)) and 0 <= last_update < 1e9:
+                    # Some Sideband versions send the age instead of an epoch.
+                    last_update = time.time() - last_update
+
                 return {
                     "latitude": struct.unpack("!i", packed[0])[0]/1e6,
                     "longitude": struct.unpack("!i", packed[1])[0]/1e6,
                     "altitude": struct.unpack("!i", packed[2])[0]/1e2,
                     "speed": struct.unpack("!I", packed[3])[0]/1e2,
                     "bearing": struct.unpack("!i", packed[4])[0]/1e2,
-                    "accuracy": struct.unpack("!H", packed[5])[0]/1e2,
-                    "last_update": packed[6],
+                    "accuracy": accuracy,
+                    "last_update": last_update,
                 }
-            except:
+            except Exception:
                 return None
         return None
 
@@ -268,18 +338,18 @@ class Temperature(Sensor):
     def __init__(self):
         super().__init__(type(self).SID)
     def pack(self):
-        return self.data["c"] if self.data else None
+        return self.data
     def unpack(self, packed):
-        return {"c": packed} if packed is not None else None
+        return float(packed) if packed is not None else None
 
 class Humidity(Sensor):
     SID = Sensor.SID_HUMIDITY
     def __init__(self):
         super().__init__(type(self).SID)
     def pack(self):
-        return self.data["percent_relative"] if self.data else None
+        return self.data
     def unpack(self, packed):
-        return {"percent_relative": packed} if packed is not None else None
+        return float(packed) if packed is not None else None
 
 class MagneticField(Sensor):
     SID = Sensor.SID_MAGNETIC_FIELD

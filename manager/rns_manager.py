@@ -17,8 +17,13 @@ import socket
 import signal
 import sys
 import webbrowser
+import hmac
+import ipaddress
+from urllib.parse import urlparse
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template, Response, stream_with_context
+from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestEntityTooLarge
+from flask import Flask, request, jsonify, render_template, Response, stream_with_context, g
 
 # Importa il modulo monitor
 import modules.rns_monitor as rns_monitor
@@ -29,7 +34,7 @@ import modules.rns_monitor as rns_monitor
 try:
     from version import APP_VERSION, APP_NAME, APP_AUTHOR, APP_URL, DONATION_ADDRESSES
 except ImportError:
-    APP_VERSION = "1.0.0"
+    APP_VERSION = "1.2.0"
     APP_NAME = "RNS Manager"
     APP_AUTHOR = "argo79"
     APP_URL = "https://github.com/argo79/RNS-Manager"
@@ -110,12 +115,26 @@ def print_rns_warning(missing_commands):
 BASE_DIR = get_base_dir()
 LOCAL_TMP = os.path.join(BASE_DIR, "tmp")
 LOCAL_DOWNLOADS = os.path.join(BASE_DIR, "downloads")
-LOCAL_CACHE = os.path.join(BASE_DIR, "cache")
+# Cache condivisa con il Messenger: ~/.rns_manager/cache/announces.db
+SHARED_DATA_DIR = os.path.expanduser("~/.rns_manager")
+CUSTOM_CACHE_DIR = os.environ.get("RNS_MANAGER_CACHE_DIR")
+LOCAL_CACHE = CUSTOM_CACHE_DIR or os.path.join(SHARED_DATA_DIR, "cache")
+LEGACY_CACHE = os.path.join(BASE_DIR, "cache")
 
 # Crea tutte le cartelle necessarie
 os.makedirs(LOCAL_TMP, exist_ok=True)
 os.makedirs(LOCAL_DOWNLOADS, exist_ok=True)
 os.makedirs(LOCAL_CACHE, exist_ok=True)
+
+# Migra la vecchia cache locale (manager/cache) verso quella condivisa
+_legacy_db = os.path.join(LEGACY_CACHE, "announces.db")
+_shared_db = os.path.join(LOCAL_CACHE, "announces.db")
+if not CUSTOM_CACHE_DIR and os.path.exists(_legacy_db) and not os.path.exists(_shared_db):
+    try:
+        shutil.copy2(_legacy_db, _shared_db)
+        print(f"[✓] Cache migrata in {_shared_db}")
+    except OSError as e:
+        print(f"[!] Impossibile migrare la cache: {e}")
 
 print(f"[DEBUG] BASE_DIR: {BASE_DIR}")
 print(f"[DEBUG] LOCAL_TMP: {LOCAL_TMP}")
@@ -159,6 +178,58 @@ def _relocate(source, destination, action='move'):
     else:
         shutil.move(src, dst)
     return dst
+
+
+def _safe_identity_name(raw_name, fallback='identity'):
+    """Restituisce un nome file identità sicuro (niente path, niente traversal)."""
+    raw_name = (raw_name or '').strip()
+    base = os.path.basename(raw_name.replace(chr(92), '/'))
+    base = secure_filename(base)
+    if not base or base in ('.', '..'):
+        base = secure_filename(fallback) or 'identity'
+    return base[:120]
+
+
+def _identity_dest_path(name):
+    """Percorso di destinazione garantito dentro RNS_MANAGER_STORAGE."""
+    root = os.path.realpath(RNS_MANAGER_STORAGE)
+    path = os.path.realpath(os.path.join(root, name))
+    if not path.startswith(root + os.sep):
+        raise ValueError('Percorso identità non consentito')
+    return path
+
+
+def _identity_roots():
+    roots = []
+    for value in (RETICULUM_STORAGE, NOMADNET_STORAGE, LXMF_STORAGE, RNS_MANAGER_STORAGE,
+                  RNPHONE_STORAGE, MESHCHAT_STORAGE):
+        if value:
+            roots.append(os.path.realpath(value))
+    return roots
+
+
+def _is_allowed_identity_path(path):
+    """True solo se il path è dentro una delle directory identità note."""
+    if not isinstance(path, str) or not path:
+        return False
+    real = os.path.realpath(os.path.expanduser(path))
+    for root in _identity_roots():
+        if real.startswith(root + os.sep) and os.path.isfile(real):
+            return True
+    return False
+
+
+def _hex_arg(value, min_len=4, max_len=64):
+    """Valida un hash/prefix esadecimale."""
+    if not isinstance(value, str):
+        return False
+    return bool(re.fullmatch(rf'[0-9a-fA-F]{{{min_len},{max_len}}}', value))
+
+
+_RNID_ALLOWED_FLAGS = {
+    '-h', '--help', '-R', '-i', '-H', '-a', '-e', '-d', '-s', '-V',
+    '-x', '-X', '-b', '-B', '-P', '-F', '-f', '--print-identity',
+}
 
 # ============================================
 # === PERCORSI CONFIGURATI DALL'UTENTE ===
@@ -204,13 +275,111 @@ print(f"[✓] Cache: {CACHE_DIR}")
 # ============================================
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
+
+_LOCAL_HOSTS = {'localhost', '127.0.0.1', '::1'}
+AUTH_TOKEN = os.environ.get("RNS_AUTH_TOKEN", "")
+
+
+def _auth_ok():
+    """Auth token opzionale (env RNS_AUTH_TOKEN)."""
+    if not AUTH_TOKEN:
+        return True
+    supplied = request.headers.get('X-Auth-Token') or request.cookies.get('rns_auth')
+    if not supplied:
+        supplied = request.args.get('token', '')
+        if supplied:
+            g.set_auth_cookie = True
+    return bool(supplied) and hmac.compare_digest(str(supplied), AUTH_TOKEN)
+
+
+def _request_host():
+    """Host della richiesta senza porta (supporta IPv6)."""
+    parsed = urlparse('//' + (request.host or ''))
+    return (parsed.hostname or '').lower()
+
+
+def _host_is_allowed(host):
+    # Solo localhost o indirizzi IP letterali: blocca DNS rebinding via domini.
+    if host in _LOCAL_HOSTS:
+        return True
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
+def _origin_matches(origin, host):
+    parsed = urlparse(origin)
+    if parsed.scheme not in ('http', 'https'):
+        return False
+    origin_host = (parsed.hostname or '').lower()
+    if host in _LOCAL_HOSTS:
+        return origin_host in _LOCAL_HOSTS
+    return origin_host == host
+
+
+@app.before_request
+def _enforce_local_origin():
+    host = _request_host()
+    if not _host_is_allowed(host):
+        return jsonify({'success': False, 'error': 'Host non consentito'}), 403
+
+    if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+        origin = request.headers.get('Origin')
+        referer = request.headers.get('Referer')
+        if origin and not _origin_matches(origin, host):
+            return jsonify({'success': False, 'error': 'Origine non consentita'}), 403
+        if not origin and referer and not _origin_matches(referer, host):
+            return jsonify({'success': False, 'error': 'Origine non consentita'}), 403
+
+    if not request.path.startswith('/static/') and not _auth_ok():
+        if request.path.startswith('/api/') or 'application/json' in (request.headers.get('Accept') or ''):
+            return jsonify({'success': False, 'error': 'Autenticazione richiesta'}), 401
+        return Response(
+            "<h1>Autenticazione richiesta</h1>"
+            "<p>Aggiungi <code>?token=...</code> all'URL oppure invia l'header "
+            "<code>X-Auth-Token</code>.</p>",
+            status=401, mimetype='text/html'
+        )
+    return None
+
+
+@app.after_request
+def _security_headers(response):
+    if getattr(g, 'set_auth_cookie', False) and AUTH_TOKEN:
+        response.set_cookie('rns_auth', AUTH_TOKEN, httponly=True, samesite='Strict',
+                            secure=request.is_secure, max_age=7 * 86400)
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'no-referrer')
+    response.headers.setdefault(
+        'Content-Security-Policy',
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self' data:; "
+        "media-src 'self' blob:; "
+        "connect-src 'self'; "
+        "worker-src 'self' blob:; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    )
+    return response
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def _request_too_large(_e):
+    return jsonify({'success': False, 'error': 'File troppo grande'}), 413
+
 
 # ============================================
 # === INIZIALIZZA MONITOR RNS ===
 # ============================================
 
 # Socket in cartella locale
-if hasattr(rns_monitor, 'SOCKET_PATH'):
+if getattr(rns_monitor, 'SOCKET_PATH', None):
     rns_monitor.SOCKET_PATH = os.path.join(BASE_DIR, "rns_monitor.sock")
     print(f"[✓] Socket path: {rns_monitor.SOCKET_PATH}")
 
@@ -219,12 +388,17 @@ monitor_manager = rns_monitor.RNSMonitorManager(
     socket_path=rns_monitor.SOCKET_PATH,
     aspects=rns_monitor.RNS_ASPECTS,
     cache_dir=CACHE_DIR,
-    max_history=2000
+    host=rns_monitor.SOCKET_HOST,
+    port=rns_monitor.SOCKET_PORT
 )
 
-# Avvia processi
-monitor_manager.start_monitor_process()
-monitor_manager.start_listener()
+# Avvia processi (può essere disabilitato per WSGI/multi-worker o test)
+SKIP_MONITOR = os.environ.get('RNS_MANAGER_SKIP_MONITOR', '0') == '1'
+if not SKIP_MONITOR:
+    monitor_manager.start_monitor_process()
+    monitor_manager.start_listener()
+else:
+    print("[i] Monitor process/listener disabilitati (RNS_MANAGER_SKIP_MONITOR=1)")
 
 # Registra blueprint del monitor
 app.register_blueprint(rns_monitor.create_monitor_blueprint(monitor_manager))
@@ -288,45 +462,8 @@ class IdentityCache:
             return {'exists': False}
 
 # Inizializza cache identità
-identity_cache = IdentityCache(cache_duration=3600)
-
-# ============================================
-# === ROUTE RESET TOTALE ===
-# ============================================
-
-@app.route('/api/monitor/reset-all', methods=['POST'])
-def monitor_reset_all():
-    try:
-        print("\n" + "="*60)
-        print("🔄 RESET TOTALE RICHIESTO")
-        print("="*60)
-        
-        monitor_manager.clear_all()
-        
-        if monitor_manager.announce_cache:
-            monitor_manager.announce_cache.clear()
-            cache_file = monitor_manager.announce_cache.db_path
-            if os.path.exists(cache_file):
-                os.remove(cache_file)
-                print(f"[✓] File cache eliminato: {cache_file}")
-        
-        print("="*60)
-        print("✅ RESET TOTALE COMPLETATO")
-        print("="*60 + "\n")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Reset totale completato',
-            'announces': 0,
-            'identities': 0
-        })
-        
-    except Exception as e:
-        print(f"[!] Errore durante reset: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
+IDENTITY_CACHE_TTL = int(os.environ.get("RNS_IDENTITY_CACHE_TTL", "300"))
+identity_cache = IdentityCache(cache_duration=IDENTITY_CACHE_TTL)
 
 # ============================================
 # === TUTTE LE ROUTE IDENTITY MANAGER ===
@@ -345,8 +482,8 @@ def index():
 @app.route('/api/rnid', methods=['POST'])
 def execute_rnid():
     try:
-        data = request.json
-        command = data.get('command', '').strip()
+        data = request.get_json(silent=True) or {}
+        command = str(data.get('command', '')).strip()
         
         if not command:
             return jsonify({'success': False, 'error': 'No command provided'})
@@ -357,8 +494,15 @@ def execute_rnid():
             except:
                 parts = command.split()
             
-            if parts[0] == 'rnid':
+            if parts and parts[0] == 'rnid':
                 parts = parts[1:]
+
+            for token in parts:
+                if token.startswith('-') and token.split('=', 1)[0] not in _RNID_ALLOWED_FLAGS:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Opzione rnid non consentita: {token.split("=", 1)[0]}'
+                    }), 403
             
             rnid_cmd = get_rnid_path()
             result = subprocess.run(
@@ -561,11 +705,13 @@ def import_identity_file():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
         
-        suggested_name = request.form.get('suggested_name', '').strip()
-        if not suggested_name:
-            suggested_name = file.filename.split('.')[0] if '.' in file.filename else file.filename
-        
-        dest_path = os.path.join(RNS_MANAGER_STORAGE, suggested_name)
+        suggested_name = _safe_identity_name(
+            request.form.get('suggested_name', '') or file.filename,
+            f"imported_{int(time.time())}"
+        )
+        dest_path = _identity_dest_path(suggested_name)
+        if os.path.exists(dest_path):
+            return jsonify({'success': False, 'error': f"Esiste già un'identità chiamata {suggested_name}"})
         file.save(dest_path)
         
         file_size = os.path.getsize(dest_path)
@@ -574,12 +720,16 @@ def import_identity_file():
             return jsonify({'success': False, 'error': f'File di {file_size} bytes, deve essere 64 bytes'})
         
         rnid_cmd = get_rnid_path()
-        result = subprocess.run(
-            [rnid_cmd, '-i', dest_path, '--print-identity'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        try:
+            result = subprocess.run(
+                [rnid_cmd, '-i', dest_path, '--print-identity'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+        except Exception as e:
+            _unlink(dest_path)
+            return jsonify({'success': False, 'error': f'Impossibile verificare l\'identità: {e}'})
         
         if result.returncode != 0:
             os.remove(dest_path)
@@ -612,8 +762,8 @@ def import_identity_file():
 @app.route('/api/identities/import/data', methods=['POST'])
 def import_identity_data():
     try:
-        data = request.json
-        identity_data = data.get('data', '').strip()
+        data = request.get_json(silent=True) or {}
+        identity_data = str(data.get('data', '')).strip()
         format_type = data.get('format', 'hex')
         suggested_name = data.get('suggested_name', '').strip()
         is_private = data.get('private', False)
@@ -621,10 +771,10 @@ def import_identity_data():
         if not identity_data:
             return jsonify({'success': False, 'error': 'No identity data provided'})
         
-        if not suggested_name:
-            suggested_name = f"imported_{int(time.time())}"
-        
-        dest_path = os.path.join(RNS_MANAGER_STORAGE, suggested_name)
+        suggested_name = _safe_identity_name(suggested_name, f"imported_{int(time.time())}")
+        dest_path = _identity_dest_path(suggested_name)
+        if os.path.exists(dest_path):
+            return jsonify({'success': False, 'error': f"Esiste già un'identità chiamata {suggested_name}"})
         
         try:
             if format_type == 'hex':
@@ -707,10 +857,13 @@ def import_identity_data():
 @app.route('/api/identities/export', methods=['POST'])
 def export_identity():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         identity_path = data.get('path', '')
         format_type = data.get('format', 'hex')
         export_private = data.get('private', False)
+
+        if not _is_allowed_identity_path(identity_path):
+            return jsonify({'success': False, 'error': 'Percorso identità non consentito'}), 403
         
         if not os.path.exists(identity_path):
             return jsonify({'success': False, 'error': 'File identità non trovato'})
@@ -802,13 +955,12 @@ def export_identity():
 @app.route('/api/identities/generate', methods=['POST'])
 def generate_identity():
     try:
-        data = request.json
-        name = data.get('name', 'identity').strip()
-        
-        if '.' in name:
-            name = name.split('.')[0]
-        
-        dest_path = os.path.join(RNS_MANAGER_STORAGE, name)
+        data = request.get_json(silent=True) or {}
+        name = _safe_identity_name(data.get('name', ''), 'identity')
+
+        dest_path = _identity_dest_path(name)
+        if os.path.exists(dest_path):
+            return jsonify({'success': False, 'error': f"Esiste già un'identità chiamata {name}"})
         
         rnid_cmd = get_rnid_path()
         result = subprocess.run(
@@ -841,9 +993,12 @@ def generate_identity():
 @app.route('/api/identities/info', methods=['POST'])
 def get_identity_info():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         identity_path = data.get('path', '')
         aspect = data.get('aspect', '')
+
+        if not _is_allowed_identity_path(identity_path):
+            return jsonify({'success': False, 'error': 'Percorso identità non consentito'}), 403
         
         if not os.path.exists(identity_path):
             return jsonify({'success': False, 'error': 'File identità non trovato'})
@@ -918,7 +1073,7 @@ def get_identity_info():
 @app.route('/api/identities/encrypt', methods=['POST'])
 def encrypt_text():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         identity_path = data.get('identity_path', '')
         text = data.get('text', '')
         
@@ -926,8 +1081,11 @@ def encrypt_text():
             return jsonify({'success': False, 'error': 'Identità non trovata'})
 
         # Le identità pubbliche hanno formato "public:<hash>": non sono file su disco
-        if not identity_path.startswith('public:') and not os.path.exists(identity_path):
-            return jsonify({'success': False, 'error': 'Identità non trovata'})
+        if not identity_path.startswith('public:'):
+            if not _is_allowed_identity_path(identity_path):
+                return jsonify({'success': False, 'error': 'Percorso identità non consentito'}), 403
+        elif not _hex_arg(identity_path.replace('public:', '', 1), 32, 64):
+            return jsonify({'success': False, 'error': 'Hash pubblico non valido'}), 400
         
         if not text:
             return jsonify({'success': False, 'error': 'Nessun testo da cifrare'})
@@ -979,12 +1137,12 @@ def encrypt_text():
 @app.route('/api/identities/decrypt', methods=['POST'])
 def decrypt_text():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         identity_path = data.get('identity_path', '')
         encrypted_text = data.get('encrypted_text', '')
         
-        if not identity_path or not os.path.exists(identity_path):
-            return jsonify({'success': False, 'error': 'Identità non trovata'})
+        if not _is_allowed_identity_path(identity_path) or not os.path.exists(identity_path):
+            return jsonify({'success': False, 'error': 'Identità non trovata'}), 403
         
         if not encrypted_text:
             return jsonify({'success': False, 'error': 'Nessun testo da decifrare'})
@@ -1041,12 +1199,12 @@ def decrypt_text():
 @app.route('/api/identities/sign', methods=['POST'])
 def sign_text():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         identity_path = data.get('identity_path', '')
         text = data.get('text', '')
         
-        if not identity_path or not os.path.exists(identity_path):
-            return jsonify({'success': False, 'error': 'Identità non trovata'})
+        if not _is_allowed_identity_path(identity_path) or not os.path.exists(identity_path):
+            return jsonify({'success': False, 'error': 'Identità non trovata'}), 403
         
         if not text:
             return jsonify({'success': False, 'error': 'Nessun testo da firmare'})
@@ -1109,13 +1267,17 @@ def sign_text():
 @app.route('/api/identities/verify', methods=['POST'])
 def verify_signature():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         identity_path = data.get('identity_path', '')
         text = data.get('text', '')
         signature = data.get('signature', '')
         
         if not identity_path:
             return jsonify({'success': False, 'error': 'Identità non specificata'})
+        if not identity_path.startswith('public:') and not _is_allowed_identity_path(identity_path):
+            return jsonify({'success': False, 'error': 'Percorso identità non consentito'}), 403
+        if identity_path.startswith('public:') and not _hex_arg(identity_path.replace('public:', '', 1), 32, 64):
+            return jsonify({'success': False, 'error': 'Hash pubblico non valido'}), 400
         
         if not text:
             return jsonify({'success': False, 'error': 'Nessun testo da verificare'})
@@ -1203,6 +1365,7 @@ def upload_temp_file():
         unique_id = str(uuid.uuid4())[:8]
         original_name = file.filename
         safe_name = ''.join(c for c in original_name if c.isalnum() or c in '._- ')
+        safe_name = safe_name.strip(' .')[:120] or 'file'
         
         temp_filename = f"{unique_id}_{safe_name}"
         temp_path = os.path.join(temp_dir, temp_filename)
@@ -1223,14 +1386,19 @@ def upload_temp_file():
 @app.route('/api/cleanup/temp', methods=['POST'])
 def cleanup_temp_file():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         temp_path = data.get('temp_path', '')
         
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
-            return jsonify({'success': True, 'message': 'File temporaneo rimosso'})
-        
-        return jsonify({'success': False, 'error': 'File non trovato'})
+        if not temp_path:
+            return jsonify({'success': False, 'error': 'Percorso mancante'}), 400
+
+        real = os.path.realpath(os.path.expanduser(str(temp_path)))
+        tmp_root = os.path.realpath(LOCAL_TMP)
+        if not real.startswith(tmp_root + os.sep) or not os.path.isfile(real):
+            return jsonify({'success': False, 'error': 'Percorso non consentito'}), 400
+
+        os.remove(real)
+        return jsonify({'success': True, 'message': 'File temporaneo rimosso'})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -1239,7 +1407,7 @@ def cleanup_temp_file():
 def relocate_file():
     """Sposta/copia un file da tmp a downloads (sicuro, senza shell)."""
     try:
-        data = request.json or {}
+        data = request.get_json(silent=True) or {}
         action = data.get('action', 'move')
         source = data.get('source', '')
         destination = data.get('destination', '')
@@ -1280,6 +1448,9 @@ def rns_status():
 def rns_paths():
     try:
         destination = request.args.get('dest', '')
+
+        if destination and not _hex_arg(destination.strip(), 4, 64):
+            return jsonify({'success': False, 'error': 'Hash destinazione non valido'}), 400
         
         print(f"[DEBUG] rnpath richiesto per destinazione: '{destination}'")
         
@@ -1329,12 +1500,16 @@ def rns_paths():
 @app.route('/api/rns/probe', methods=['POST'])
 def rns_probe():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         destination = data.get('destination', '')
         aspect = data.get('aspect', 'rnstransport.probe')
         
         if not destination:
             return jsonify({'success': False, 'error': 'Nessuna destinazione specificata'})
+        if not _hex_arg(str(destination).strip(), 32, 64):
+            return jsonify({'success': False, 'error': 'Hash destinazione non valido'}), 400
+        if aspect not in rns_monitor.RNS_ASPECTS:
+            return jsonify({'success': False, 'error': 'Aspect non valido'}), 400
         
         rnprobe_cmd = get_rnprobe_path()
         cmd = [rnprobe_cmd, aspect, destination]
@@ -1378,12 +1553,12 @@ def rns_probe():
 @app.route('/api/rns/probe/aspect', methods=['POST'])
 def rns_probe_aspect():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         identity_path = data.get('identity_path', '')
         aspect = data.get('aspect', 'rnstransport.probe')
         
-        if not identity_path or not os.path.exists(identity_path):
-            return jsonify({'success': False, 'error': 'Identità non trovata'})
+        if not _is_allowed_identity_path(identity_path) or not os.path.exists(identity_path):
+            return jsonify({'success': False, 'error': 'Identità non trovata'}), 403
         
         if aspect not in rns_monitor.RNS_ASPECTS:
             return jsonify({'success': False, 'error': f'Aspect non valido: {aspect}'})
@@ -1430,11 +1605,13 @@ def rns_probe_aspect():
 @app.route('/api/rns/paths/blackhole', methods=['POST'])
 def rns_paths_blackhole():
     try:
-        data = request.json
-        identity_hash = data.get('destination', '')
+        data = request.get_json(silent=True) or {}
+        identity_hash = str(data.get('destination', '')).strip()
         
         if not identity_hash:
             return jsonify({'success': False, 'error': 'Nessuna identità specificata'})
+        if not _hex_arg(identity_hash, 32, 64):
+            return jsonify({'success': False, 'error': 'Hash identità non valido'}), 400
         
         rnpath_cmd = get_rnpath_path()
         cmd = [rnpath_cmd, '-p', identity_hash]
@@ -1461,9 +1638,11 @@ def rns_paths_blackhole():
 @app.route('/api/identities/find/by-hash')
 def find_identity_by_hash():
     try:
-        hash_value = request.args.get('hash', '')
+        hash_value = (request.args.get('hash', '') or '').strip()
         if not hash_value:
             return jsonify({'success': False, 'error': 'Nessun hash specificato'})
+        if not _hex_arg(hash_value, 8, 64):
+            return jsonify({'success': False, 'error': 'Hash non valido'}), 400
         
         storage_dirs = [
             (RETICULUM_STORAGE, 'reticulum'),
@@ -1499,7 +1678,7 @@ def find_identity_by_hash():
                                     end = line.find('>', start)
                                     if start > 0 and end > start:
                                         identity_hash = line[start:end]
-                                        if hash_value in identity_hash:
+                                        if identity_hash.startswith(hash_value):
                                             return jsonify({
                                                 'success': True,
                                                 'identity_path': item_path,

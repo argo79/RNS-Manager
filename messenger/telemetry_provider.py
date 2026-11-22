@@ -17,11 +17,11 @@ except ImportError:
     print("⚠️ psutil non installato. Installare con: pip install psutil")
 
 try:
-    import gps
+    from gpsdclient import GPSDClient  # noqa: F401
     GPSD_AVAILABLE = True
 except ImportError:
     GPSD_AVAILABLE = False
-    print("⚠️ gps non installato. Installare con: pip install gps")
+    print("⚠️ gpsdclient non installato. Installare con: pip install gpsdclient")
 
 import RNS
 import struct
@@ -141,7 +141,10 @@ class LocationProvider:
         
         # Avvia GPSD se configurato
         if config.get('location_source') == 'gpsd':
-            self._init_gpsd()
+            if not GPSD_AVAILABLE:
+                print("⚠️ Sorgente GPSD richiesta ma gpsdclient non è disponibile")
+            else:
+                self._init_gpsd()
     
     def _init_gpsd(self):
         """Inizializza connessione a GPSD"""

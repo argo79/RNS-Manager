@@ -5,7 +5,9 @@ Versione con contatori centralizzati e DATI RADIO COMPLETI
 """
 
 import os
+import copy
 import json
+import codecs
 import time
 import threading
 import queue
@@ -18,12 +20,15 @@ from datetime import datetime, timedelta
 try:
     from version import APP_VERSION
 except ImportError:
-    APP_VERSION = "1.1.2"
+    APP_VERSION = "1.2.0"
 
-try:
-    multiprocessing.set_start_method('fork', force=True)
-except RuntimeError:
-    pass
+STATS_CACHE_TTL = float(os.environ.get('RNS_STATS_CACHE_TTL', '30'))
+
+if sys.platform != 'win32':
+    try:
+        multiprocessing.set_start_method('fork', force=True)
+    except (RuntimeError, ValueError):
+        pass
 # ======================================
 
 # ============================================
@@ -87,6 +92,10 @@ class SQLiteAnnounceCache:
         self.db_path = os.path.join(cache_dir, 'announces.db')
         self.max_age_days = max_age_days
         self.max_size = max_size
+        self._insert_since_check = 0
+        self._write_lock = threading.Lock()
+        self._cleanup_lock = threading.Lock()
+        self._cleanup_running = False
         self._init_db()
         
         # Thread per cleanup periodico
@@ -96,9 +105,23 @@ class SQLiteAnnounceCache:
         
         print(f"📦 SQLite Cache: {self.db_path}")
     
+    def _connect(self):
+        """Connessione SQLite con WAL/busy timeout per uso concorrente."""
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        try:
+            conn.execute('PRAGMA synchronous=NORMAL')
+            conn.execute('PRAGMA busy_timeout=10000')
+        except sqlite3.Error:
+            pass
+        return conn
+
     def _init_db(self):
         """Inizializza database SQLite"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
+        try:
+            conn.execute('PRAGMA journal_mode=WAL')
+        except sqlite3.Error:
+            pass
         c = conn.cursor()
         
         # Tabella principale annunci
@@ -141,6 +164,7 @@ class SQLiteAnnounceCache:
         c.execute('CREATE INDEX IF NOT EXISTS idx_time ON announces(timestamp)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_rssi ON announces(rssi)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_snr ON announces(snr)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_identity_time ON announces(identity_hash, timestamp DESC)')
         
         # Tabella per statistiche aggregate
         c.execute('''
@@ -165,7 +189,7 @@ class SQLiteAnnounceCache:
     def add_announce(self, announce):
         """Aggiunge annuncio al database SQLite"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             c = conn.cursor()
             
             # Estrai dati
@@ -236,8 +260,14 @@ class SQLiteAnnounceCache:
             conn.close()
             
             # Cleanup se necessario (in background)
-            if self._should_cleanup():
-                threading.Thread(target=self._cleanup_old, daemon=True).start()
+            # Cleanup periodico: evita un COUNT(*) per ogni singolo annuncio.
+            with self._write_lock:
+                self._insert_since_check += 1
+                due = self._insert_since_check >= 250
+                if due:
+                    self._insert_since_check = 0
+            if due and self._should_cleanup():
+                self._schedule_cleanup()
             
             return True
             
@@ -246,7 +276,7 @@ class SQLiteAnnounceCache:
             return False
     
     def get_announces(self, aspect=None, dest_hash=None, identity_hash=None,
-                      min_rssi=None, since=None, limit=None, offset=0, sort='time_desc'):
+                      min_rssi=None, since=None, search=None, limit=None, offset=0, sort='time_desc'):
         """Recupera annunci con filtri avanzati"""
         
         print(f"🔍 SQLiteAnnounceCache.get_announces()")
@@ -254,7 +284,7 @@ class SQLiteAnnounceCache:
         print(f"   limit: {limit}")
         print(f"   offset: {offset}")
         
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         
@@ -262,7 +292,13 @@ class SQLiteAnnounceCache:
         query = "SELECT * FROM announces WHERE 1=1"
         params = []
         
-        if aspect:
+        if aspect == 'unknown':
+            query += " AND (aspect IS NULL OR aspect = '' OR aspect = 'unknown')"
+            print("   filtro aspect: unknown")
+        elif aspect == 'known':
+            query += " AND aspect IS NOT NULL AND aspect != '' AND aspect != 'unknown' AND aspect != 'identity_hash'"
+            print("   filtro aspect: known")
+        elif aspect:
             query += " AND aspect = ?"
             params.append(aspect)
             print(f"   filtro aspect: {aspect}")
@@ -284,6 +320,13 @@ class SQLiteAnnounceCache:
         if since:
             query += " AND timestamp >= ?"
             params.append(since)
+
+        if search:
+            like = f'%{search}%'
+            query += (" AND (dest_hash LIKE ? OR identity_hash LIKE ? OR data LIKE ?"
+                      " OR interface LIKE ? OR ip LIKE ? OR aspect LIKE ?)")
+            params.extend([like, like, like, like, like, like])
+            print(f"   filtro search: {search}")
         
         # Ordinamento
         sort_map = {
@@ -295,6 +338,18 @@ class SQLiteAnnounceCache:
             'snr_asc': ('snr', 'ASC'),
             'hops_desc': ('CAST(hops AS INTEGER)', 'DESC'),
             'hops_asc': ('CAST(hops AS INTEGER)', 'ASC'),
+            'aspect_desc': ('aspect', 'DESC'),
+            'aspect_asc': ('aspect', 'ASC'),
+            'identity_desc': ('identity_hash', 'DESC'),
+            'identity_asc': ('identity_hash', 'ASC'),
+            'dest_desc': ('dest_hash', 'DESC'),
+            'dest_asc': ('dest_hash', 'ASC'),
+            'iface_desc': ('interface', 'DESC'),
+            'iface_asc': ('interface', 'ASC'),
+            'data_desc': ('data', 'DESC'),
+            'data_asc': ('data', 'ASC'),
+            'q_desc': ('q', 'DESC'),
+            'q_asc': ('q', 'ASC'),
         }
         sort_col, sort_dir = sort_map.get(sort, ('timestamp', 'DESC'))
         query += f" ORDER BY {sort_col} {sort_dir}"
@@ -325,15 +380,19 @@ class SQLiteAnnounceCache:
         return results
     
     def count_announces(self, aspect=None, dest_hash=None, identity_hash=None,
-                        min_rssi=None, since=None):
+                        min_rssi=None, since=None, search=None):
         """Conta annunci con filtri"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         c = conn.cursor()
         
         query = "SELECT COUNT(*) FROM announces WHERE 1=1"
         params = []
         
-        if aspect:
+        if aspect == 'unknown':
+            query += " AND (aspect IS NULL OR aspect = '' OR aspect = 'unknown')"
+        elif aspect == 'known':
+            query += " AND aspect IS NOT NULL AND aspect != '' AND aspect != 'unknown' AND aspect != 'identity_hash'"
+        elif aspect:
             query += " AND aspect = ?"
             params.append(aspect)
         
@@ -352,6 +411,12 @@ class SQLiteAnnounceCache:
         if since:
             query += " AND timestamp >= ?"
             params.append(since)
+
+        if search:
+            like = f'%{search}%'
+            query += (" AND (dest_hash LIKE ? OR identity_hash LIKE ? OR data LIKE ?"
+                      " OR interface LIKE ? OR ip LIKE ? OR aspect LIKE ?)")
+            params.extend([like, like, like, like, like, like])
         
         c.execute(query, params)
         count = c.fetchone()[0]
@@ -367,7 +432,7 @@ class SQLiteAnnounceCache:
         annunci sono nuovi.
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             c = conn.cursor()
             c.execute("SELECT COALESCE(MAX(announce_id), 0) FROM announces")
             row = c.fetchone()
@@ -379,48 +444,68 @@ class SQLiteAnnounceCache:
 
     
     def get_stats(self):
-        """Statistiche database"""
-        conn = sqlite3.connect(self.db_path)
+        """Statistiche database (usate anche dal frontend in modalità cache)."""
+        conn = self._connect()
         c = conn.cursor()
-        
-        # Conteggio totale
+
         c.execute("SELECT COUNT(*) FROM announces")
         total = c.fetchone()[0]
-        
-        # Statistiche per aspect
+
         c.execute('''
-            SELECT aspect, COUNT(*) as count 
-            FROM announces 
-            GROUP BY aspect 
-            ORDER BY count DESC 
-            LIMIT 10
+            SELECT aspect, COUNT(*) as count
+            FROM announces
+            GROUP BY aspect
+            ORDER BY count DESC
         ''')
-        aspects = [{'aspect': row[0], 'count': row[1]} for row in c.fetchall()]
-        
-        # Statistiche radio
+        aspect_rows = c.fetchall()
+        aspects = [{'aspect': row[0], 'count': row[1]} for row in aspect_rows[:10]]
+        aspect_counts = {(row[0] or 'unknown'): row[1] for row in aspect_rows}
+
         c.execute('''
-            SELECT 
-                AVG(rssi) as avg_rssi,
-                MAX(rssi) as max_rssi,
-                MIN(rssi) as min_rssi,
-                AVG(snr) as avg_snr,
-                MAX(snr) as max_snr,
-                MIN(snr) as min_snr,
-                AVG(q) as avg_q
-            FROM announces 
-            WHERE rssi IS NOT NULL
+            SELECT
+                AVG(rssi), MAX(rssi), MIN(rssi),
+                AVG(snr), MAX(snr), MIN(snr),
+                AVG(q)
+            FROM announces
         ''')
         radio = c.fetchone()
-        
-        # Primo e ultimo timestamp
+
         c.execute("SELECT MIN(timestamp), MAX(timestamp) FROM announces")
         time_range = c.fetchone()
-        
+        c.execute("SELECT COUNT(DISTINCT identity_hash) FROM announces WHERE identity_hash IS NOT NULL AND identity_hash != ''")
+        unique_identities = c.fetchone()[0] or 0
+
+        c.execute('''
+            SELECT a.identity_hash, COUNT(*) as count,
+                   MIN(a.timestamp) as first_seen, MAX(a.timestamp) as last_seen,
+                   (SELECT x.data FROM announces x
+                    WHERE x.identity_hash = a.identity_hash
+                    ORDER BY x.timestamp DESC LIMIT 1) as last_data,
+                   (SELECT COUNT(DISTINCT x.aspect) FROM announces x
+                    WHERE x.identity_hash = a.identity_hash) as aspect_count
+            FROM announces a
+            WHERE a.identity_hash IS NOT NULL AND a.identity_hash != ''
+            GROUP BY a.identity_hash
+            ORDER BY count DESC
+            LIMIT 500
+        ''')
+        identities = [{
+            'identity_hash': row[0],
+            'count': row[1],
+            'first_seen': row[2],
+            'last_seen': row[3],
+            'last_data': row[4],
+            'aspect_count': row[5],
+        } for row in c.fetchall()]
+
         conn.close()
-        
+
         return {
             'total_announces': total,
             'aspects': aspects,
+            'aspect_counts': aspect_counts,
+            'identities': identities,
+            'unique_identities': unique_identities,
             'radio': {
                 'avg_rssi': radio[0],
                 'max_rssi': radio[1],
@@ -436,49 +521,70 @@ class SQLiteAnnounceCache:
                 'span_days': (time.time() - time_range[0]) / 86400 if time_range[0] else 0
             }
         }
-    
+
     def get_peer_stats(self, dest_hash):
-        """Statistiche per un peer specifico"""
-        conn = sqlite3.connect(self.db_path)
+        """Statistiche per un peer (calcolate dai dati correnti)."""
+        conn = self._connect()
         c = conn.cursor()
-        
         c.execute('''
-            SELECT * FROM announce_stats WHERE dest_hash = ?
+            SELECT COUNT(*), MIN(timestamp), MAX(timestamp),
+                   AVG(CASE WHEN hops GLOB '[0-9]*' THEN CAST(hops AS INTEGER) END),
+                   AVG(rssi), AVG(snr), AVG(q)
+            FROM announces WHERE dest_hash = ?
         ''', (dest_hash,))
-        
         row = c.fetchone()
+        c.execute('''
+            SELECT aspect, interface FROM announces
+            WHERE dest_hash = ? ORDER BY timestamp DESC LIMIT 1
+        ''', (dest_hash,))
+        last = c.fetchone()
         conn.close()
-        
-        if row:
-            return {
-                'dest_hash': row[0],
-                'first_seen': row[1],
-                'last_seen': row[2],
-                'announce_count': row[3],
-                'avg_hops': row[4],
-                'avg_rssi': row[5],
-                'avg_snr': row[6],
-                'avg_q': row[7],
-                'last_aspect': row[8],
-                'last_interface': row[9]
-            }
-        return None
-    
+        if not row or not row[0]:
+            return None
+        return {
+            'dest_hash': dest_hash,
+            'first_seen': row[1],
+            'last_seen': row[2],
+            'announce_count': row[0],
+            'avg_hops': row[3],
+            'avg_rssi': row[4],
+            'avg_snr': row[5],
+            'avg_q': row[6],
+            'last_aspect': last[0] if last else None,
+            'last_interface': last[1] if last else None,
+        }
+
     def _should_cleanup(self):
         """Verifica se è ora di fare cleanup"""
-        # Cleanup ogni 1000 inserimenti (semplice)
-        conn = sqlite3.connect(self.db_path)
+        # Chiamato ogni 250 inserimenti: esegue il COUNT solo quando serve.
+        conn = self._connect()
         c = conn.cursor()
         c.execute("SELECT COUNT(*) FROM announces")
         count = c.fetchone()[0]
         conn.close()
         
         return count > self.max_size
-    
+
+    def _schedule_cleanup(self):
+        """Avvia il cleanup in background evitando esecuzioni concorrenti."""
+        with self._cleanup_lock:
+            if self._cleanup_running:
+                return
+            self._cleanup_running = True
+
+        def _run():
+            try:
+                self._cleanup_old()
+            finally:
+                with self._cleanup_lock:
+                    self._cleanup_running = False
+
+        threading.Thread(target=_run, daemon=True).start()
+
     def _cleanup_old(self):
         """Rimuove annunci vecchi"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._connect()
             c = conn.cursor()
             
             # Rimuovi oltre max_size
@@ -509,7 +615,7 @@ class SQLiteAnnounceCache:
         """Rimuovi annunci più vecchi di N giorni (metodo pubblico)"""
         cutoff = time.time() - (days * 86400)
         
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         c = conn.cursor()
         c.execute("DELETE FROM announces WHERE timestamp < ?", (cutoff,))
         removed = c.rowcount
@@ -521,7 +627,7 @@ class SQLiteAnnounceCache:
     
     def vacuum(self):
         """Ottimizza database"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         conn.execute("VACUUM")
         conn.close()
         print("🧹 SQLite: VACUUM completato")
@@ -530,15 +636,23 @@ class SQLiteAnnounceCache:
         """Thread di cleanup automatico"""
         while self.running:
             time.sleep(3600)  # Ogni ora
-            self._cleanup_old()
+            if not self.running:
+                break
+            self._schedule_cleanup()
     
     def clear(self):
         """Pulisce tutto il database"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         c = conn.cursor()
         c.execute("DELETE FROM announces")
         c.execute("DELETE FROM announce_stats")
+        try:
+            c.execute("DELETE FROM sqlite_sequence WHERE name = 'announces'")
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
+        with self._write_lock:
+            self._insert_since_check = 0
         conn.close()
         print("🧹 SQLite: database pulito")
     
@@ -566,7 +680,6 @@ def run_rns_monitor(socket_path, aspects, host=None, port=None):
         def __init__(self, sock):
             self.count = 0
             self.cache = {}
-            self.seen_packets = set()
             self.socket = sock
             self.ASPECTS = aspects
         
@@ -744,7 +857,7 @@ def run_rns_monitor(socket_path, aspects, host=None, port=None):
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server.bind(socket_path)
         server.listen(1)
-        os.chmod(socket_path, 0o666)
+        os.chmod(socket_path, 0o600)
         print(f"[MONITOR] In attesa di connessione Flask su {socket_path}...")
     
     try:
@@ -781,10 +894,9 @@ def run_rns_monitor(socket_path, aspects, host=None, port=None):
 class RNSMonitorManager:
     """Gestore per Flask con contatori centralizzati - ORA CON SQLITE"""
     
-    def __init__(self, socket_path, aspects, cache_dir, max_history=1000, host=None, port=None):
+    def __init__(self, socket_path, aspects, cache_dir, host=None, port=None):
         self.socket_path = socket_path
         self.aspects = aspects
-        self.max_history = max_history
         self.host = host
         self.port = port
         self.is_windows = IS_WINDOWS
@@ -808,9 +920,11 @@ class RNSMonitorManager:
             except Exception as e:
                 print(f"[MonitorManager] Impossibile riprendere il contatore: {e}")
 
-        self.announce_history = []  # Memoria recente (ridotta a 100)
+        self.announce_history = []  # Memoria recente (ultimi 100)
         self.history_lock = threading.Lock()
-        self.announce_queue = queue.Queue(maxsize=1000)
+        self._stats_lock = threading.Lock()
+        self._stats_cache = None
+        self._stats_ts = 0
 
         # Sottoscrittori SSE: una coda per client, broadcast a tutti
         self.subscribers = set()
@@ -833,7 +947,10 @@ class RNSMonitorManager:
         self.monitor_process = multiprocessing.Process(
             target=run_rns_monitor,
             args=(self.socket_path, self.aspects, self.host, self.port),
-            daemon=True
+            # Non daemon: RNS avvia processi figli per generare gli stamp
+            # dei path request ("daemonic processes are not allowed to
+            # have children"). stop() termina comunque il processo.
+            daemon=False
         )
         self.monitor_process.start()
         print(f"[MonitorManager] Monitor avviato (PID: {self.monitor_process.pid})")
@@ -852,6 +969,7 @@ class RNSMonitorManager:
         """Thread che ascolta gli annunci dal socket"""
         sock = None
         buffer = ""
+        decoder = codecs.getincrementaldecoder('utf-8')('replace')
         
         print("[MonitorManager] Connessione al monitor...")
         
@@ -873,10 +991,12 @@ class RNSMonitorManager:
                         sock.settimeout(None)
                         print("[MonitorManager] ✅ Connesso al monitor socket")
                 
-                data = sock.recv(16384).decode('utf-8')
+                chunk = sock.recv(16384)
+                data = decoder.decode(chunk) if chunk else ''
                 if not data:
                     sock.close()
                     sock = None
+                    decoder = codecs.getincrementaldecoder('utf-8')('replace')
                     time.sleep(2)
                     continue
                 
@@ -947,38 +1067,45 @@ class RNSMonitorManager:
                 pass
 
     def get_stats(self):
-        """Restituisce statistiche unificate - ORA CON DATI SQLITE"""
+        """Statistiche unificate, con cache TTL per non martellare SQLite."""
+        now = time.time()
+        with self._stats_lock:
+            if self._stats_cache is not None and (now - self._stats_ts) < STATS_CACHE_TTL:
+                return copy.deepcopy(self._stats_cache)
+
         with self.history_lock:
-            unique_sources = len({a.get('identity_hash', '') for a in self.announce_history if a.get('identity_hash')}) if self.announce_history else 0
-            
-            # 🔥 Statistiche da SQLite
-            sqlite_stats = self.announce_cache.get_stats() if self.announce_cache else {}
-            
-            # Calcola statistiche radio dalla history recente
-            radio_stats = {}
-            if self.announce_history:
-                rssi_values = [a.get('rssi') for a in self.announce_history if a.get('rssi') is not None]
-                snr_values = [a.get('snr') for a in self.announce_history if a.get('snr') is not None]
-                q_values = [a.get('q') for a in self.announce_history if a.get('q') is not None]
-                
-                radio_stats = {
-                    'avg_rssi': sum(rssi_values)/len(rssi_values) if rssi_values else None,
-                    'avg_snr': sum(snr_values)/len(snr_values) if snr_values else None,
-                    'avg_q': sum(q_values)/len(q_values) if q_values else None,
-                    'min_rssi': min(rssi_values) if rssi_values else None,
-                    'max_rssi': max(rssi_values) if rssi_values else None,
-                }
-            
-            return {
-                'total_announces': self.announce_counter,
-                'history_size': len(self.announce_history),
-                'sqlite_total': sqlite_stats.get('total_announces', 0),
-                'monitor_alive': self.monitor_process.is_alive() if self.monitor_process else False,
-                'unique_sources': unique_sources,
-                'radio_stats': radio_stats,
-                'sqlite': sqlite_stats  # Statistiche complete da SQLite
+            history = list(self.announce_history)
+            counter = self.announce_counter
+
+        unique_sources = len({a.get('identity_hash', '') for a in history if a.get('identity_hash')})
+        radio_stats = {}
+        if history:
+            rssi_values = [a.get('rssi') for a in history if a.get('rssi') is not None]
+            snr_values = [a.get('snr') for a in history if a.get('snr') is not None]
+            q_values = [a.get('q') for a in history if a.get('q') is not None]
+            radio_stats = {
+                'avg_rssi': sum(rssi_values) / len(rssi_values) if rssi_values else None,
+                'avg_snr': sum(snr_values) / len(snr_values) if snr_values else None,
+                'avg_q': sum(q_values) / len(q_values) if q_values else None,
+                'min_rssi': min(rssi_values) if rssi_values else None,
+                'max_rssi': max(rssi_values) if rssi_values else None,
             }
-    
+
+        sqlite_stats = self.announce_cache.get_stats() if self.announce_cache else {}
+        result = {
+            'total_announces': counter,
+            'history_size': len(history),
+            'sqlite_total': sqlite_stats.get('total_announces', 0),
+            'monitor_alive': self.monitor_process.is_alive() if self.monitor_process else False,
+            'unique_sources': unique_sources,
+            'radio_stats': radio_stats,
+            'sqlite': sqlite_stats,
+        }
+        with self._stats_lock:
+            self._stats_cache = copy.deepcopy(result)
+            self._stats_ts = now
+        return result
+
     def get_history(self, aspect_filter='all', limit=100, offset=0, search='', sort='time_desc', source='memory'):
         """
         Recupera storico annunci - ORA CON SQLITE
@@ -1061,22 +1188,14 @@ class RNSMonitorManager:
         print(f"📊 sort: {sort}")
         print("="*60 + "\n")
         
-        # Converti aspect_filter
-        aspect = None
-        if aspect_filter not in ['all', 'unknown', 'known']:
-            aspect = aspect_filter
+        aspect = None if aspect_filter == 'all' else aspect_filter
         
-        # Per search, cerchiamo in dest_hash e identity_hash
-        dest_filter = search if search else None
-        identity_filter = search if search else None
-        
-        print(f"📌 Parametri convertiti: aspect={aspect}, dest={dest_filter}, identity={identity_filter}")
+        print(f"📌 Parametri convertiti: aspect={aspect}, search={search}")
         
         # Ottieni da SQLite
         announces = self.announce_cache.get_announces(
             aspect=aspect,
-            dest_hash=dest_filter,
-            identity_hash=identity_filter,
+            search=search if search else None,
             limit=limit if limit and limit > 0 else None,
             offset=offset,
             sort=sort
@@ -1092,8 +1211,7 @@ class RNSMonitorManager:
         # Conteggio totale
         total = self.announce_cache.count_announces(
             aspect=aspect,
-            dest_hash=dest_filter,
-            identity_hash=identity_filter
+            search=search if search else None
         )
         
         print(f"📊 Totale conteggio: {total}")
@@ -1143,14 +1261,11 @@ class RNSMonitorManager:
         with self.history_lock:
             self.announce_history = []
             self.announce_counter = 0
-            
-            # Svuota la coda
-            while not self.announce_queue.empty():
-                try:
-                    self.announce_queue.get_nowait()
-                except:
-                    break
         
+        with self._stats_lock:
+            self._stats_cache = None
+            self._stats_ts = 0
+
         # 🔥 Pulisci SQLite
         if self.announce_cache:
             self.announce_cache.clear()
@@ -1209,9 +1324,19 @@ def create_monitor_blueprint(monitor_manager):
     @monitor_bp.route('/history')
     def history():
         aspect = request.args.get('aspect', 'all')
-        limit = int(request.args.get('limit', 100))
-        offset = int(request.args.get('offset', 0))
-        search = request.args.get('search', '').lower()
+        if aspect not in ('all', 'unknown', 'known') and aspect not in RNS_ASPECTS:
+            aspect = 'all'
+        try:
+            limit = int(request.args.get('limit', 100))
+        except (TypeError, ValueError):
+            limit = 100
+        try:
+            offset = int(request.args.get('offset', 0))
+        except (TypeError, ValueError):
+            offset = 0
+        limit = max(0, min(limit, 100000))
+        offset = max(0, min(offset, 10**9))
+        search = (request.args.get('search', '') or '')[:128].lower()
         sort = request.args.get('sort', 'time_desc')
         source = request.args.get('source', 'memory')  # 'memory' o 'sqlite'
         
@@ -1255,7 +1380,7 @@ def create_monitor_blueprint(monitor_manager):
 
                 # Invia storico recente
                 with monitor_manager.history_lock:
-                    recent = list(reversed(monitor_manager.announce_history[-20:]))
+                    recent = list(reversed(monitor_manager.announce_history[:20]))
 
                 for announce in recent:
                     if announce.get('id', 0) > last_id:
@@ -1303,13 +1428,10 @@ def create_monitor_blueprint(monitor_manager):
             monitor_manager.clear_all()
             
             if monitor_manager.announce_cache:
+                # Non eliminare il file: lo stesso oggetto SQLiteAnnounceCache
+                # resta in uso dal listener/cleanup thread. Cancellare il file
+                # renderebbe la cache inutilizzabile fino al riavvio.
                 monitor_manager.announce_cache.clear()
-                
-                # Elimina file cache
-                cache_file = monitor_manager.announce_cache.db_path
-                if os.path.exists(cache_file):
-                    os.remove(cache_file)
-                    print(f"[✓] File cache eliminato: {cache_file}")
             
             print("="*60)
             print("✅ RESET TOTALE COMPLETATO")
@@ -1336,8 +1458,8 @@ def create_monitor_blueprint(monitor_manager):
     def save_announce():
         """Salva un annuncio in tempo reale nel database SQLite"""
         try:
-            announce = request.json
-            if not announce:
+            announce = request.get_json(silent=True)
+            if not isinstance(announce, dict) or not announce:
                 return jsonify({'success': False, 'error': 'Dati mancanti'}), 400
             
             print(f"\n📡 NUOVO ANNUNCIO IN TEMPO REALE - ID: {announce.get('id')}")
@@ -1403,12 +1525,20 @@ def create_monitor_blueprint(monitor_manager):
         
         # Parametri di ricerca
         aspect = request.args.get('aspect')
-        dest = request.args.get('dest')
-        identity = request.args.get('identity')
+        dest = (request.args.get('dest') or '')[:128] or None
+        identity = (request.args.get('identity') or '')[:128] or None
         min_rssi = request.args.get('min_rssi', type=float)
         since = request.args.get('since', type=float)
-        limit = int(request.args.get('limit', 100))
-        offset = int(request.args.get('offset', 0))
+        try:
+            limit = int(request.args.get('limit', 100))
+        except (TypeError, ValueError):
+            limit = 100
+        try:
+            offset = int(request.args.get('offset', 0))
+        except (TypeError, ValueError):
+            offset = 0
+        limit = max(1, min(limit, 100000))
+        offset = max(0, min(offset, 10**9))
         sort = request.args.get('sort', 'time_desc')
         
         # Costruisci filtri
@@ -1445,7 +1575,12 @@ def create_monitor_blueprint(monitor_manager):
         if not monitor_manager.announce_cache:
             return jsonify({'success': False, 'error': 'SQLite non disponibile'}), 404
         
-        days = int(request.json.get('days', 30)) if request.json else 30
+        body = request.get_json(silent=True) or {}
+        try:
+            days = int(body.get('days', 30))
+        except (TypeError, ValueError):
+            days = 30
+        days = max(1, min(days, 3650))
         
         removed = monitor_manager.announce_cache.cleanup_old(days)
         
@@ -1475,25 +1610,3 @@ def create_monitor_blueprint(monitor_manager):
         })
     
     return monitor_bp
-
-
-# ============================================
-# === FUNZIONE PER INIZIALIZZARE IL MONITOR ===
-# ============================================
-def init_monitor(app, cache_dir):
-    """Inizializza il monitor e restituisce il manager"""
-    
-    # Crea manager
-    manager = RNSMonitorManager(
-        socket_path=SOCKET_PATH,
-        aspects=RNS_ASPECTS,
-        cache_dir=cache_dir,
-        host=SOCKET_HOST,
-        port=SOCKET_PORT
-    )
-    
-    # Avvia processi
-    manager.start_monitor_process()
-    manager.start_listener()
-    
-    return manager

@@ -142,6 +142,7 @@ body {
     border: 1px solid var(--border);
     min-width: 200px;
     word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .status {
@@ -209,7 +210,9 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 6px;
     flex-shrink: 0;
+    min-width: 0;
 }
 
 .lxmf-peer-header h3 {
@@ -219,6 +222,8 @@ body {
     margin: 0;
     text-transform: uppercase;
     font-weight: normal;
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .lxmf-peer-count {
@@ -228,6 +233,8 @@ body {
     font-size: 10px;
     color: var(--dim);
     border: 1px solid var(--border);
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 /* STILI PER IDENTITÀ */
@@ -403,6 +410,56 @@ body {
 .peer-name {
     font-weight: bold;
     flex: 1;
+}
+
+.peer-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+/* Contatto compatto: dettagli solo quando espanso */
+.peer-expand-icon {
+    color: #8a9bb5;
+    font-size: 12px;
+    width: 14px;
+    text-align: center;
+}
+
+.peer-compact-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding-left: 32px;
+    font-size: 0.68rem;
+    color: #8a9bb5;
+    min-width: 0;
+}
+
+.peer-short-hash {
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.peer-compact-groups {
+    display: inline-flex;
+    gap: 3px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.lxmf-peer-item.expanded {
+    border-color: #4c9aff;
+    background: #101827;
+}
+
+.peer-details {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #2a3142;
 }
 
 .peer-hash {
@@ -730,6 +787,47 @@ body {
     margin-bottom: 5px;
     border-radius: 4px;
     border-left: 3px solid #4c9aff;
+    cursor: pointer;
+}
+
+.raw-entry-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.raw-entry-preview {
+    margin-top: 3px;
+    font-size: 0.6rem;
+    color: #8a9bb5;
+    word-break: break-all;
+    overflow: hidden;
+    max-height: 2.6em;
+}
+
+.raw-entry-chevron {
+    color: #4c9aff;
+    margin-left: 4px;
+}
+
+.raw-entry-details {
+    display: none;
+    margin: 6px 0 0;
+    padding: 6px;
+    max-height: 280px;
+    overflow: auto;
+    background: #0f1219;
+    border: 1px solid #2a3142;
+    border-radius: 4px;
+    color: #9fd0ff;
+    font-size: 0.62rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.raw-entry.expanded {
+    border-left-color: #4caf50;
 }
 
 /* TELEMETRIA CONTAINER */
@@ -771,6 +869,7 @@ body {
 /* MAPPA 60% */
 .telemetry-map-area {
     height: 60%;
+    min-height: 180px;
     background: #1a1f2e;
     border-radius: 6px;
     overflow: hidden;
@@ -806,6 +905,61 @@ body {
     background: #3a4458;
 }
 
+.map-controls {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: calc(100% - 20px);
+}
+
+.map-layer-select,
+.map-measure-select {
+    background: #1a1f2e;
+    color: #e6edf7;
+    border: 1px solid #3b4a63;
+    border-radius: 4px;
+    padding: 3px 5px;
+    font-family: inherit;
+    font-size: 0.68rem;
+    max-width: 160px;
+}
+
+.map-measure-controls {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-width: calc(100% - 190px);
+}
+
+.map-measure-info {
+    display: inline-block;
+    max-width: 360px;
+    padding: 4px 7px;
+    border-radius: 4px;
+    background: rgba(10, 13, 20, 0.88);
+    color: #ffd700;
+    border: 1px solid #ffd70055;
+    font-size: 0.68rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
+}
+
+/* Sopra i pane Leaflet (tile pane ~200-400, controls ~800) */
+.map-controls,
+.map-measure-controls {
+    z-index: 1000;
+}
+
+.map-status {
+    z-index: 900;
+}
+
 .map-placeholder {
     height: 100%;
     display: flex;
@@ -817,6 +971,23 @@ body {
 .map-container {
     height: 100%;
     width: 100%;
+    min-height: 160px;
+}
+
+.map-status {
+    display: none;
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    z-index: 12;
+    max-width: calc(100% - 16px);
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(10, 10, 10, 0.85);
+    color: #8a9bb5;
+    font-size: 0.7rem;
+    line-height: 1.3;
+    pointer-events: none;
 }
 
 /* Stili Leaflet */
@@ -1018,6 +1189,14 @@ body {
     font-size: 0.7rem;
     color: #4a5568;
     text-align: center;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+#announceStatsDisplay {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Config */
@@ -1212,4 +1391,436 @@ body {
 .audio-preview audio::-webkit-media-controls-current-time-display,
 .audio-preview audio::-webkit-media-controls-time-remaining-display {
     color: #8a9bb5;
+
+/* ============================================
+   HEADER ACTIONS / ESCI
+   ============================================ */
+.header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: 10px;
+    flex-wrap: wrap;
+}
+
+.lxmf-header-btn {
+    background: #2a3142;
+    color: #e6edf7;
+    border: 1px solid #3b4a63;
+    border-radius: 4px;
+    padding: 5px 9px;
+    font-family: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.lxmf-header-btn:hover { background: #3b4a63; }
+
+.lxmf-header-btn.exit {
+    background: #5a1212;
+    border-color: #aa3333;
+    color: #ffd7d7;
+}
+
+.lxmf-header-btn.exit:hover {
+    background: #7a1717;
+    color: #ffffff;
+}
+
+/* Filtro aspect annunci (estendibile per futuri tool) */
+.peer-aspect-select {
+    background: #1a1f2e;
+    color: #e6edf7;
+    border: 1px solid #3b4a63;
+    border-radius: 4px;
+    padding: 3px 5px;
+    font-family: inherit;
+    font-size: 0.68rem;
+    flex: 1 1 90px;
+    min-width: 0;
+    max-width: 130px;
+    text-overflow: ellipsis;
+}
+
+.lxmf-peer-header .lxmf-file-btn {
+    flex: 0 0 auto;
+}
+
+/* Hash interi nella lista contatti */
+.peer-hash-full {
+    font-family: monospace;
+    font-size: 9px;
+    line-height: 1.25;
+    color: #8a9bb5;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+    margin-top: 2px;
+}
+
+.peer-hash-full:hover {
+    color: #b9c8dd;
+    text-decoration: underline dotted;
+}
+
+/* Badge messaggi non letti */
+.unread-badge {
+    display: inline-block;
+    min-width: 18px;
+    padding: 1px 5px;
+    border-radius: 9px;
+    background: #c62828;
+    color: #ffffff;
+    font-size: 0.65rem;
+    font-weight: bold;
+    text-align: center;
+}
+
+/* Overlay uscita */
+.exit-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    background: rgba(0, 0, 0, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.exit-card {
+    background: #111111;
+    border: 2px solid #aa3333;
+    border-radius: 8px;
+    padding: 28px 34px;
+    text-align: center;
+    color: #e6edf7;
+    max-width: 420px;
+}
+
+.exit-card h2 {
+    color: #ff8888;
+    margin-bottom: 10px;
+    font-weight: normal;
+}
+
+.exit-card p {
+    color: #8a9bb5;
+    margin-bottom: 18px;
+    font-size: 0.9rem;
+}
+
+.exit-card button {
+    background: #5a1212;
+    color: #ffffff;
+    border: 1px solid #aa3333;
+    border-radius: 4px;
+    padding: 8px 18px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.exit-card button:hover { background: #7a1717; }
+
+/* Mappa non disponibile */
+.map-unavailable {
+    padding: 30px;
+    text-align: center;
+    color: #8a9bb5;
+    font-size: 0.9rem;
+}
+
+/* Header flessibile su schermi stretti */
+.identity-info { flex-wrap: wrap; }
+
+
+/* Gruppi multipli nella lista contatti */
+.peer-group-indicator {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
+}
+
+.peer-group-badge {
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+
+.no-group {
+    color: #666666;
+    font-size: 0.7rem;
+    font-style: italic;
+}
+
+}
+
+/* Aspect annunciati (discovery/interfacce) */
+.peer-announce-type {
+    font-size: 0.68rem;
+    color: #ffb74d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+}
+
+.peer-announce-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 4px;
+    padding: 4px 6px;
+    border-left: 2px solid #ff9800;
+    background: #1a1f2e;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    color: #d6e0ee;
+    word-break: break-all;
+}
+
+
+/* Modalità mappa espansa per interface discovery */
+.lxmf-container.map-mode .lxmf-message-column {
+    display: none;
+}
+
+.lxmf-container.map-mode .lxmf-raw-monitor {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+}
+
+.lxmf-container.map-mode .lxmf-raw-header {
+    display: none;
+}
+
+.lxmf-container.map-mode .telemetry-top-section {
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    gap: 0;
+    border-bottom: 0;
+}
+
+.lxmf-container.map-mode .telemetry-compact-area,
+.lxmf-container.map-mode .telemetry-bottom-section {
+    display: none;
+}
+
+.lxmf-container.map-mode .telemetry-map-area {
+    height: 100%;
+    min-height: 0;
+    border-radius: 0;
+}
+
+.lxmf-container.map-mode .lxmf-peer-column {
+    width: 320px;
+}
+
+/* Filtri tipi interfaccia */
+.interface-filter-panel {
+    padding: 8px 10px;
+    border-bottom: 1px solid #2a3142;
+    background: #0f1219;
+    flex-shrink: 0;
+}
+
+.interface-filter-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #8a9bb5;
+    font-size: 0.65rem;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.interface-filter-head button {
+    background: #2a3142;
+    color: #e6edf7;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+}
+
+.interface-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.interface-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #1a1f2e;
+    color: #b9c8dd;
+    border: 1px solid #2a3142;
+    border-radius: 12px;
+    padding: 3px 7px;
+    font-size: 0.66rem;
+    cursor: pointer;
+}
+
+.interface-filter-chip b {
+    color: #e6edf7;
+    font-weight: normal;
+    opacity: 0.8;
+}
+
+.interface-filter-chip.active {
+    border-color: var(--iface-color);
+    color: #fff;
+    background: color-mix(in srgb, var(--iface-color) 25%, #1a1f2e);
+}
+
+.iface-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--iface-color);
+    box-shadow: 0 0 5px var(--iface-color);
+}
+
+.interface-filter-empty {
+    color: #8a9bb5;
+    font-size: 0.7rem;
+}
+
+/* Marker: nome + hops; il tipo è indicato da colore/icona */
+.iface-map-marker,
+.contact-map-marker {
+    display: inline-flex;
+    align-items: stretch;
+    height: 26px;
+    max-width: 210px;
+    border: 1px solid var(--iface-color);
+    border-radius: 5px;
+    overflow: hidden;
+    background: rgba(10, 13, 20, 0.92);
+    box-shadow: 0 0 8px var(--iface-color);
+    font-family: monospace;
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.iface-map-symbol {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex: 0 0 24px;
+    color: #081018;
+    background: var(--iface-color);
+    font-size: 14px;
+}
+
+.iface-map-name {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 145px;
+    padding: 0 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #e6edf7;
+}
+
+.iface-map-hops {
+    display: flex;
+    align-items: center;
+    padding: 0 5px;
+    color: #fff;
+    background: color-mix(in srgb, var(--iface-color) 35%, #10151f);
+    flex: 0 0 auto;
+}
+
+/* Azione propagation nella scheda peer */
+.peer-propagation-action {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px 8px;
+    border: 1px solid #ff9800;
+    border-radius: 4px;
+    background: #ff980020;
+    color: #ffb74d;
+    font-family: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.peer-propagation-action:hover {
+    background: #ff980040;
+    color: #fff;
+}
+
+.peer-propagation-action.current {
+    border-color: #4caf50;
+    background: #4caf5020;
+    color: #9be7a0;
+    cursor: default;
+}
+
+/* Config propagation */
+.propagation-config-row {
+    display: flex;
+    align-items: stretch;
+    gap: 5px;
+}
+
+.propagation-config-row .config-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.config-inline-btn {
+    border: none;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.config-inline-btn.propagation-set {
+    background: #ff9800;
+    color: #111;
+}
+
+.config-inline-btn.propagation-clear {
+    background: #5a1212;
+    color: #ffd7d7;
+}
+
+.propagation-status {
+    margin-top: 5px;
+    color: #8a9bb5;
+    font-size: 0.68rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.propagation-status.active {
+    color: #9be7a0;
+}
+
+
+/* Header peer globale — fuori dalla media query */
+.peer-aspect-select {
+    flex: 1 1 90px;
+    min-width: 0;
+    max-width: 130px;
+    width: auto;
+    text-overflow: ellipsis;
+}
+
+.lxmf-peer-header .lxmf-file-btn {
+    flex: 0 0 auto;
 }

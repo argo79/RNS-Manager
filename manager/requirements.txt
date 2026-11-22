@@ -2,7 +2,7 @@
 # Python 3.8+ recommended
 
 # Core framework
-Flask==2.3.3
+Flask>=2.3,<4
 
 # Reticulum core (include rnid, rnstatus, rnpath, rnprobe)
 rns>=0.7.0

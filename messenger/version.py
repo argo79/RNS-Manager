@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # version.py - Versione unificata per RNS Messenger
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.2.0"
 APP_NAME = "RNS Messenger"
 APP_AUTHOR = "argo79"
 APP_EMAIL = "arg0netds@gmail.com"

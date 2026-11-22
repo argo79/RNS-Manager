@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # version.py - Versione unificata per tutto il progetto
 
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.2.0"
 APP_NAME = "RNS Manager"
 APP_AUTHOR = "argo79"
 APP_EMAIL = "arg0netds@gmail.com"

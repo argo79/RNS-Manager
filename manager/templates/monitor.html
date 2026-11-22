@@ -45,6 +45,31 @@
             font-size: 10px;
         }
 
+        /* Hash identità nelle statistiche: intero, compatto e cliccabile */
+        .stats-id-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px 8px;
+            margin-bottom: 8px;
+        }
+
+        .stats-identity-hash {
+            font-family: monospace;
+            font-size: 10px;
+            line-height: 1.2;
+            color: #8888ff;
+            cursor: pointer;
+            word-break: break-all;
+            overflow-wrap: anywhere;
+            border-bottom: 1px dotted #444;
+        }
+
+        .stats-identity-hash:hover {
+            color: #aaaaff;
+            border-bottom-color: #88ff88;
+        }
+
         /* Stili per colonne cliccabili */
         th[onclick] {
             cursor: pointer;
@@ -548,6 +573,27 @@
             }
         }
 
+        // Escape per contenuti non fidati (annunci/app_data remoti, errori backend).
+        function escapeHtml(value) {
+            if (value === undefined || value === null) return '';
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // Escape per valori inseriti in stringhe JS dentro attributi onclick.
+        function escapeJsString(value) {
+            return String(value === undefined || value === null ? '' : value)
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/\r/g, '\\r')
+                .replace(/\n/g, '\\n')
+                .replace(/</g, '\\x3c');
+        }
+
         function formatRate(rateHz) {
             if (rateHz >= 1) return rateHz.toFixed(2) + ' Hz';
             if (rateHz >= 0.001) return (rateHz * 1000).toFixed(1) + ' mHz';
@@ -679,16 +725,93 @@
         // === FUNZIONI MODAL (PROBE, PATH, BLACKHOLE) ===
         // ============================================
 
-        function showIdentityInTab(identityHash) {
+        function findStatsIdentity(identityHash) {
+            const rows = state.backendStats
+                && state.backendStats.full
+                && state.backendStats.full.sqlite
+                && state.backendStats.full.sqlite.identities;
+            if (!Array.isArray(rows)) return null;
+            return rows.find(row => row.identity_hash === identityHash) || null;
+        }
+
+        function buildIdentityFromAnnounces(identityHash, announces) {
+            const identity = {
+                hash: identityHash,
+                first: Infinity,
+                last: 0,
+                count: 0,
+                aspects: new Map(),
+                lastData: ''
+            };
+
+            announces.forEach(ann => {
+                const ts = ann.timestamp || 0;
+                identity.first = Math.min(identity.first, ts);
+                identity.last = Math.max(identity.last, ts);
+                identity.count++;
+                if (ann.data) identity.lastData = ann.data;
+
+                const aspect = ann.aspect || 'unknown';
+                if (!identity.aspects.has(aspect)) {
+                    identity.aspects.set(aspect, {
+                        dest: ann.dest_hash,
+                        count: 0,
+                        last: ts,
+                        data: ann.data
+                    });
+                }
+                const asp = identity.aspects.get(aspect);
+                asp.count++;
+                asp.last = Math.max(asp.last, ts);
+                if (ann.data) asp.data = ann.data;
+            });
+
+            if (identity.first === Infinity) identity.first = 0;
+            return identity;
+        }
+
+        async function showIdentityInTab(identityHash) {
             document.querySelectorAll('.tab-main').forEach(t => t.classList.remove('active'));
             document.querySelector('[data-view="identities"]').classList.add('active');
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById('view-identities').classList.add('active');
             state.view = 'identities';
-            
+
             document.getElementById('identity-search-input').value = identityHash;
             state.identitySearch = identityHash;
+
+            // Se l'identità non è tra gli annunci recenti, usa i dati delle statistiche
+            let needsDetails = false;
+            if (!state.identities.has(identityHash)) {
+                const row = findStatsIdentity(identityHash);
+                if (row) {
+                    state.identities.set(identityHash, {
+                        hash: identityHash,
+                        first: row.first_seen || 0,
+                        last: row.last_seen || 0,
+                        count: row.count || 0,
+                        aspects: new Map(),
+                        aspectCount: row.aspect_count || 0,
+                        lastData: row.last_data || ''
+                    });
+                    needsDetails = true;
+                }
+            }
+
             renderIdentities();
+
+            // Solo per le identità ricostruite dalle statistiche: carica gli aspect da SQLite
+            if (!needsDetails) return;
+            try {
+                const response = await fetch(`/api/monitor/sqlite/search?identity=${encodeURIComponent(identityHash)}&limit=10000&sort=time_desc`);
+                const data = await response.json();
+                if (data.success && Array.isArray(data.results) && data.results.length > 0) {
+                    state.identities.set(identityHash, buildIdentityFromAnnounces(identityHash, data.results));
+                    renderIdentities();
+                }
+            } catch (err) {
+                console.warn('Impossibile caricare i dettagli identità da SQLite:', err);
+            }
         }
 
         function hideAspectModal() {
@@ -751,12 +874,12 @@
                                 outputDiv.innerHTML = output || '✅ Comando eseguito';
                             }
                         } else {
-                            outputDiv.innerHTML = `❌ Errore: ${data.error || 'Comando fallito'}`;
+                            outputDiv.innerHTML = `❌ Errore: ${escapeHtml(data.error || 'Comando fallito')}`;
                             outputDiv.style.color = '#ff6666';
                         }
                     })
                     .catch(err => {
-                        outputDiv.innerHTML = `❌ Errore: ${err.message}`;
+                        outputDiv.innerHTML = `❌ Errore: ${escapeHtml(err.message)}`;
                         outputDiv.style.color = '#ff6666';
                     });
             } else if (command === 'probe') {
@@ -784,12 +907,12 @@
                                 .replace(/>/g, '&gt;');
                             outputDiv.innerHTML = output || '✅ Probe inviato';
                         } else {
-                            outputDiv.innerHTML = `❌ Errore: ${data.error}`;
+                            outputDiv.innerHTML = `❌ Errore: ${escapeHtml(data.error)}`;
                             outputDiv.style.color = '#ff6666';
                         }
                     })
                     .catch(err => {
-                        outputDiv.innerHTML = `❌ Errore: ${err.message}`;
+                        outputDiv.innerHTML = `❌ Errore: ${escapeHtml(err.message)}`;
                         outputDiv.style.color = '#ff6666';
                     });
             } else if (command === 'blackhole') {
@@ -814,11 +937,11 @@
                                 .replace(/>/g, '&gt;');
                             outputDiv.innerHTML = output || '✅ Nessun blackhole trovato';
                         } else {
-                            outputDiv.innerHTML = `❌ Errore: ${data.error}`;
+                            outputDiv.innerHTML = `❌ Errore: ${escapeHtml(data.error)}`;
                         }
                     })
                     .catch(err => {
-                        outputDiv.innerHTML = `❌ Errore: ${err.message}`;
+                        outputDiv.innerHTML = `❌ Errore: ${escapeHtml(err.message)}`;
                     });
             }
         }
@@ -919,9 +1042,12 @@
                     if (data.success) {
                         state.backendStats = {
                             total: data.total_announces || 0,
+                            sqliteTotal: data.sqlite_total || 0,
                             unique: data.unique_sources || 0,
-                            cacheSize: data.cache?.size || 0
+                            cacheSize: (data.sqlite && data.sqlite.total_announces) || 0,
+                            full: data
                         };
+                        updateHeadersFromBackend();
                     }
                 })
                 .catch(err => console.error('Errore refresh stats:', err));
@@ -939,6 +1065,27 @@
             counts.set('known', 0);
             counts.set('unknown', 0);
             ASPECTS.forEach(a => counts.set(a, 0));
+
+            if (state.cacheSource === 'cache') {
+                const full = state.backendStats && state.backendStats.full;
+                const remoteCounts = full && full.sqlite && full.sqlite.aspect_counts;
+                if (remoteCounts) {
+                    let total = 0, known = 0, unknown = 0;
+                    Object.entries(remoteCounts).forEach(([asp, cnt]) => {
+                        total += cnt;
+                        if (ASPECTS.includes(asp)) {
+                            counts.set(asp, (counts.get(asp) || 0) + cnt);
+                            known += cnt;
+                        } else {
+                            unknown += cnt;
+                        }
+                    });
+                    counts.set('all', total);
+                    counts.set('known', known);
+                    counts.set('unknown', unknown);
+                    return counts;
+                }
+            }
             
             if (window._allAnnounces && window._allAnnounces.length > 0) {
                 window._allAnnounces.forEach(ann => {
@@ -1043,11 +1190,11 @@
         // ============================================
 
         function createAnnounceRow(a) {
-            const idShort = a.identity_hash?.slice(0, 32) || '?';
-            const destShort = a.dest_hash?.slice(0, 32) || '-';
+            const idShort = escapeHtml(a.identity_hash?.slice(0, 32) || '?');
+            const destShort = escapeHtml(a.dest_hash?.slice(0, 32) || '-');
             
             // APPLICA decodeUTF8 AI DATI PRIMA DI USARLI
-            const decodedData = decodeUTF8(a.data || '');
+            const decodedData = escapeHtml(decodeUTF8(a.data || ''));
             
             const rssiClass = getRSSIClass(a.rssi);
             const snrClass = getSNRClass(a.snr);
@@ -1085,12 +1232,12 @@
             } else if (a.time) {
                 timeDisplay = a.time;
             }
-            row += `<td style="white-space:nowrap; color:var(--dim);">${timeDisplay}</td>`;
-            row += `<td class="identity" title="${a.identity_hash || ''}"><span class="clickable-hash" onclick="showIdentityInTab('${escapedIdentityHash}')">${idShort}</span></td>`;
-            row += `<td class="dest" title="${a.dest_hash || ''}"><span class="clickable-hash" onclick="showAspectModal('${escapedIdentityHash}', '${escapedAspect}', '${escapedDestHash}')">${destShort}</span></td>`;
+            row += `<td style="white-space:nowrap; color:var(--dim);">${escapeHtml(timeDisplay)}</td>`;
+            row += `<td class="identity" title="${escapeHtml(a.identity_hash || '')}"><span class="clickable-hash" onclick="showIdentityInTab('${escapeJsString(escapedIdentityHash)}')">${idShort}</span></td>`;
+            row += `<td class="dest" title="${escapeHtml(a.dest_hash || '')}"><span class="clickable-hash" onclick="showAspectModal('${escapeJsString(escapedIdentityHash)}', '${escapeJsString(escapedAspect)}', '${escapeJsString(escapedDestHash)}')">${destShort}</span></td>`;
             
             if (a.aspect && a.aspect !== 'unknown' && a.aspect !== 'identity_hash') {
-                row += `<td><span class="badge">${a.aspect}</span></td>`;
+                row += `<td><span class="badge">${escapeHtml(a.aspect)}</span></td>`;
             } else {
                 row += `<td><span class="unknown">sconosciuto</span></td>`;
             }
@@ -1099,7 +1246,7 @@
             row += `<td class="${rssiClass} radio-data">${rssiDisplay}</td>`;
             row += `<td class="${snrClass} radio-data">${snrDisplay}</td>`;
             row += `<td class="${qClass} radio-data">${qDisplay}</td>`;
-            row += `<td class="iface">${a.interface?.split('[')[0] || '?'}</td>`;
+            row += `<td class="iface">${escapeHtml(a.interface?.split('[')[0] || '?')}</td>`;
             
             // USA decodedData CHE È GIÀ PULITO
             row += `<td class="data" style="font-family: monospace;" title="${decodedData}">${decodedData || ''}</td>`;
@@ -1397,13 +1544,13 @@
                 }
                 
                 const isExpanded = state.expandedIdentities.has(id.hash);
-                const lastData = decodeUTF8(id.lastData);
+                const lastData = escapeHtml(decodeUTF8(id.lastData));
                 const lastActiveAgo = Math.round((now - id.last) / 60);
                 
-                html += `<div class="identity-group" data-identity-hash="${id.hash}">`;
-                html += `<div class="identity-header ${isExpanded ? 'expanded' : ''}" onclick="toggleIdentity('${id.hash}', this)">`;
+                html += `<div class="identity-group" data-identity-hash="${escapeHtml(id.hash)}">`;
+                html += `<div class="identity-header ${isExpanded ? 'expanded' : ''}" onclick="toggleIdentity('${escapeJsString(id.hash)}', this)">`;
                 html += `<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">`;
-                html += `<span class="identity-hash" title="${id.hash}">${id.hash.slice(0,32)}</span>`;
+                html += `<span class="identity-hash" title="${escapeHtml(id.hash)}">${escapeHtml(id.hash.slice(0,32))}</span>`;
                 html += `<span style="color:var(--fg);">${id.count} annunci</span>`;
                 
                 if (active) {
@@ -1417,7 +1564,8 @@
                     html += `<span class="app-data-preview">📋 ${lastData.slice(0,40)}</span>`;
                 }
                 html += `</div>`;
-                html += `<span style="color:var(--dim);">${id.aspects.size} aspect</span>`;
+                const aspectCount = id.aspects.size || id.aspectCount || 0;
+                html += `<span style="color:var(--dim);">${aspectCount} aspect</span>`;
                 html += `</div>`;
                 
                 // ASPECT LIST CON FREQUENZE E PERIODI DETTAGLIATI
@@ -1438,14 +1586,14 @@
                     }
                     
                     const destShort = data.dest ? `${data.dest.slice(0,32)}` : '-';
-                    const aspData = decodeUTF8(data.data);
+                    const aspData = escapeHtml(decodeUTF8(data.data));
                     const aspLastActiveAgo = aspActive ? '' : `💤 ${Math.round((now - data.last) / 60)} min`;
                     
                     html += `<div class="aspect-item">`;
                     html += `<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">`;
-                    html += `<span class="badge" style="background:#0a1a0a;">${asp}</span>`;
-                    html += `<span class="aspect-dest" title="${data.dest}">`;
-                    html += `<span class="clickable-hash" onclick="showAspectModal('${id.hash}', '${asp}', '${data.dest}')">${destShort}</span>`;
+                    html += `<span class="badge" style="background:#0a1a0a;">${escapeHtml(asp)}</span>`;
+                    html += `<span class="aspect-dest" title="${escapeHtml(data.dest)}">`;
+                    html += `<span class="clickable-hash" onclick="showAspectModal('${escapeJsString(id.hash)}', '${escapeJsString(asp)}', '${escapeJsString(data.dest)}')">${escapeHtml(destShort)}</span>`;
                     html += `</span>`;
                     if (aspData) {
                         html += `<span style="color:#88ff88; font-size:10px;">📋 ${aspData.slice(0,25)}</span>`;
@@ -1489,10 +1637,100 @@
         // === STATISTICHE - USA _allAnnounces ===
         // ============================================
 
+        function renderStatsFromBackend(stats) {
+            const sqlite = (stats && stats.sqlite) || {};
+            const total = sqlite.total_announces || 0;
+            const identityRows = Array.isArray(sqlite.identities) ? sqlite.identities : [];
+            const activeIdentities = identityRows.filter(row => isActive(row.last_seen)).length;
+
+            document.getElementById('stat-total').textContent = total;
+            const uniqueIdentities = sqlite.unique_identities !== undefined ? sqlite.unique_identities : identityRows.length;
+            document.getElementById('stat-identities').textContent = `${uniqueIdentities} (${activeIdentities} attive)`;
+
+            const firstSeen = (sqlite.time_range && sqlite.time_range.first) || 0;
+            const lastSeen = (sqlite.time_range && sqlite.time_range.last) || 0;
+            const elapsed = lastSeen - firstSeen;
+            if (elapsed > 0) {
+                const rate = total / elapsed;
+                document.getElementById('stat-rate').textContent = formatRate(rate);
+                document.getElementById('stat-period').textContent = formatPeriod(1 / rate);
+            } else {
+                document.getElementById('stat-rate').textContent = '—';
+                document.getElementById('stat-period').textContent = '—';
+            }
+
+            const aspectCounts = sqlite.aspect_counts || {};
+            let aspHtml = '';
+            Object.entries(aspectCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8)
+                .forEach(([asp, cnt]) => {
+                    const short = asp.split('.').pop() || asp;
+                    const rate = elapsed > 0 ? cnt / elapsed : 0;
+                    aspHtml += `<div class="stat-card">`;
+                    aspHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                    aspHtml += `<span style="color:var(--fg); font-weight:bold;" title="${escapeHtml(asp)}">${escapeHtml(short.slice(0,12))}</span>`;
+                    aspHtml += `<span style="color:var(--dim);">${cnt} ann.</span>`;
+                    aspHtml += `</div>`;
+                    if (rate > 0) {
+                        aspHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
+                        aspHtml += `<span style="color:#ffff88;" title="frequenza">⚡ ${formatRate(rate)}</span>`;
+                        aspHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(1/rate)}</span>`;
+                        aspHtml += `</div>`;
+                    }
+                    aspHtml += `</div>`;
+                });
+            document.getElementById('stats-aspects').innerHTML = aspHtml || '<div style="color:var(--dim);">nessun dato</div>';
+
+            let idHtml = '';
+            identityRows
+                .slice()
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 10)
+                .forEach(id => {
+                    const active = isActive(id.last_seen);
+                    const identityElapsed = (id.last_seen || 0) - (id.first_seen || 0);
+                    const idRateHz = identityElapsed > 0 && id.count > 1 ? id.count / identityElapsed : 0;
+                    const lastData = escapeHtml(decodeUTF8(id.last_data));
+                    const lastActiveAgo = Math.round((Date.now() / 1000 - id.last_seen) / 60);
+
+                    const fullHash = String(id.identity_hash || '');
+                    idHtml += `<div class="stat-card">`;
+                    idHtml += `<div class="stats-id-row">`;
+                    idHtml += `<span class="stats-identity-hash" title="${escapeHtml(fullHash)} — clicca per aprire nelle identità" onclick="showIdentityInTab('${escapeJsString(fullHash)}')">${escapeHtml(fullHash)}</span>`;
+                    if (lastData) idHtml += `<span style="color:#88ff88; font-size:9px;">${lastData.slice(0,16)}</span>`;
+                    idHtml += `</div>`;
+                    idHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                    idHtml += `<span style="color:var(--dim);">${id.count} ann.</span>`;
+                    if (active && idRateHz > 0) {
+                        idHtml += `<span style="color:#ffff88;" title="frequenza">⚡ ${formatRate(idRateHz)}</span>`;
+                    } else if (id.count > 0) {
+                        idHtml += `<span class="inactive" style="color:#ff8888; font-size:11px;">💤 ${lastActiveAgo} min</span>`;
+                    }
+                    idHtml += `</div>`;
+                    idHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
+                    idHtml += `<span>${id.aspect_count || 0} aspect</span>`;
+                    if (active && idRateHz > 0) {
+                        idHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(1/idRateHz)}</span>`;
+                    }
+                    idHtml += `</div>`;
+                    idHtml += `</div>`;
+                });
+            document.getElementById('stats-identities').innerHTML = idHtml || '<div style="color:var(--dim);">nessun dato</div>';
+        }
+
         function renderStats() {
             const now = Date.now() / 1000;
+
+            if (state.cacheSource === 'cache') {
+                const full = state.backendStats && state.backendStats.full;
+                if (full) {
+                    renderStatsFromBackend(full);
+                    return;
+                }
+            }
             
-            // USA SEMPRE _allAnnounces per le statistiche!
+            // Modalità memory (o stats non ancora disponibili)
             if (window._allAnnounces && window._allAnnounces.length > 0) {
                 const total = window._allAnnounces.length;
                 document.getElementById('stat-total').textContent = total;
@@ -1538,7 +1776,7 @@
                             
                             aspHtml += `<div class="stat-card">`;
                             aspHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
-                            aspHtml += `<span style="color:var(--fg); font-weight:bold;" title="${asp}">${short.slice(0,12)}</span>`;
+                            aspHtml += `<span style="color:var(--fg); font-weight:bold;" title="${escapeHtml(asp)}">${escapeHtml(short.slice(0,12))}</span>`;
                             aspHtml += `<span style="color:var(--dim);">${cnt} ann.</span>`;
                             aspHtml += `</div>`;
                             aspHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
@@ -1556,7 +1794,7 @@
                             const short = asp.split('.').pop() || asp;
                             aspHtml += `<div class="stat-card">`;
                             aspHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
-                            aspHtml += `<span style="color:var(--fg); font-weight:bold;" title="${asp}">${short.slice(0,12)}</span>`;
+                            aspHtml += `<span style="color:var(--fg); font-weight:bold;" title="${escapeHtml(asp)}">${escapeHtml(short.slice(0,12))}</span>`;
                             aspHtml += `<span style="color:var(--dim);">${cnt} ann.</span>`;
                             aspHtml += `</div>`;
                             aspHtml += `</div>`;
@@ -1574,12 +1812,13 @@
                         const elapsed = id.last - id.first;
                         const idRateHz = elapsed > 0 && id.count > 1 ? id.count / elapsed : 0;
                         const idPeriod = idRateHz > 0 ? 1 / idRateHz : 0;
-                        const lastData = decodeUTF8(id.lastData);
+                        const lastData = escapeHtml(decodeUTF8(id.lastData));
                         const lastActiveAgo = Math.round((now - id.last) / 60);
                         
+                        const fullHash = String(id.hash || '');
                         idHtml += `<div class="stat-card">`;
-                        idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
-                        idHtml += `<span style="font-family:monospace; color:#8888ff;" title="${id.hash}">${id.hash.slice(0,16)}…</span>`;
+                        idHtml += `<div class="stats-id-row">`;
+                        idHtml += `<span class="stats-identity-hash" title="${escapeHtml(fullHash)} — clicca per aprire nelle identità" onclick="showIdentityInTab('${escapeJsString(fullHash)}')">${escapeHtml(fullHash)}</span>`;
                         if (lastData) idHtml += `<span style="color:#88ff88; font-size:9px;">${lastData.slice(0,16)}</span>`;
                         idHtml += `</div>`;
                         
@@ -1649,7 +1888,7 @@
                     
                     aspHtml += `<div class="stat-card">`;
                     aspHtml += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
-                    aspHtml += `<span style="color:var(--fg); font-weight:bold;" title="${asp}">${short.slice(0,12)}</span>`;
+                    aspHtml += `<span style="color:var(--fg); font-weight:bold;" title="${escapeHtml(asp)}">${escapeHtml(short.slice(0,12))}</span>`;
                     aspHtml += `<span style="color:var(--dim);">${cnt} ann.</span>`;
                     aspHtml += `</div>`;
                     aspHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
@@ -1671,12 +1910,13 @@
                     const elapsed = id.last - id.first;
                     const idRateHz = elapsed > 0 && id.count > 1 ? id.count / elapsed : 0;
                     const idPeriod = idRateHz > 0 ? 1 / idRateHz : 0;
-                    const lastData = decodeUTF8(id.lastData);
+                    const lastData = escapeHtml(decodeUTF8(id.lastData));
                     const lastActiveAgo = Math.round((now - id.last) / 60);
                     
+                    const fullHash = String(id.hash || '');
                     idHtml += `<div class="stat-card">`;
-                    idHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
-                    idHtml += `<span style="font-family:monospace; color:#8888ff;" title="${id.hash}">${id.hash.slice(0,16)}…</span>`;
+                    idHtml += `<div class="stats-id-row">`;
+                    idHtml += `<span class="stats-identity-hash" title="${escapeHtml(fullHash)} — clicca per aprire nelle identità" onclick="showIdentityInTab('${escapeJsString(fullHash)}')">${escapeHtml(fullHash)}</span>`;
                     if (lastData) idHtml += `<span style="color:#88ff88; font-size:9px;">${lastData.slice(0,16)}</span>`;
                     idHtml += `</div>`;
                     
@@ -1693,7 +1933,8 @@
                     idHtml += `</div>`;
                     
                     idHtml += `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px;">`;
-                    idHtml += `<span>${id.aspects.size} aspect</span>`;
+                    const aspectCount = id.aspects.size || id.aspectCount || 0;
+                    idHtml += `<span>${aspectCount} aspect</span>`;
                     
                     if (active && idRateHz > 0) {
                         idHtml += `<span style="color:#88ffff;" title="periodo">⏱️ ${formatPeriod(idPeriod)}</span>`;
@@ -1726,60 +1967,61 @@
         // === LOAD HISTORY - CARICA DUE VOLTE ===
         // ============================================
 
-        function loadFromCache() {
-            console.log('📦 Caricamento da SQLite...');
-            
-            // 1. Carica TUTTI gli annunci per le statistiche
-            const allParams = new URLSearchParams({
-                aspect: 'all',
-                search: '',
-                limit: 0,  // 0 = TUTTI
-                offset: 0,
-                sort: 'time_desc',
-                source: 'cache'
-            });
+        function updateHeadersFromBackend() {
+            const full = state.backendStats && state.backendStats.full;
+            const sqlite = full && full.sqlite;
+            if (!sqlite) {
+                document.getElementById('total-announces').textContent = (window._allAnnounces || []).length;
+                document.getElementById('cache-size-indicator').textContent = (window._allAnnounces || []).length;
+                document.getElementById('unique-sources').textContent = state.identities.size;
+                return;
+            }
+            const total = sqlite.total_announces || 0;
+            const identities = sqlite.unique_identities !== undefined
+                ? sqlite.unique_identities
+                : (Array.isArray(sqlite.identities) ? sqlite.identities.length : state.identities.size);
+            document.getElementById('total-announces').textContent = total;
+            document.getElementById('cache-size-indicator').textContent = total;
+            document.getElementById('unique-sources').textContent = identities;
+        }
 
-            // 2. Carica gli ULTIMI 1000 per la vista live
+        async function loadFromCache() {
+            console.log('📦 Caricamento da SQLite...');
+
+            // Carica solo la finestra recente: le statistiche complete arrivano da /api/monitor/stats
             const liveParams = new URLSearchParams({
                 aspect: 'all',
                 search: '',
-                limit: 1000,
+                limit: 2000,
                 offset: 0,
                 sort: 'time_desc',
                 source: 'cache'
             });
 
-            return Promise.all([
-                fetch(`/api/monitor/history?${allParams}`).then(r => r.json()),
-                fetch(`/api/monitor/history?${liveParams}`).then(r => r.json())
-            ]).then(([allData, liveData]) => {
-                if (allData.success && allData.announces) {
-                    window._allAnnounces = allData.announces;
-                    console.log(`✅ Caricati ${window._allAnnounces.length} annunci TOTALI per statistiche`);
-                }
-                
+            try {
+                const response = await fetch(`/api/monitor/history?${liveParams}`);
+                const liveData = await response.json();
                 if (liveData.success && liveData.announces) {
                     window._liveAnnounces = liveData.announces;
-                    console.log(`✅ Caricati ${window._liveAnnounces.length} annunci per vista LIVE`);
+                    window._allAnnounces = liveData.announces;
+                    console.log(`✅ Caricati ${liveData.announces.length} annunci recenti da SQLite`);
                 }
-                
+
+                await refreshBackendStats();
                 rebuildIdentitiesFromAnnounces();
                 state.page = 1;
                 applyCurrentSortAndRender();
-                
+
                 if (window.updateAspectTabs) window.updateAspectTabs();
                 if (state.view === 'stats') renderStats();
-                
-                document.getElementById('total-announces').textContent = window._allAnnounces.length;
-                document.getElementById('cache-size-indicator').textContent = window._allAnnounces.length;
-                document.getElementById('unique-sources').textContent = state.identities.size;
-                
+                updateHeadersFromBackend();
+
                 return window._allAnnounces;
-            }).catch(err => {
+            } catch (err) {
                 console.error('❌ Errore fetch:', err);
-                document.getElementById('announce-body').innerHTML = 
+                document.getElementById('announce-body').innerHTML =
                     '<tr><td colspan="10" style="text-align:center; padding:40px; color:#ff8888;">❌ Errore di caricamento</td></tr>';
-            });
+            }
         }
 
         function loadHistory() {
@@ -1832,60 +2074,9 @@
         }
 
         function updateTabsFromCache() {
-            console.log('🚀 updateTabsFromCache()');
-            
-            // Forza reset
-            window._allAnnounces = [];
-            window._liveAnnounces = [];
-            
-            const allParams = new URLSearchParams({
-                aspect: 'all',
-                search: '',
-                limit: 0,
-                offset: 0,
-                sort: 'time_desc',
-                source: 'cache'
-            });
-
-            const liveParams = new URLSearchParams({
-                aspect: 'all',
-                search: '',
-                limit: 1000,
-                offset: 0,
-                sort: 'time_desc',
-                source: 'cache'
-            });
-
-            Promise.all([
-                fetch(`/api/monitor/history?${allParams}`).then(r => r.json()),
-                fetch(`/api/monitor/history?${liveParams}`).then(r => r.json())
-            ]).then(([allData, liveData]) => {
-                if (allData.success && allData.announces) {
-                    window._allAnnounces = allData.announces;
-                    console.log(`✅ Caricati ${window._allAnnounces.length} annunci TOTALI da SQLite`);
-                }
-                
-                if (liveData.success && liveData.announces) {
-                    window._liveAnnounces = liveData.announces;
-                    console.log(`✅ Caricati ${window._liveAnnounces.length} annunci LIVE da SQLite`);
-                }
-                
-                rebuildIdentitiesFromAnnounces();
-                state.page = 1;
-                applyCurrentSortAndRender();
-                
-                if (window.updateAspectTabs) window.updateAspectTabs();
-                if (state.view === 'stats') renderStats();
-                
-                document.getElementById('total-announces').textContent = window._allAnnounces.length;
-                document.getElementById('cache-size-indicator').textContent = window._allAnnounces.length;
-                document.getElementById('unique-sources').textContent = state.identities.size;
-            }).catch(err => {
-                console.error('❌ Errore caricamento cache:', err);
-            });
+            return loadFromCache();
         }
 
-        
         // ============================================
         // === CONNESSIONE SSE - GESTISCE DUE ARRAY ===
         // ============================================
@@ -2221,10 +2412,14 @@
                 }
             });
 
+            let searchTimer = null;
             document.getElementById('search-input').addEventListener('input', function() {
                 state.search = this.value.toLowerCase();
                 state.page = 1;
-                if ((state.cacheSource === 'cache' && window._liveAnnounces.length > 0) || window._allAnnounces.length > 0) {
+                if (state.cacheSource === 'cache') {
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(() => loadFromCache(), 300);
+                } else if (window._allAnnounces.length > 0) {
                     applyCurrentSortAndRender();
                 } else {
                     loadHistory();

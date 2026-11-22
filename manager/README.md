@@ -34,7 +34,7 @@ Main features:
 - 🔍 Aspect filters, text search, sorting
 - 📊 Statistics per identity/aspect/interface plus radio data (RSSI, SNR, Q)
 - 🏷️ Automatic aspect recognition with per-identity cache
-- 💾 Persistent SQLite cache (`cache/announces.db`, 7 days, max 100,000 rows)
+- 💾 Persistent SQLite cache (`~/.rns_manager/cache/announces.db`, shared with the Messenger, 7 days, max 100,000 rows)
 - 🖱️ Interactive modals for `rnpath`, `rnprobe` and blackhole checks
 
 ![Aspect Monitor](img/rnsMonitor.jpg)
@@ -98,7 +98,7 @@ manager/
 └── build_rns_manager.sh      # Standalone build
 ```
 
-Runtime folders created inside `manager/`: `cache/`, `downloads/`, `tmp/` and `rns_monitor.sock`.
+Runtime folders created inside `manager/`: `downloads/`, `tmp/` and `rns_monitor.sock`. The announce cache is stored in `~/.rns_manager/cache/` (shared with the Messenger).
 
 ## 🗂️ Identity directories
 
@@ -121,10 +121,22 @@ Identities are searched in:
 
 **Aspect Monitor**: use the *Live*, *Identities* and *Statistics* tabs; click hashes to open `rnpath`, `rnprobe`, `rnpath -p`.
 
+## 🔐 Security
+
+- The server binds to `127.0.0.1` and rejects requests with non-local `Host` headers and
+  cross-origin `Origin`/`Referer` on state-changing methods (DNS-rebinding/CSRF hardening).
+- Security headers (`CSP`, `X-Frame-Options`, `X-Content-Type-Options`) are enabled.
+- Identity file operations are restricted to the known identity directories; `/api/rnid`
+  accepts only an allowlist of options.
+- Uploads are limited to 16 MB.
+- Optional token auth: set `RNS_AUTH_TOKEN` and open the UI with `?token=...` (cookie/header supported).
+- `RNS_MANAGER_SKIP_MONITOR=1` disables the monitor process/listener (WSGI multi-worker/tests); useful when the monitor runs separately.
+- `RNS_MANAGER_CACHE_DIR` overrides the cache directory.
+
 ## 🔧 Configuration
 
-- **Identity cache**: 5 minutes (in memory); *Deep Scan* forces a full scan.
-- **Announce cache**: SQLite in `cache/announces.db`, 7-day retention.
+- **Identity cache**: 5 minutes by default (in memory, `RNS_IDENTITY_CACHE_TTL` to override); the UI refresh forces a full scan.
+- **Announce cache**: SQLite in `~/.rns_manager/cache/announces.db`, 7-day retention (shared with the Messenger).
 - **Recognised aspects**: `RNS_ASPECTS` in `modules/rns_monitor.py` **and** the `ASPECTS` array in `templates/monitor.html` must be kept in sync.
 - **Search directories**: `USER_DIRECTORIES` in `rns_manager.py`.
 - **UI translations**: `static/index_translations.json` (15 languages); the default language follows the browser, and the selector is in the header.
@@ -152,10 +164,22 @@ POST /api/files/relocate           # move/copy tmp -> downloads (safe, no shell)
 ## 📦 Standalone build
 
 ```bash
+cd RNS-Manager
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r manager/requirements.txt pyinstaller
+
 cd manager
 ./build_rns_manager.sh
-# output: dist/rns_manager_v<version>.run
+# output: ../dist/rns_manager_v<version>.run
 ```
+
+The build runs in a clean virtualenv: dependencies the Manager does not use
+(e.g. `numpy`, `astroid`/`pylint`) are excluded, keeping the `.run` around 20-30 MB.
+The binary embeds the RNS library, but it uses the `rnid`, `rnstatus`, `rnpath`,
+`rnprobe` commands and the `~/.reticulum` configuration already installed on the
+target system. Attach `.run` files to a GitHub **Release** (2 GB per asset limit);
+do not commit them to the repository (100 MB per file limit).
 
 ## 📱 Android via Termux
 
@@ -175,6 +199,7 @@ Open `http://127.0.0.1:5010` in the browser.
 ## 🐛 Known issues
 
 - The first identity scan may take 10–30 seconds.
+- The Identities tab is built from the latest 2,000 announces; the Statistics tab uses full-cache aggregates from SQLite.
 - Some aspects may not be recognised.
 - On mobile devices some tables require horizontal scrolling.
 

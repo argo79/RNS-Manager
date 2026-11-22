@@ -19,6 +19,15 @@ import subprocess
 from RNS.vendor import umsgpack
 from gpsdclient import GPSDClient
 import core.telemeter as telemeter
+from core.aspects import (
+    ASPECT_LABELS,
+    DEFAULT_ANNOUNCE_ASPECTS,
+    DISCOVERY_ASPECT,
+    is_discovery_aspect,
+    is_map_capable_aspect,
+    normalize_announce_aspects,
+    parse_interface_discovery_app_data,
+)
 import audio_codec
 from telemetry_provider import TelemetryProvider, setup_telemetry_handlers
 
@@ -68,6 +77,7 @@ PEER_GROUPS = {
 }
 
 CODEC2_AVAILABLE = audio_codec.detect_codec2()
+DEBUG_PACKETS = os.environ.get("RNS_DEBUG_PACKETS", "0") == "1"
 _RETICULUM_INSTANCE = None
 
 def get_reticulum():
@@ -213,8 +223,67 @@ def get_telemetry_sensor_name(sensor_id):
     }
     return sensor_names.get(sensor_id, f"Sconosciuto (0x{sensor_id:02x})")
 
+ICON_RE = re.compile(r'^[A-Za-z0-9-]{1,64}$')
+COLOR_RE = re.compile(r'^[0-9a-fA-F]{6}$')
+
+
+def sanitize_appearance(icon, fg, bg):
+    """Normalizza icona e colori provenienti da peer remoti."""
+    icon = str(icon or 'account-outline')
+    if not ICON_RE.fullmatch(icon):
+        icon = 'account-outline'
+
+    def _color(value, fallback):
+        value = str(value or '').lstrip('#')
+        return value.lower() if COLOR_RE.fullmatch(value) else fallback
+
+    return [icon.lower(), _color(fg, '4c9aff'), _color(bg, '1a1f2e')]
+
+
+def sanitize_display_name(value, fallback=None):
+    text = ''.join(ch for ch in str(value or '') if ch >= ' ' and ch != '')
+    text = ' '.join(text.split())[:96]
+    return text or fallback
+
+
+def is_hash_preview_name(name, identity_hash=None):
+    """Riconosce nomi che sono in realtà un prefisso dell'hash identità."""
+    text = str(name or '').strip().lower()
+    if not text or not re.fullmatch(r'[0-9a-f]+', text) or len(text) < 8:
+        return False
+    if not identity_hash:
+        return False
+    if isinstance(identity_hash, (bytes, bytearray)):
+        identity_hash = bytes(identity_hash).hex()
+    return str(identity_hash).lower().startswith(text)
+
+
+def clean_display_name(value, fallback=None):
+    """Pulisce nomi legacy con prefisso di lunghezza e byte di controllo."""
+    if value is None:
+        return fallback
+
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            text = bytes(value).decode('utf-8')
+        except UnicodeDecodeError:
+            text = bytes(value).decode('latin-1', errors='replace')
+    else:
+        text = str(value)
+
+    # I vecchi annunci potevano salvare: <lunghezza><nome><metadati>.
+    if text:
+        length = ord(text[0])
+        if 0 < length < 0x20 and length <= len(text) - 1:
+            candidate = sanitize_display_name(text[1:1 + length], None)
+            if candidate:
+                return candidate[:96]
+
+    return sanitize_display_name(text, fallback)
+
+
 class Messenger:
-    def __init__(self, storagepath="~/.rns_manager/storage", configpath="~/.rns_manager/config.json", identity_path=None):
+    def __init__(self, storagepath="~/.rns_manager/storage", configpath="~/.rns_manager/config.json", identity_path=None, announce_aspects=None, display_name=None):
         self.storagepath = os.path.expanduser(storagepath)
         self.configpath = os.path.expanduser(configpath)
         self.telemetry_dir = os.path.join(self.storagepath, "telemetry")
@@ -222,7 +291,7 @@ class Messenger:
         self.conversations_dir = os.path.join(self.storagepath, "conversations")
         self.raw_dir = os.path.join(self.storagepath, "raw")
         self.peers_db = os.path.join(self.storagepath, "peers.db")
-        self.announces_cache_db = os.path.expanduser("~/.rns_manager/Cache/announces.db")
+        self.announces_cache_db = os.path.expanduser("~/.rns_manager/cache/announces.db")
         self.rangetest_dir = os.path.join(self.storagepath, "rangetest")
 
         os.makedirs(self.storagepath, exist_ok=True)
@@ -237,12 +306,18 @@ class Messenger:
         self.rns = get_reticulum()
         
         if identity_path and os.path.exists(identity_path):
+            self.identity_path = identity_path
             self.identity = RNS.Identity.from_file(identity_path)
             print(f"✅ Identità caricata da file: {identity_path}")
         else:
             self.identity = self._choose_identity()
         
-        self.display_name = self._load_display_name()
+        explicit_name = clean_display_name(display_name, None)
+        if explicit_name and is_hash_preview_name(explicit_name, self.identity.hash.hex()):
+            explicit_name = None
+        self.display_name = explicit_name or self._load_display_name()
+        if explicit_name:
+            self._save_display_name(explicit_name)
         self.lxmf_storage = os.path.dirname(self.storagepath)
         os.makedirs(self.lxmf_storage, exist_ok=True)
 
@@ -254,6 +329,33 @@ class Messenger:
         )
 
         self.message_callback = None
+        self.announce_callback = None
+        configured_aspects = announce_aspects
+        if not configured_aspects:
+            configured_aspects = self.config.get('announce_aspects')
+        self.announce_aspects = normalize_announce_aspects(
+            configured_aspects or DEFAULT_ANNOUNCE_ASPECTS,
+            ensure_delivery=True,
+        )
+        self.announce_aspects_lock = threading.Lock()
+        self.announce_handlers = []
+        self.announce_stats = {
+            'total': 0,
+            'by_aspect': {},
+            'last': None,
+            'recent': [],
+        }
+        self.announce_stats_lock = threading.Lock()
+        self.telemetry_stats = {
+            'requests_sent': 0,
+            'responses_received': 0,
+            'responses_sent': 0,
+            'requests_ignored': 0,
+            'last_request': None,
+            'last_response': None,
+            'last_ignored': None,
+        }
+        self.telemetry_stats_lock = threading.Lock()
         self.delivery_callbacks = {}
         self.failed_callbacks = {}
         self.progress_callbacks = {}
@@ -264,8 +366,9 @@ class Messenger:
         self._set_propagation_node()
         self._init_peers_db()
 
-        self.announce_handler = AnnounceHandler(self)
-        RNS.Transport.register_announce_handler(self.announce_handler)
+        self._register_announce_handlers()
+        # Alias retrocompatibile con il vecchio handler singolo.
+        self.announce_handler = self.announce_handlers[0] if self.announce_handlers else None
         self.received_raw = {}
         
         self.running = True
@@ -283,44 +386,219 @@ class Messenger:
             print(f"⚠️ Errore inizializzazione telemetria esterna: {e}")
             self.telemetry_provider = None
 
+        # Retention dati (startup + ogni 24h)
+        self._retention_stop = threading.Event()
+        self.retention_thread = threading.Thread(target=self._retention_loop, daemon=True)
+        self.retention_thread.start()
+
+    def _request_announce_destination_types(self, aspects=None):
+        """Ask a shared Reticulum instance to forward these destination types.
+
+        LXMRouter only requests ``lxmf.delivery`` and ``lxmf.propagation``.
+        Interface discovery (and any other aspect added by the user) must be
+        requested explicitly when Messenger is attached to a shared instance.
+        """
+        for aspect in (aspects or self.announce_aspects):
+            try:
+                reticulum = RNS.Reticulum.get_instance()
+                wants = getattr(reticulum, 'wants_destination_type', None)
+                if wants:
+                    wants(aspect)
+            except Exception as e:
+                RNS.log(f"Impossibile richiedere l'aspect {aspect}: {e}", RNS.LOG_DEBUG)
+
+    @staticmethod
+    def _deregister_announce_handler(handler):
+        deregister = getattr(RNS.Transport, 'deregister_announce_handler', None)
+        if deregister is None:
+            # Compatibilità con vecchie versioni RNS.
+            deregister = getattr(RNS.Transport, 'unregister_announce_handler', None)
+        if deregister:
+            deregister(handler)
+
+    def _register_announce_handlers(self, aspects=None):
+        aspects = normalize_announce_aspects(
+            aspects if aspects is not None else self.announce_aspects,
+            ensure_delivery=True,
+        )
+        handlers = []
+        for aspect in aspects:
+            handler = AnnounceHandler(self, aspect)
+            try:
+                RNS.Transport.register_announce_handler(handler)
+                handlers.append(handler)
+            except Exception as e:
+                RNS.log(f"Errore registrazione handler {aspect}: {e}", RNS.LOG_WARNING)
+        self.announce_aspects = aspects
+        self.announce_handlers = handlers
+        self._request_announce_destination_types(aspects)
+        return handlers
+
+    def set_announce_aspects(self, aspects):
+        """Aggiorna gli aspect a runtime senza riavviare il processo."""
+        aspects = normalize_announce_aspects(aspects, ensure_delivery=True)
+        lock = getattr(self, 'announce_aspects_lock', None)
+        if lock is None:
+            self.announce_aspects_lock = threading.Lock()
+            lock = self.announce_aspects_lock
+        with lock:
+            if aspects == self.announce_aspects:
+                return list(self.announce_aspects)
+            old_handlers = list(getattr(self, 'announce_handlers', []))
+            for handler in old_handlers:
+                try:
+                    self._deregister_announce_handler(handler)
+                except Exception:
+                    pass
+            handlers = []
+            for aspect in aspects:
+                handler = AnnounceHandler(self, aspect)
+                try:
+                    RNS.Transport.register_announce_handler(handler)
+                    handlers.append(handler)
+                except Exception as e:
+                    RNS.log(f"Errore registrazione handler {aspect}: {e}", RNS.LOG_WARNING)
+            self.announce_aspects = aspects
+            self.announce_handlers = handlers
+            self.announce_handler = handlers[0] if handlers else None
+            self._request_announce_destination_types(aspects)
+        return list(self.announce_aspects)
+
+    def _retention_days(self, key, default):
+        try:
+            return max(0, int(self.config.get(key, default)))
+        except (TypeError, ValueError):
+            return default
+
+    def _purge_dir(self, directory, cutoff):
+        """Rimuove i file più vecchi di cutoff; ritorna il numero rimosso."""
+        if not directory or not os.path.isdir(directory):
+            return 0
+        removed = 0
+        for root, dirs, files in os.walk(directory, topdown=False):
+            for name in files:
+                path = os.path.join(root, name)
+                try:
+                    if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                        os.unlink(path)
+                        removed += 1
+                except OSError:
+                    pass
+            for name in dirs:
+                path = os.path.join(root, name)
+                try:
+                    if not os.listdir(path):
+                        os.rmdir(path)
+                except OSError:
+                    pass
+        return removed
+
+    def cleanup_old_data(self):
+        """Applica la retention a DB, raw, telemetria, conversazioni e rangetest."""
+        results = {}
+        now = time.time()
+
+        message_days = self._retention_days('message_retention_days', 90)
+        if message_days > 0:
+            cutoff = now - message_days * 86400
+            try:
+                with self.db_lock:
+                    conn = sqlite3.connect(self.peers_db, timeout=10)
+                    c = conn.cursor()
+                    c.execute('DELETE FROM messages WHERE timestamp < ?', (cutoff,))
+                    results['messages'] = c.rowcount
+                    c.execute('DELETE FROM sent_messages WHERE sent_at < ?', (cutoff,))
+                    results['sent_messages'] = c.rowcount
+                    conn.commit()
+                    conn.close()
+            except Exception as e:
+                print(f"⚠️ Retention DB fallita: {e}")
+
+        for key, default, attr in (
+            ('raw_retention_days', 30, 'raw_dir'),
+            ('telemetry_retention_days', 90, 'telemetry_dir'),
+            ('rangetest_retention_days', 90, 'rangetest_dir'),
+        ):
+            days = self._retention_days(key, default)
+            if days > 0:
+                results[key] = self._purge_dir(getattr(self, attr, None), now - days * 86400)
+
+        if message_days > 0:
+            cutoff = now - message_days * 86400
+            results['conversations'] = self._purge_dir(getattr(self, 'conversations_dir', None), cutoff)
+            results['attachments'] = self._purge_dir(getattr(self, 'attachments_dir', None), cutoff)
+
+        if any(results.values()):
+            print(f"🧹 Retention: {results}")
+        return results
+
+    def _retention_loop(self):
+        while not self._retention_stop.is_set():
+            try:
+                self.cleanup_old_data()
+            except Exception as e:
+                print(f"⚠️ Errore retention: {e}")
+            self._retention_stop.wait(86400)
+
     def cleanup(self):
         """Pulisce le risorse Reticulum prima di distruggere l'istanza"""
         self.running = False
+        if hasattr(self, '_retention_stop'):
+            self._retention_stop.set()
         try:
             # Aspetta che il thread di progresso finisca
             if hasattr(self, 'progress_thread') and self.progress_thread.is_alive():
                 self.progress_thread.join(timeout=1.0)
-            
-            # Deregistra la destinazione principale - CORREZIONE!
-            if hasattr(self, 'dest') and self.dest:
+
+            # Ferma il thread GPSD (se attivo)
+            provider = getattr(self, 'telemetry_provider', None)
+            location = getattr(provider, 'location', None) if provider else None
+            if location:
                 try:
-                    # LXMRouter non ha unregister_delivery_identity, dobbiamo rimuovere dal router
-                    if hasattr(self.router, 'delivery_destinations'):
-                        self.router.delivery_destinations = [
-                            d for d in self.router.delivery_destinations 
-                            if d != self.dest
-                        ]
-                    print("   ✅ Destinazione rimossa dal router")
-                except Exception as e:
-                    print(f"   ⚠️ Errore rimozione: {e}")
-            
-            # Rimuovi l'announce handler
-            if hasattr(self, 'announce_handler'):
-                try:
-                    RNS.Transport.unregister_announce_handler(self.announce_handler)
-                except:
+                    location.stop()
+                except Exception:
                     pass
             
+            # Deregistra la destinazione principale da RNS.Transport.
+            # LXMRouter.delivery_destinations è un dict, non una lista.
+            dest = getattr(self, 'dest', None)
+            router = getattr(self, 'router', None)
+            if dest:
+                try:
+                    dest_hash = getattr(dest, 'hash', None)
+                    if router is not None and isinstance(getattr(router, 'delivery_destinations', None), dict) and dest_hash is not None:
+                        router.delivery_destinations.pop(dest_hash, None)
+                    deregister = getattr(RNS.Transport, 'deregister_destination', None)
+                    if deregister:
+                        deregister(dest)
+                    print("   ✅ Destinazione deregistrata da RNS")
+                except Exception as e:
+                    print(f"   ⚠️ Errore deregistrazione destinazione: {e}")
+
+            # Rimuovi tutti gli announce handler registrati
+            handlers = list(getattr(self, 'announce_handlers', []))
+            legacy = getattr(self, 'announce_handler', None)
+            if legacy and legacy not in handlers:
+                handlers.append(legacy)
+            for handler in handlers:
+                try:
+                    self._deregister_announce_handler(handler)
+                except Exception:
+                    pass
+            self.announce_handlers = []
+
             # Ferma il router
-            if hasattr(self, 'router'):
-                # Pulisci riferimenti
-                self.router.delivery_callbacks = []
+            if router is not None:
+                try:
+                    router.delivery_callbacks = []
+                except Exception:
+                    pass
                 self.router = None
-                
+
             # Pulisci riferimenti
             self.dest = None
+            self.local_dest = None
             self.announce_handler = None
-            
             print("🧹 Messenger pulito correttamente")
             
         except Exception as e:
@@ -355,7 +633,7 @@ class Messenger:
                     
                     -- Dati anagrafici
                     display_name TEXT,
-                    group_name TEXT DEFAULT 'public',
+                    group_name TEXT,
                     notes TEXT,
                     
                     -- Dati ultimo annuncio
@@ -456,6 +734,13 @@ class Messenger:
                     created_at REAL
                 )
             ''')
+
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
             
             # ============================================
             # 🔴 NUOVA TABELLA PER I GRUPPI MULTIPLI (N:N)
@@ -471,17 +756,74 @@ class Messenger:
                 )
             ''')
             
-            # ============================================
-            # 🔴 NUOVA TABELLA PER I PREFERITI (separata)
-            # ============================================
-            c.execute('''
-                CREATE TABLE IF NOT EXISTS favorites (
-                    identity_hash TEXT PRIMARY KEY,
-                    added_at REAL,
-                    FOREIGN KEY(identity_hash) REFERENCES identities(identity_hash) ON DELETE CASCADE
-                )
-            ''')
-            
+            # Migrazione: preferiti e gruppo anche sulla tabella identities
+            # (così un peer è configurabile anche prima di avere una destination)
+            c.execute("PRAGMA table_info(identities)")
+            ident_cols = {row[1] for row in c.fetchall()}
+            prefs_added = False
+            if 'is_favorite' not in ident_cols:
+                c.execute("ALTER TABLE identities ADD COLUMN is_favorite INTEGER DEFAULT 0")
+                prefs_added = True
+            if 'group_name' not in ident_cols:
+                c.execute("ALTER TABLE identities ADD COLUMN group_name TEXT")
+                prefs_added = True
+            if prefs_added:
+                c.execute('''
+                    UPDATE identities SET
+                        is_favorite = COALESCE((
+                            SELECT MAX(d.is_favorite) FROM destinations d
+                            WHERE d.identity_hash = identities.identity_hash
+                        ), 0),
+                        group_name = COALESCE((
+                            SELECT d.group_name FROM destinations d
+                            WHERE d.identity_hash = identities.identity_hash
+                              AND d.group_name IS NOT NULL
+                              AND d.group_name != 'public'
+                            LIMIT 1
+                        ), NULL)
+                ''')
+
+            # Importa i preferiti legacy solo durante la prima migrazione,
+            # poi svuota la vecchia tabella per non ripristinare scelte future.
+            if prefs_added:
+                try:
+                    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'")
+                    if c.fetchone():
+                        c.execute('''
+                            UPDATE identities SET is_favorite = 1
+                            WHERE identity_hash IN (SELECT identity_hash FROM favorites)
+                        ''')
+                        c.execute("DELETE FROM favorites")
+                except Exception:
+                    pass
+
+            # Reset una tantum dei gruppi: nessun contatto deve partire in "public".
+            c.execute("SELECT value FROM app_meta WHERE key = 'groups_reset_v2'")
+            if not c.fetchone():
+                c.execute('UPDATE identities SET group_name = NULL')
+                c.execute('UPDATE destinations SET group_name = NULL')
+                c.execute('DELETE FROM peer_groups')
+                c.execute("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('groups_reset_v2', '1')")
+
+            # Pulizia una tantum dei nomi legacy (prefissi di lunghezza/byte di controllo).
+            c.execute("SELECT value FROM app_meta WHERE key = 'display_names_v1'")
+            if not c.fetchone():
+                c.execute('SELECT identity_hash, display_name FROM identities')
+                cleaned_names = 0
+                for identity_hash, raw_name in c.fetchall():
+                    cleaned = clean_display_name(raw_name, None)
+                    if cleaned and is_hash_preview_name(cleaned, identity_hash):
+                        cleaned = None
+                    if cleaned != raw_name:
+                        c.execute(
+                            'UPDATE identities SET display_name = ? WHERE identity_hash = ?',
+                            (cleaned, identity_hash),
+                        )
+                        cleaned_names += 1
+                c.execute("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('display_names_v1', '1')")
+                if cleaned_names:
+                    print(f"🧹 Nomi peer normalizzati: {cleaned_names}")
+
             # ============================================
             # INDICI PER VELOCITÀ
             # ============================================
@@ -500,6 +842,8 @@ class Messenger:
             # 🔴 NUOVI INDICI
             c.execute('CREATE INDEX IF NOT EXISTS idx_peer_groups_identity ON peer_groups(identity_hash)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_peer_groups_group ON peer_groups(group_name)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_identities_favorite ON identities(is_favorite)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_identities_group ON identities(group_name)')
             
             conn.commit()
             conn.close()
@@ -507,14 +851,10 @@ class Messenger:
     def _load_config(self):
         default = {
             "propagation_node": None,
-            "delivery_mode": "direct",
-            "max_retries": 3,
+            "delivery_mode": "opportunistic",
             "preferred_audio": "c2_3200",
+            "announce_aspects": list(DEFAULT_ANNOUNCE_ASPECTS),
             "stamp_cost": 0,
-            "propagation_stamp_cost": 16,
-            "accept_invalid_stamps": False,
-            "max_stamp_retries": 3,
-            "auto_send_voice": False,
             "try_propagation_on_fail": True,
             # 🔴 OPZIONI POSIZIONE
             "location_source": "fixed",  # "fixed" o "gpsd"
@@ -527,27 +867,147 @@ class Messenger:
             },
             "gpsd_host": "localhost",
             "gpsd_port": 2947,
-            "appearance": ["antenna", "4c9aff", "1a1f2e"]
+            "appearance": ["antenna", "4c9aff", "1a1f2e"],
+            # Retention dati (0 = disabilitata)
+            "message_retention_days": 90,
+            "raw_retention_days": 30,
+            "telemetry_retention_days": 90,
+            "rangetest_retention_days": 90,
+            # Sicurezza: comandi/telemetria remoti disabilitati di default
+            "allow_remote_commands": False,
+            "allow_telemetry_requests": False,
         }
         if os.path.exists(self.configpath):
-            with open(self.configpath, 'r') as f:
-                config = json.load(f)
-                default.update(config)
+            try:
+                with open(self.configpath, 'r') as f:
+                    config = json.load(f)
+                if isinstance(config, dict):
+                    default.update(config)
                 print(f"📄 Config caricato: propagation_node={config.get('propagation_node', 'None')}")
+            except Exception as e:
+                print(f"⚠️ Config non leggibile, uso i default: {e}")
         else:
             os.makedirs(os.path.dirname(self.configpath), exist_ok=True)
             with open(self.configpath, 'w') as f:
                 json.dump(default, f, indent=4)
             print("📄 Creato config di default con opzioni telemetria")
+        default['announce_aspects'] = normalize_announce_aspects(
+            default.get('announce_aspects'), ensure_delivery=True
+        )
         return default
+
+    def _audio_preference(self):
+        """Restituisce (mode Codec2, nome preferenza) dalla config."""
+        pref = str(self.config.get('preferred_audio', 'c2_3200')).lower()
+        mapping = {
+            'c2_450': AM_CODEC2_450PWB,
+            'c2_700': AM_CODEC2_700C,
+            'c2_1200': AM_CODEC2_1200,
+            'c2_1300': AM_CODEC2_1300,
+            'c2_1400': AM_CODEC2_1400,
+            'c2_1600': AM_CODEC2_1600,
+            'c2_2400': AM_CODEC2_2400,
+            'c2_3200': AM_CODEC2_3200,
+        }
+        return mapping.get(pref), pref
+
+    def _encode_wav_to_codec2(self, audio_path, mode):
+        """Converte un WAV PCM in Codec2 (8 kHz mono). Ritorna None se non possibile."""
+        if not CODEC2_AVAILABLE:
+            return None
+        with wave.open(audio_path, 'rb') as wav_file:
+            channels = wav_file.getnchannels()
+            rate = wav_file.getframerate()
+            width = wav_file.getsampwidth()
+            frames = wav_file.readframes(wav_file.getnframes())
+        if width != 2:
+            return None
+        samples = np.frombuffer(frames, dtype=np.int16)
+        if channels > 1:
+            samples = samples.reshape(-1, channels).mean(axis=1).astype(np.int16)
+        if rate != 8000:
+            import audio_codec
+            resampled = audio_codec.resample(samples.tobytes(), 2, 1, rate, 8000, True)
+            samples = np.frombuffer(resampled, dtype=np.int16)
+        import audio_codec
+        return audio_codec.encode_codec2(samples, mode)
+
+    def _desired_method(self):
+        """Mappa delivery_mode della config sui valori LXMF."""
+        mode = str(self.config.get('delivery_mode', 'opportunistic')).lower()
+        return {
+            'direct': LXMF.LXMessage.DIRECT,
+            'opportunistic': LXMF.LXMessage.OPPORTUNISTIC,
+            'propagated': LXMF.LXMessage.PROPAGATED,
+        }.get(mode, LXMF.LXMessage.OPPORTUNISTIC)
+
+    def _peer_permissions(self, destination_hash):
+        # Permessi del peer (default: tutto negato).
+        deny = {'allow_commands': False, 'allow_telemetry': False, 'trust_level': 0}
+        try:
+            with self.db_lock:
+                conn = sqlite3.connect(self.peers_db, timeout=10)
+                c = conn.cursor()
+                c.execute('''
+                    SELECT allow_commands, allow_telemetry, trust_level
+                    FROM destinations
+                    WHERE destination_hash = ?
+                    ORDER BY last_seen DESC LIMIT 1
+                ''', (destination_hash,))
+                row = c.fetchone()
+                conn.close()
+            if not row:
+                return deny
+            return {
+                'allow_commands': bool(row[0]),
+                'allow_telemetry': bool(row[1]),
+                'trust_level': int(row[2] or 0),
+            }
+        except Exception as e:
+            RNS.log(f"Errore lettura permessi peer: {e}", RNS.LOG_WARNING)
+            return deny
+
+    def set_propagation_node(self, node_hash):
+        """Applica subito un nodo propagation e aggiorna il router LXMF.
+
+        LXMF accetta solo destination hash da 16 byte (32 caratteri hex).
+        """
+        node_hash = str(node_hash or '').strip().lower()
+        if node_hash:
+            if not re.fullmatch(r'[0-9a-f]{32}', node_hash):
+                raise ValueError('propagation_node deve essere un hash di 32 caratteri hex')
+            node_bytes = bytes.fromhex(node_hash)
+            self.router.set_outbound_propagation_node(node_bytes)
+            self.propagation_node = node_bytes
+            self.config['propagation_node'] = node_hash
+            try:
+                self.router.request_path(node_bytes)
+                print(f"📡 Propagation node impostato e path richiesto: {node_hash}")
+            except Exception as e:
+                print(f"⚠️ Propagation impostato, richiesta path non disponibile: {e}")
+            return node_hash
+
+        self.propagation_node = None
+        self.config['propagation_node'] = None
+        try:
+            link = getattr(self.router, 'outbound_propagation_link', None)
+            if link:
+                link.teardown()
+        except Exception:
+            pass
+        try:
+            self.router.outbound_propagation_link = None
+            self.router.outbound_propagation_node = None
+        except Exception:
+            pass
+        print("📡 Propagation node rimosso")
+        return None
 
     def _set_propagation_node(self):
         node_hash = self.config.get("propagation_node")
         if node_hash:
             try:
-                self.propagation_node = bytes.fromhex(node_hash)
-                self.router.set_outbound_propagation_node(self.propagation_node)
-                print(f"📡 Propagation node impostato: {node_hash}")
+                self.set_propagation_node(node_hash)
             except Exception as e:
                 print(f"❌ Errore propagation node: {e}")
 
@@ -561,24 +1021,66 @@ class Messenger:
         if identities:
             print(f"🔑 Trovate {len(identities)} identità. Uso la prima: {identities[0]}")
             path = os.path.join(self.storagepath, identities[0])
+            self.identity_path = path
             return RNS.Identity.from_file(path)
         
         print("✨ Creazione nuova identità...")
         identity = RNS.Identity()
         path = os.path.join(self.storagepath, identity.hash.hex())
+        self.identity_path = path
         identity.to_file(path)
         return identity
 
+    def _name_sidecar_paths(self):
+        paths = []
+        identity_path = getattr(self, 'identity_path', None)
+        if identity_path:
+            paths.append(f"{identity_path}.name")
+        paths.append(os.path.join(self.storagepath, f"{self.identity.hash.hex()}.name"))
+        return paths
+
+    def _save_display_name(self, name):
+        name = sanitize_display_name(name, None)
+        if not name:
+            return
+        paths = self._name_sidecar_paths()
+        if not paths:
+            return
+        try:
+            with open(paths[0], 'w') as f:
+                f.write(name)
+        except OSError as e:
+            print(f"⚠️ Impossibile salvare il nome identità: {e}")
+
     def _load_display_name(self):
-        name_file = os.path.join(self.storagepath, f"{self.identity.hash.hex()}.name")
-        if os.path.exists(name_file):
-            with open(name_file, 'r') as f:
-                return f.read().strip()
-        else:
-            default_name = self.identity.hash.hex()[:8]
-            with open(name_file, 'w') as f:
-                f.write(default_name)
-            return default_name
+        identity_hash = self.identity.hash.hex()
+        candidates = []
+
+        def add_candidate(value):
+            name = clean_display_name(value, None)
+            if name and not is_hash_preview_name(name, identity_hash):
+                candidates.append(name)
+
+        if isinstance(self.config, dict):
+            add_candidate(self.config.get('display_name'))
+
+        for name_file in self._name_sidecar_paths():
+            try:
+                if os.path.exists(name_file):
+                    with open(name_file, 'r', encoding='utf-8', errors='replace') as f:
+                        add_candidate(f.read())
+            except OSError:
+                continue
+
+        identity_path = getattr(self, 'identity_path', None)
+        if identity_path:
+            base_name = os.path.basename(identity_path)
+            if base_name and not re.fullmatch(r'[0-9a-fA-F]{32,64}', base_name):
+                add_candidate(base_name)
+
+        if candidates:
+            return candidates[0]
+        return identity_hash[:8]
 
     def _save_attachment(self, msg_hash, typ, data, filename_hint=None):
         """🔴 DEPRECATO - Non usiamo più file su disco"""
@@ -718,12 +1220,11 @@ class Messenger:
                 conn = sqlite3.connect(self.peers_db, timeout=10)
                 c = conn.cursor()
                 
-                # Crea JSON con l'appearance
-                appearance_json = json.dumps({
-                    'icon': appearance[0],
-                    'fg': appearance[1].hex() if isinstance(appearance[1], bytes) else appearance[1],
-                    'bg': appearance[2].hex() if isinstance(appearance[2], bytes) else appearance[2]
-                })
+                # Crea JSON con l'appearance sanificata
+                fg = appearance[1].hex() if isinstance(appearance[1], bytes) else appearance[1]
+                bg = appearance[2].hex() if isinstance(appearance[2], bytes) else appearance[2]
+                icon, fg, bg = sanitize_appearance(appearance[0], fg, bg)
+                appearance_json = json.dumps({'icon': icon, 'fg': fg, 'bg': bg})
                 
                 # Aggiorna la tabella destinations
                 c.execute('''
@@ -873,12 +1374,11 @@ class Messenger:
             if message.fields and FIELD_ICON_APPEARANCE in message.fields:
                 appearance = message.fields[FIELD_ICON_APPEARANCE]
                 if isinstance(appearance, (list, tuple)) and len(appearance) == 3:
-                    appearance_json = json.dumps({
-                        'icon': appearance[0],
-                        'fg': appearance[1].hex() if isinstance(appearance[1], bytes) else appearance[1],
-                        'bg': appearance[2].hex() if isinstance(appearance[2], bytes) else appearance[2]
-                    })
-                    print(f"🎨 Appearance salvata per {source_hash[:8]}: {appearance[0]}")
+                    fg = appearance[1].hex() if isinstance(appearance[1], bytes) else appearance[1]
+                    bg = appearance[2].hex() if isinstance(appearance[2], bytes) else appearance[2]
+                    icon, fg, bg = sanitize_appearance(appearance[0], fg, bg)
+                    appearance_json = json.dumps({'icon': icon, 'fg': fg, 'bg': bg})
+                    print(f"🎨 Appearance salvata per {source_hash[:8]}: {icon}")
             
             c.execute("SELECT identity_hash FROM destinations WHERE destination_hash = ?", (source_hash,))
             row = c.fetchone()
@@ -898,8 +1398,8 @@ class Messenger:
             
             c.execute('''
                 INSERT INTO destinations (
-                    destination_hash, identity_hash, aspect, last_seen, hops, rssi, snr, q, app_data, appearance
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    destination_hash, identity_hash, aspect, last_seen, hops, rssi, snr, q, app_data, appearance, group_name
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
                 ON CONFLICT(destination_hash) DO UPDATE SET
                     identity_hash = excluded.identity_hash,
                     last_seen = excluded.last_seen,
@@ -913,8 +1413,8 @@ class Messenger:
             
             if identity_hash:
                 c.execute('''
-                    INSERT INTO identities (identity_hash, last_seen)
-                    VALUES (?, ?)
+                    INSERT INTO identities (identity_hash, last_seen, group_name)
+                    VALUES (?, ?, NULL)
                     ON CONFLICT(identity_hash) DO UPDATE SET
                         last_seen = excluded.last_seen
                 ''', (identity_hash, now))
@@ -933,6 +1433,15 @@ class Messenger:
                 f.write(packed.hex())
         except Exception as e:
             RNS.log(f"Errore salvataggio raw per {msg_hash}: {e}", RNS.LOG_ERROR)
+
+    def _remember_raw(self, msg_hash, raw_hex, raw_ascii):
+        """Mantiene in memoria solo gli ultimi raw (max 500)."""
+        self.received_raw[msg_hash] = {'hex': raw_hex, 'ascii': raw_ascii}
+        while len(self.received_raw) > 500:
+            oldest = next(iter(self.received_raw), None)
+            if oldest is None:
+                break
+            self.received_raw.pop(oldest, None)
 
     def _message_to_dict(self, lxmf_message):
         fields_dict = {}
@@ -1146,208 +1655,210 @@ class Messenger:
             else:
                 decrypted = None
                 
-            debug_packet(message.packed, "⬇️ RICEVUTO", 
-                        f"Hash: {message.hash.hex()[:16]}... Da: {message.source_hash.hex()[:16]}...",
-                        decrypted)
+            if DEBUG_PACKETS:
+                debug_packet(message.packed, "⬇️ RICEVUTO",
+                            f"Hash: {message.hash.hex()[:16]}... Da: {message.source_hash.hex()[:16]}...",
+                            decrypted)
         
-        # 🔴 DEBUG ESTESO: Mostra TUTTI i campi del messaggio decifrato
-        print("\n" + "="*80)
-        print(f"📦 CONTENUTO DECIFRATO - Hash: {message.hash.hex()[:16]}...")
-        print("="*80)
-        print(f"   📝 Titolo: {message.title.decode('utf-8', errors='ignore')}")
-        print(f"   📝 Contenuto: {message.content.decode('utf-8', errors='ignore')}")
+        if DEBUG_PACKETS:
+            # 🔴 DEBUG ESTESO: Mostra TUTTI i campi del messaggio decifrato
+            print("\n" + "="*80)
+            print(f"📦 CONTENUTO DECIFRATO - Hash: {message.hash.hex()[:16]}...")
+            print("="*80)
+            print(f"   📝 Titolo: {message.title.decode('utf-8', errors='ignore')}")
+            print(f"   📝 Contenuto: {message.content.decode('utf-8', errors='ignore')}")
         
-        if message.fields:
-            print(f"\n   📌 CAMPI LXMF (FIELDS):")
-            for field_type, field_value in message.fields.items():
-                field_name = {
-                    0x02: "TELEMETRY",
-                    0x03: "TELEMETRY_STREAM",
-                    0x04: "ICON_APPEARANCE",
-                    0x05: "FILE_ATTACHMENTS",
-                    0x06: "IMAGE",
-                    0x07: "AUDIO",
-                    0x09: "COMMANDS"
-                }.get(field_type, f"UNKNOWN(0x{field_type:02x})")
+            if message.fields:
+                print(f"\n   📌 CAMPI LXMF (FIELDS):")
+                for field_type, field_value in message.fields.items():
+                    field_name = {
+                        0x02: "TELEMETRY",
+                        0x03: "TELEMETRY_STREAM",
+                        0x04: "ICON_APPEARANCE",
+                        0x05: "FILE_ATTACHMENTS",
+                        0x06: "IMAGE",
+                        0x07: "AUDIO",
+                        0x09: "COMMANDS"
+                    }.get(field_type, f"UNKNOWN(0x{field_type:02x})")
                 
-                print(f"\n      📌 Campo 0x{field_type:02x} ({field_name}):")
+                    print(f"\n      📌 Campo 0x{field_type:02x} ({field_name}):")
                 
-                if field_type == FIELD_TELEMETRY and isinstance(field_value, bytes):
-                    print(f"         📊 TELEMETRIA ({len(field_value)} bytes)")
-                    try:
-                        # Decodifica la telemetria
-                        telemetry_data = umsgpack.unpackb(field_value)
-                        print(f"         📊 Dati telemetria grezzi: {telemetry_data}")
+                    if field_type == FIELD_TELEMETRY and isinstance(field_value, bytes):
+                        print(f"         📊 TELEMETRIA ({len(field_value)} bytes)")
+                        try:
+                            # Decodifica la telemetria
+                            telemetry_data = umsgpack.unpackb(field_value)
+                            print(f"         📊 Dati telemetria grezzi: {telemetry_data}")
                         
-                        # Decodifica ogni sensore
-                        for sensor_id, sensor_value in telemetry_data.items():
-                            sensor_name = {
-                                0x01: "TIME", 0x02: "LOCATION", 0x03: "PRESSURE",
-                                0x04: "BATTERY", 0x05: "PHYSICAL_LINK", 0x06: "ACCELERATION",
-                                0x07: "TEMPERATURE", 0x08: "HUMIDITY", 0x09: "MAGNETIC_FIELD",
-                                0x0A: "AMBIENT_LIGHT", 0x0B: "GRAVITY", 0x0C: "ANGULAR_VELOCITY",
-                                0x0E: "PROXIMITY", 0x0F: "INFORMATION", 0x10: "RECEIVED",
-                                0x11: "POWER_CONSUMPTION", 0x12: "POWER_PRODUCTION",
-                                0x13: "PROCESSOR", 0x14: "RAM", 0x15: "NVM",
-                                0x16: "TANK", 0x17: "FUEL", 0x19: "RNS_TRANSPORT",
-                                0x18: "LXMF_PROPAGATION", 0x1A: "CONNECTION_MAP",
-                                0xFF: "CUSTOM"
-                            }.get(sensor_id, f"UNKNOWN(0x{sensor_id:02x})")
+                            # Decodifica ogni sensore
+                            for sensor_id, sensor_value in telemetry_data.items():
+                                sensor_name = {
+                                    0x01: "TIME", 0x02: "LOCATION", 0x03: "PRESSURE",
+                                    0x04: "BATTERY", 0x05: "PHYSICAL_LINK", 0x06: "ACCELERATION",
+                                    0x07: "TEMPERATURE", 0x08: "HUMIDITY", 0x09: "MAGNETIC_FIELD",
+                                    0x0A: "AMBIENT_LIGHT", 0x0B: "GRAVITY", 0x0C: "ANGULAR_VELOCITY",
+                                    0x0E: "PROXIMITY", 0x0F: "INFORMATION", 0x10: "RECEIVED",
+                                    0x11: "POWER_CONSUMPTION", 0x12: "POWER_PRODUCTION",
+                                    0x13: "PROCESSOR", 0x14: "RAM", 0x15: "NVM",
+                                    0x16: "TANK", 0x17: "FUEL", 0x19: "RNS_TRANSPORT",
+                                    0x18: "LXMF_PROPAGATION", 0x1A: "CONNECTION_MAP",
+                                    0xFF: "CUSTOM"
+                                }.get(sensor_id, f"UNKNOWN(0x{sensor_id:02x})")
                             
-                            print(f"            📍 Sensore {sensor_name} (0x{sensor_id:02x}):")
+                                print(f"            📍 Sensore {sensor_name} (0x{sensor_id:02x}):")
                             
-                            # Decodifica specifica per tipo
-                            if sensor_id == 0x01 and isinstance(sensor_value, int):  # TIME
-                                from datetime import datetime
-                                dt = datetime.fromtimestamp(sensor_value)
-                                print(f"               UTC: {sensor_value} -> {dt.strftime('%Y-%m-%d %H:%M:%S')}")
+                                # Decodifica specifica per tipo
+                                if sensor_id == 0x01 and isinstance(sensor_value, int):  # TIME
+                                    from datetime import datetime
+                                    dt = datetime.fromtimestamp(sensor_value)
+                                    print(f"               UTC: {sensor_value} -> {dt.strftime('%Y-%m-%d %H:%M:%S')}")
                             
-                            elif sensor_id == 0x02 and isinstance(sensor_value, list) and len(sensor_value) >= 7:  # LOCATION
-                                try:
-                                    lat = struct.unpack("!i", sensor_value[0])[0]/1e6
-                                    lon = struct.unpack("!i", sensor_value[1])[0]/1e6
-                                    alt = struct.unpack("!i", sensor_value[2])[0]/1e2
-                                    speed = struct.unpack("!I", sensor_value[3])[0]/1e2
-                                    bearing = struct.unpack("!i", sensor_value[4])[0]/1e2
-                                    accuracy = struct.unpack("!H", sensor_value[5])[0]/1e2
-                                    last_update = sensor_value[6]
-                                    print(f"               📍 Posizione: {lat}, {lon}")
-                                    print(f"               📈 Altitudine: {alt}m")
-                                    print(f"               ⚡ Velocità: {speed} km/h")
-                                    print(f"               🧭 Direzione: {bearing}°")
-                                    print(f"               🎯 Precisione: {accuracy}m")
-                                    print(f"               🕐 Ultimo aggiornamento: {last_update}")
-                                except Exception as e:
-                                    print(f"               Errore decodifica location: {e}")
+                                elif sensor_id == 0x02 and isinstance(sensor_value, list) and len(sensor_value) >= 7:  # LOCATION
+                                    try:
+                                        lat = struct.unpack("!i", sensor_value[0])[0]/1e6
+                                        lon = struct.unpack("!i", sensor_value[1])[0]/1e6
+                                        alt = struct.unpack("!i", sensor_value[2])[0]/1e2
+                                        speed = struct.unpack("!I", sensor_value[3])[0]/1e2
+                                        bearing = struct.unpack("!i", sensor_value[4])[0]/1e2
+                                        accuracy = struct.unpack("!H", sensor_value[5])[0]/1e2
+                                        last_update = sensor_value[6]
+                                        print(f"               📍 Posizione: {lat}, {lon}")
+                                        print(f"               📈 Altitudine: {alt}m")
+                                        print(f"               ⚡ Velocità: {speed} km/h")
+                                        print(f"               🧭 Direzione: {bearing}°")
+                                        print(f"               🎯 Precisione: {accuracy}m")
+                                        print(f"               🕐 Ultimo aggiornamento: {last_update}")
+                                    except Exception as e:
+                                        print(f"               Errore decodifica location: {e}")
                             
-                            elif sensor_id == 0x04 and isinstance(sensor_value, list):  # BATTERY
-                                try:
-                                    charge = sensor_value[0]
-                                    charging = sensor_value[1]
-                                    temp = sensor_value[2] if len(sensor_value) > 2 else None
-                                    print(f"               🔋 Carica: {charge}%")
-                                    print(f"               ⚡ In carica: {charging}")
-                                    if temp:
-                                        print(f"               🌡️ Temperatura: {temp}°C")
-                                except:
+                                elif sensor_id == 0x04 and isinstance(sensor_value, list):  # BATTERY
+                                    try:
+                                        charge = sensor_value[0]
+                                        charging = sensor_value[1]
+                                        temp = sensor_value[2] if len(sensor_value) > 2 else None
+                                        print(f"               🔋 Carica: {charge}%")
+                                        print(f"               ⚡ In carica: {charging}")
+                                        if temp:
+                                            print(f"               🌡️ Temperatura: {temp}°C")
+                                    except:
+                                        print(f"               {sensor_value}")
+                            
+                                elif sensor_id == 0x07 and sensor_value is not None:  # TEMPERATURE
+                                    print(f"               🌡️ Temperatura: {sensor_value}°C")
+                            
+                                elif sensor_id == 0x08 and sensor_value is not None:  # HUMIDITY
+                                    print(f"               💧 Umidità: {sensor_value}%")
+                            
+                                elif sensor_id == 0x03 and sensor_value is not None:  # PRESSURE
+                                    print(f"               🌡️ Pressione: {sensor_value} mbar")
+                            
+                                elif sensor_id == 0x0A and sensor_value is not None:  # AMBIENT_LIGHT
+                                    print(f"               💡 Luce: {sensor_value} lux")
+                            
+                                elif sensor_id == 0x0B and isinstance(sensor_value, list) and len(sensor_value) >= 3:  # GRAVITY
+                                    try:
+                                        print(f"               📊 Gravità: x={sensor_value[0]}, y={sensor_value[1]}, z={sensor_value[2]} m/s²")
+                                    except:
+                                        print(f"               {sensor_value}")
+                            
+                                elif sensor_id == 0x06 and isinstance(sensor_value, list) and len(sensor_value) >= 3:  # ACCELERATION
+                                    try:
+                                        print(f"               📊 Accelerazione: x={sensor_value[0]}, y={sensor_value[1]}, z={sensor_value[2]} m/s²")
+                                    except:
+                                        print(f"               {sensor_value}")
+                            
+                                elif sensor_id == 0x05 and sensor_value is not None:  # PHYSICAL_LINK
+                                    print(f"               📡 Link fisico: {sensor_value}")
+                            
+                                elif sensor_id == 0x09 and sensor_value is not None:  # MAGNETIC_FIELD
+                                    print(f"               🧲 Campo magnetico: {sensor_value}")
+                            
+                                elif sensor_id == 0x0C and sensor_value is not None:  # ANGULAR_VELOCITY
+                                    print(f"               🔄 Velocità angolare: {sensor_value}")
+                            
+                                elif sensor_id == 0x0E and sensor_value is not None:  # PROXIMITY
+                                    print(f"               📏 Prossimità: {sensor_value}")
+                            
+                                elif sensor_id == 0x0F and sensor_value is not None:  # INFORMATION
+                                    print(f"               ℹ️ Informazione: {sensor_value}")
+                            
+                                elif sensor_id == 0x10 and isinstance(sensor_value, list):  # RECEIVED
+                                    try:
+                                        print(f"               📨 Ricevuto da: {sensor_value[0]}")
+                                        print(f"               🔀 Via: {sensor_value[1]}")
+                                        if len(sensor_value) > 3:
+                                            print(f"               📏 Distanza geodesica: {sensor_value[2]}m")
+                                            print(f"               📏 Distanza euclidea: {sensor_value[3]}m")
+                                    except:
+                                        print(f"               {sensor_value}")
+                            
+                                elif sensor_id == 0x11 and sensor_value is not None:  # POWER_CONSUMPTION
+                                    print(f"               ⚡ Consumo: {sensor_value}W")
+                            
+                                elif sensor_id == 0x12 and sensor_value is not None:  # POWER_PRODUCTION
+                                    print(f"               ⚡ Produzione: {sensor_value}W")
+                            
+                                elif sensor_id == 0x13 and sensor_value is not None:  # PROCESSOR
+                                    print(f"               💻 Processore: {sensor_value}%")
+                            
+                                elif sensor_id == 0x14 and sensor_value is not None:  # RAM
+                                    print(f"               🧠 RAM: {sensor_value}%")
+                            
+                                elif sensor_id == 0x15 and sensor_value is not None:  # NVM
+                                    print(f"               💾 Memoria: {sensor_value}%")
+                            
+                                elif sensor_id == 0x16 and sensor_value is not None:  # TANK
+                                    print(f"               🛢️ Serbatoio: {sensor_value}%")
+                            
+                                elif sensor_id == 0x17 and sensor_value is not None:  # FUEL
+                                    print(f"               ⛽ Carburante: {sensor_value}%")
+                            
+                                elif sensor_id == 0x19 and sensor_value is not None:  # RNS_TRANSPORT
+                                    print(f"               🚇 Trasporto RNS: {sensor_value}")
+                            
+                                elif sensor_id == 0x18 and sensor_value is not None:  # LXMF_PROPAGATION
+                                    print(f"               📡 Propagazione LXMF: {sensor_value}")
+                            
+                                elif sensor_id == 0x1A and sensor_value is not None:  # CONNECTION_MAP
+                                    print(f"               🗺️ Mappa connessioni: {sensor_value}")
+                            
+                                elif sensor_id == 0xFF and sensor_value is not None:  # CUSTOM
+                                    print(f"               🔧 Custom: {sensor_value}")
+                            
+                                else:
                                     print(f"               {sensor_value}")
-                            
-                            elif sensor_id == 0x07 and sensor_value is not None:  # TEMPERATURE
-                                print(f"               🌡️ Temperatura: {sensor_value}°C")
-                            
-                            elif sensor_id == 0x08 and sensor_value is not None:  # HUMIDITY
-                                print(f"               💧 Umidità: {sensor_value}%")
-                            
-                            elif sensor_id == 0x03 and sensor_value is not None:  # PRESSURE
-                                print(f"               🌡️ Pressione: {sensor_value} mbar")
-                            
-                            elif sensor_id == 0x0A and sensor_value is not None:  # AMBIENT_LIGHT
-                                print(f"               💡 Luce: {sensor_value} lux")
-                            
-                            elif sensor_id == 0x0B and isinstance(sensor_value, list) and len(sensor_value) >= 3:  # GRAVITY
-                                try:
-                                    print(f"               📊 Gravità: x={sensor_value[0]}, y={sensor_value[1]}, z={sensor_value[2]} m/s²")
-                                except:
-                                    print(f"               {sensor_value}")
-                            
-                            elif sensor_id == 0x06 and isinstance(sensor_value, list) and len(sensor_value) >= 3:  # ACCELERATION
-                                try:
-                                    print(f"               📊 Accelerazione: x={sensor_value[0]}, y={sensor_value[1]}, z={sensor_value[2]} m/s²")
-                                except:
-                                    print(f"               {sensor_value}")
-                            
-                            elif sensor_id == 0x05 and sensor_value is not None:  # PHYSICAL_LINK
-                                print(f"               📡 Link fisico: {sensor_value}")
-                            
-                            elif sensor_id == 0x09 and sensor_value is not None:  # MAGNETIC_FIELD
-                                print(f"               🧲 Campo magnetico: {sensor_value}")
-                            
-                            elif sensor_id == 0x0C and sensor_value is not None:  # ANGULAR_VELOCITY
-                                print(f"               🔄 Velocità angolare: {sensor_value}")
-                            
-                            elif sensor_id == 0x0E and sensor_value is not None:  # PROXIMITY
-                                print(f"               📏 Prossimità: {sensor_value}")
-                            
-                            elif sensor_id == 0x0F and sensor_value is not None:  # INFORMATION
-                                print(f"               ℹ️ Informazione: {sensor_value}")
-                            
-                            elif sensor_id == 0x10 and isinstance(sensor_value, list):  # RECEIVED
-                                try:
-                                    print(f"               📨 Ricevuto da: {sensor_value[0]}")
-                                    print(f"               🔀 Via: {sensor_value[1]}")
-                                    if len(sensor_value) > 3:
-                                        print(f"               📏 Distanza geodesica: {sensor_value[2]}m")
-                                        print(f"               📏 Distanza euclidea: {sensor_value[3]}m")
-                                except:
-                                    print(f"               {sensor_value}")
-                            
-                            elif sensor_id == 0x11 and sensor_value is not None:  # POWER_CONSUMPTION
-                                print(f"               ⚡ Consumo: {sensor_value}W")
-                            
-                            elif sensor_id == 0x12 and sensor_value is not None:  # POWER_PRODUCTION
-                                print(f"               ⚡ Produzione: {sensor_value}W")
-                            
-                            elif sensor_id == 0x13 and sensor_value is not None:  # PROCESSOR
-                                print(f"               💻 Processore: {sensor_value}%")
-                            
-                            elif sensor_id == 0x14 and sensor_value is not None:  # RAM
-                                print(f"               🧠 RAM: {sensor_value}%")
-                            
-                            elif sensor_id == 0x15 and sensor_value is not None:  # NVM
-                                print(f"               💾 Memoria: {sensor_value}%")
-                            
-                            elif sensor_id == 0x16 and sensor_value is not None:  # TANK
-                                print(f"               🛢️ Serbatoio: {sensor_value}%")
-                            
-                            elif sensor_id == 0x17 and sensor_value is not None:  # FUEL
-                                print(f"               ⛽ Carburante: {sensor_value}%")
-                            
-                            elif sensor_id == 0x19 and sensor_value is not None:  # RNS_TRANSPORT
-                                print(f"               🚇 Trasporto RNS: {sensor_value}")
-                            
-                            elif sensor_id == 0x18 and sensor_value is not None:  # LXMF_PROPAGATION
-                                print(f"               📡 Propagazione LXMF: {sensor_value}")
-                            
-                            elif sensor_id == 0x1A and sensor_value is not None:  # CONNECTION_MAP
-                                print(f"               🗺️ Mappa connessioni: {sensor_value}")
-                            
-                            elif sensor_id == 0xFF and sensor_value is not None:  # CUSTOM
-                                print(f"               🔧 Custom: {sensor_value}")
-                            
-                            else:
-                                print(f"               {sensor_value}")
                     
-                    except Exception as e:
-                        print(f"         Errore decodifica telemetria: {e}")
+                        except Exception as e:
+                            print(f"         Errore decodifica telemetria: {e}")
                 
-                elif field_type == FIELD_ICON_APPEARANCE and isinstance(field_value, (list, tuple)) and len(field_value) == 3:
-                    print(f"         🎨 Icona: {field_value[0]}")
-                    print(f"         🎨 Foreground: {field_value[1].hex() if isinstance(field_value[1], bytes) else field_value[1]}")
-                    print(f"         🎨 Background: {field_value[2].hex() if isinstance(field_value[2], bytes) else field_value[2]}")
+                    elif field_type == FIELD_ICON_APPEARANCE and isinstance(field_value, (list, tuple)) and len(field_value) == 3:
+                        print(f"         🎨 Icona: {field_value[0]}")
+                        print(f"         🎨 Foreground: {field_value[1].hex() if isinstance(field_value[1], bytes) else field_value[1]}")
+                        print(f"         🎨 Background: {field_value[2].hex() if isinstance(field_value[2], bytes) else field_value[2]}")
                 
-                elif field_type == FIELD_IMAGE and isinstance(field_value, (list, tuple)) and len(field_value) == 2:
-                    print(f"         🖼️ Immagine: {len(field_value[1])} bytes, tipo: {field_value[0]}")
+                    elif field_type == FIELD_IMAGE and isinstance(field_value, (list, tuple)) and len(field_value) == 2:
+                        print(f"         🖼️ Immagine: {len(field_value[1])} bytes, tipo: {field_value[0]}")
                 
-                elif field_type == FIELD_AUDIO and isinstance(field_value, (list, tuple)) and len(field_value) == 2:
-                    mode_name = "Codec2" if field_value[0] <= 0x09 else "Opus"
-                    print(f"         🎵 Audio: {len(field_value[1])} bytes, mode: {mode_name} (0x{field_value[0]:02x})")
+                    elif field_type == FIELD_AUDIO and isinstance(field_value, (list, tuple)) and len(field_value) == 2:
+                        mode_name = "Codec2" if field_value[0] <= 0x09 else "Opus"
+                        print(f"         🎵 Audio: {len(field_value[1])} bytes, mode: {mode_name} (0x{field_value[0]:02x})")
                 
-                elif field_type == FIELD_FILE_ATTACHMENTS and isinstance(field_value, list):
-                    print(f"         📎 Allegati: {len(field_value)} file")
-                    for i, att in enumerate(field_value):
-                        if isinstance(att, (list, tuple)) and len(att) == 2:
-                            print(f"            File {i+1}: {att[0]} ({len(att[1])} bytes)")
+                    elif field_type == FIELD_FILE_ATTACHMENTS and isinstance(field_value, list):
+                        print(f"         📎 Allegati: {len(field_value)} file")
+                        for i, att in enumerate(field_value):
+                            if isinstance(att, (list, tuple)) and len(att) == 2:
+                                print(f"            File {i+1}: {att[0]} ({len(att[1])} bytes)")
                 
-                elif field_type == FIELD_COMMANDS and isinstance(field_value, list):
-                    print(f"         🎮 Comandi: {field_value}")
+                    elif field_type == FIELD_COMMANDS and isinstance(field_value, list):
+                        print(f"         🎮 Comandi: {field_value}")
                 
-                elif field_type == FIELD_TELEMETRY_STREAM and isinstance(field_value, list):
-                    print(f"         📊 Stream telemetria: {len(field_value)} pacchetti")
+                    elif field_type == FIELD_TELEMETRY_STREAM and isinstance(field_value, list):
+                        print(f"         📊 Stream telemetria: {len(field_value)} pacchetti")
                 
-                else:
-                    print(f"         {field_value}")
+                    else:
+                        print(f"         {field_value}")
         
-        print("="*80 + "\n")
+            print("="*80 + "\n")
             
         attachments = []
         telemetry_obj = None
@@ -1401,6 +1912,13 @@ class Messenger:
                     telemetry_obj = telemeter.Telemeter.from_packed(message.fields[FIELD_TELEMETRY])
                     telemetry_data = telemetry_obj.read_all()
                     self._save_telemetry(message.source_hash.hex(), telemetry_obj, message)
+
+                    self._record_telemetry_event('response_received', {
+                        'source': message.source_hash.hex(),
+                        'hash': message.hash.hex(),
+                        'time': time.time(),
+                        'keys': sorted(list(telemetry_data.keys())) if isinstance(telemetry_data, dict) else [],
+                    })
                     
                     # 🔴 AGGIORNA L'ULTIMA TELEMETRIA DEL PEER
                     self._update_peer_telemetry(message.source_hash.hex(), telemetry_data, message)
@@ -1424,6 +1942,13 @@ class Messenger:
                         if t:
                             stream.append(t)
                     telemetry_obj = stream
+                    self._record_telemetry_event('response_received', {
+                        'source': message.source_hash.hex(),
+                        'hash': message.hash.hex(),
+                        'time': time.time(),
+                        'keys': ['stream'],
+                        'stream_count': len(stream),
+                    })
                     print(f"📊 TELEMETRY STREAM: {len(stream)} pacchetti")
                 except Exception as e:
                     RNS.log(f"Errore parsing stream telemetria: {e}", RNS.LOG_ERROR)
@@ -1434,7 +1959,10 @@ class Messenger:
                 self._save_peer_appearance(message.source_hash.hex(), appearance)
 
             if FIELD_COMMANDS in message.fields:
-                self._handle_commands(message, message.fields[FIELD_COMMANDS])
+                if getattr(message, 'signature_validated', False):
+                    self._handle_commands(message, message.fields[FIELD_COMMANDS])
+                else:
+                    RNS.log("Comandi ignorati: firma del messaggio non valida", RNS.LOG_WARNING)
 
         source_hash_hex = message.source_hash.hex()
         conv_dir = os.path.join(self.conversations_dir, source_hash_hex)
@@ -1501,27 +2029,44 @@ class Messenger:
             pass
 
         if raw_hex:
-            self.received_raw[msg_dict['hash']] = {'hex': raw_hex, 'ascii': raw_ascii}
+            self._remember_raw(msg_dict['hash'], raw_hex, raw_ascii)
 
         if self.message_callback:
             self.message_callback(msg_dict)
 
     def _handle_commands(self, message, commands):
+        if not isinstance(commands, (list, tuple)):
+            return
         source = message.source_hash.hex()
+        perms = self._peer_permissions(source)
+        allow_commands = perms['allow_commands'] or bool(self.config.get('allow_remote_commands', False))
+        allow_telemetry = perms['allow_telemetry'] or bool(self.config.get('allow_telemetry_requests', False))
         for cmd_dict in commands:
             if not isinstance(cmd_dict, dict):
                 continue
             for cmd_type, cmd_data in cmd_dict.items():
-                cmd_type = int(cmd_type)
+                try:
+                    cmd_type = int(cmd_type)
+                except (TypeError, ValueError):
+                    continue
                 if cmd_type == Commands.PING:
+                    if not allow_commands:
+                        RNS.log(f"PING ignorato da {source[:16]} (non autorizzato)", RNS.LOG_WARNING)
+                        continue
                     self.send(source, "Ping reply", callbacks=None)
                 elif cmd_type == Commands.ECHO:
+                    if not allow_commands:
+                        RNS.log(f"ECHO ignorato da {source[:16]} (non autorizzato)", RNS.LOG_WARNING)
+                        continue
                     if isinstance(cmd_data, bytes):
                         text = cmd_data.decode('utf-8', errors='replace')
                     else:
                         text = str(cmd_data)
                     self.send(source, f"Echo reply: {text}", callbacks=None)
                 elif cmd_type == Commands.SIGNAL_REPORT:
+                    if not allow_commands:
+                        RNS.log(f"SIGNAL_REPORT ignorato da {source[:16]} (non autorizzato)", RNS.LOG_WARNING)
+                        continue
                     q = getattr(message, 'q', None)
                     rssi = getattr(message, 'rssi', None)
                     snr = getattr(message, 'snr', None)
@@ -1538,16 +2083,22 @@ class Messenger:
 
                 # 🔴 GESTIONE COMANDI CUSTOM (tipo 0x00)
                 elif cmd_type == Commands.CUSTOM:
+                    if not allow_commands:
+                        RNS.log(f"CUSTOM ignorato da {source[:16]} (non autorizzato)", RNS.LOG_WARNING)
+                        continue
                     print(f"📦 Comando custom ricevuto: {cmd_data}")
                     
-                    # Parsa comando in formato "rangetest 15 start"
+                    # Accetta sia "rangetest 15 start" (Sideband) sia "15 start" (UI web).
                     if isinstance(cmd_data, str):
                         parts = cmd_data.lower().split()
-                        if len(parts) >= 3 and parts[0] == 'rangetest':
+                        if parts and parts[0] == 'rangetest':
+                            parts = parts[1:]
+                        if len(parts) >= 2 and parts[0].isdigit():
                             try:
-                                interval = int(parts[1])
-                                action = parts[2]
-                                
+                                interval = int(parts[0])
+                                interval = max(5, min(interval, 3600))
+                                action = parts[1]
+
                                 if action == 'start' and interval > 0:
                                     self._start_rangetest(source, interval)
                                     self.send(source, f"✅ Rangetest avviato ogni {interval} secondi", callbacks=None)
@@ -1565,6 +2116,15 @@ class Messenger:
 
                 # 🔴 TELEMETRY_REQUEST - CORREZIONE COMPLETA
                 elif cmd_type == Commands.TELEMETRY_REQUEST:
+                    if not allow_telemetry:
+                        self._record_telemetry_event('request_ignored', {
+                            'source': source,
+                            'time': time.time(),
+                            'reason': 'allow_telemetry_false',
+                            'hash': message.hash.hex(),
+                        })
+                        RNS.log(f"TELEMETRY_REQUEST ignorato da {source[:16]} (non autorizzato)", RNS.LOG_WARNING)
+                        continue
                     print(f"📡 Richiesta telemetria da {source[:16]}...")
                     
                     try:
@@ -1616,6 +2176,11 @@ class Messenger:
                             fields=fields,
                             callbacks=None
                         )
+                        self._record_telemetry_event('response_sent', {
+                            'source': source,
+                            'time': time.time(),
+                            'keys': sorted(list(fields.keys())),
+                        })
                         print(f"✅ Risposta telemetria inviata a {source[:16]}")
                         
                     except Exception as e:
@@ -1692,6 +2257,10 @@ class Messenger:
         """Salva un punto dati del rangetest per il peer B"""
         if peer_hash in self.active_rangetests:
             try:
+                if len(self.active_rangetests[peer_hash].get('data_points', [])) >= 10000:
+                    RNS.log("Rangetest: limite punti raggiunto, arresto", RNS.LOG_WARNING)
+                    self._stop_rangetest(peer_hash)
+                    return
                 # Leggi i dati di telemetria di B
                 data = telemetry_obj.read_all()
                 
@@ -1928,6 +2497,8 @@ class Messenger:
                 source_dest = self.dest
 
                 fields_dict = {}
+                audio_mode = None
+                audio_size = None
 
                 # 🔴 IMMAGINE - AGGIUNGI TITOLO DEFAULT SE NECESSARIO
                 if image_path and not title and not content:
@@ -1973,49 +2544,77 @@ class Messenger:
                     title = "🎤 Audio Message"
                     content = " "  # spazio vuoto
 
-                # 🎵 AUDIO - CONVERSIONE CON FFMPEG (garantito)
+                # 🎵 AUDIO: Codec2 (preferito) oppure Opus via ffmpeg
                 if audio_path:
                     ext = os.path.splitext(audio_path)[1].lower()
-                    
+                    audio_field_set = False
+
                     if ext == '.wav':
-                        try:
-                            print(f"🎵 Conversione WAV con ffmpeg...")
-                            
-                            # Crea file Opus temporaneo
+                        pref_mode, pref_name = self._audio_preference()
+                        if pref_mode is not None and CODEC2_AVAILABLE:
+                            try:
+                                encoded = self._encode_wav_to_codec2(audio_path, pref_mode)
+                                if encoded:
+                                    fields_dict[FIELD_AUDIO] = [pref_mode, encoded]
+                                    audio_field_set = True
+                                    audio_mode = pref_mode
+                                    audio_size = len(encoded)
+                                    print(f"✅ Audio Codec2 ({pref_name}): {len(encoded)} bytes")
+                            except Exception as e:
+                                print(f"⚠️ Codec2 non disponibile, fallback Opus: {e}")
+
+                        if not audio_field_set:
                             temp_opus = audio_path + "_compressed.opus"
-                            
-                            # FFMPEG: converti WAV in Opus con parametri ottimali
-                            cmd = [
-                                'ffmpeg', '-i', audio_path,
-                                '-c:a', 'libopus',           # Codec Opus
-                                '-b:a', '16k',                # Bitrate 16kbps (voce)
-                                '-application', 'voip',        # Ottimizzato per voce
-                                '-frame_duration', '60',       # Frame 60ms come Sideband
-                                '-packet_loss', '1',           # Tolleranza perdita pacchetti
-                                '-ac', '1',                     # Mono
-                                '-ar', '48000',                  # Sample rate 48kHz
-                                '-y',                             # Sovrascrivi
-                                temp_opus
-                            ]
-                            
-                            result = subprocess.run(cmd, capture_output=True)
-                            
-                            if result.returncode == 0 and os.path.exists(temp_opus):
-                                with open(temp_opus, 'rb') as f:
-                                    audio_bytes = f.read()
-                                os.unlink(temp_opus)
-                                
-                                fields_dict[FIELD_AUDIO] = [AM_OPUS_OGG, audio_bytes]
-                                print(f"✅ Audio Opus compresso con ffmpeg: {len(audio_bytes)} bytes")
-                                print(f"   Rapporto compressione: {os.path.getsize(audio_path)} → {len(audio_bytes)} bytes")
-                            else:
-                                print(f"❌ FFmpeg errore: {result.stderr.decode()}")
-                                return {'success': False, 'error': 'FFmpeg compression failed'}
-                                
+                            try:
+                                print("🎵 Conversione WAV con ffmpeg...")
+                                cmd = [
+                                    'ffmpeg', '-i', audio_path,
+                                    '-c:a', 'libopus',
+                                    '-b:a', '16k',
+                                    '-application', 'voip',
+                                    '-frame_duration', '60',
+                                    '-packet_loss', '1',
+                                    '-ac', '1',
+                                    '-ar', '48000',
+                                    '-y',
+                                    temp_opus
+                                ]
+                                result = subprocess.run(cmd, capture_output=True)
+                                if result.returncode == 0 and os.path.exists(temp_opus):
+                                    with open(temp_opus, 'rb') as f:
+                                        audio_bytes = f.read()
+                                    fields_dict[FIELD_AUDIO] = [AM_OPUS_OGG, audio_bytes]
+                                    audio_field_set = True
+                                    audio_mode = AM_OPUS_OGG
+                                    audio_size = len(audio_bytes)
+                                    print(f"✅ Audio Opus compresso con ffmpeg: {len(audio_bytes)} bytes")
+                                else:
+                                    print(f"❌ FFmpeg errore: {result.stderr.decode(errors='ignore')}")
+                                    return {'success': False, 'error': 'FFmpeg compression failed'}
+                            except Exception as e:
+                                print(f"❌ Conversione audio fallita: {e}")
+                                traceback.print_exc()
+                                return {'success': False, 'error': f'Conversione audio fallita: {e}'}
+                            finally:
+                                if os.path.exists(temp_opus):
+                                    try:
+                                        os.unlink(temp_opus)
+                                    except OSError:
+                                        pass
+
+                    elif ext in ('.opus', '.ogg', '.oga'):
+                        try:
+                            with open(audio_path, 'rb') as f:
+                                audio_bytes = f.read()
+                            fields_dict[FIELD_AUDIO] = [AM_OPUS_OGG, audio_bytes]
+                            audio_field_set = True
+                            audio_mode = AM_OPUS_OGG
+                            audio_size = len(audio_bytes)
+                            print(f"✅ Audio Opus allegato: {len(audio_bytes)} bytes")
                         except Exception as e:
-                            print(f"❌ Conversione audio fallita: {e}")
-                            traceback.print_exc()
-                            return {'success': False, 'error': f'Conversione audio fallita: {e}'}
+                            return {'success': False, 'error': f'Lettura audio fallita: {e}'}
+                    else:
+                        return {'success': False, 'error': f'Formato audio non supportato: {ext}'}
 
                 # 🔴 FILE - AGGIUNGI TITOLO DEFAULT SE NECESSARIO
                 if file_attachments and not title and not content:
@@ -2060,7 +2659,7 @@ class Messenger:
                     content,
                     title,
                     fields=fields_dict if fields_dict else None,
-                    desired_method=0x01  # opportunistic
+                    desired_method=self._desired_method()
                 )
 
                 msg.stamp_cost = self.config.get('stamp_cost', 0)
@@ -2101,7 +2700,10 @@ class Messenger:
                     'hash': msg_hash,
                     'method': 'opportunistic',
                     'status': 'sending',
-                    'packed_size': msg.packed_size
+                    'packed_size': msg.packed_size,
+                    'title': title,
+                    'audio_mode': audio_mode,
+                    'audio_size': audio_size,
                 }
 
             except Exception as e:
@@ -2129,7 +2731,7 @@ class Messenger:
             source_dest = self.dest
 
             fields = {FIELD_COMMANDS: [{command_type: command_data}]}
-            desired_method = 0x01
+            desired_method = self._desired_method()
             method_name = 'opportunistic'
 
             msg = LXMF.LXMessage(
@@ -2216,7 +2818,7 @@ class Messenger:
             commands = [{Commands.TELEMETRY_REQUEST: [timebase, is_collector_request]}]
             fields = {FIELD_COMMANDS: commands}
 
-            desired_method = 0x01
+            desired_method = self._desired_method()
             method_name = 'opportunistic'
 
             msg = LXMF.LXMessage(
@@ -2273,6 +2875,16 @@ class Messenger:
             }
 
             self.router.handle_outbound(msg)
+
+            self._record_telemetry_event('request_sent', {
+                'destination': dest_hash,
+                'hash': msg_hash,
+                'time': time.time(),
+                'method': method_name,
+                'timebase': timebase,
+                'collector': bool(is_collector_request),
+            })
+
 
             return {
                 'success': True,
@@ -2371,6 +2983,119 @@ class Messenger:
     def get_hash(self):
         return self.identity.hash.hex()
 
+    def _record_announce_event(self, event):
+        """Registra ogni announce ricevuto, anche se il peer è già noto."""
+        event = dict(event or {})
+        aspect = str(event.get('aspect') or 'lxmf.delivery').lower()
+        with self.announce_stats_lock:
+            self.announce_stats['total'] += 1
+            self.announce_stats['by_aspect'][aspect] = self.announce_stats['by_aspect'].get(aspect, 0) + 1
+            self.announce_stats['last'] = event
+            self.announce_stats['recent'].append(event)
+            if len(self.announce_stats['recent']) > 50:
+                del self.announce_stats['recent'][:-50]
+
+    def get_announce_stats(self):
+        """Statistiche announce in memoria + dati DB per aspect."""
+        with self.announce_stats_lock:
+            stats = {
+                'total': self.announce_stats.get('total', 0),
+                'by_aspect': dict(self.announce_stats.get('by_aspect') or {}),
+                'last': dict(self.announce_stats['last']) if self.announce_stats.get('last') else None,
+                'recent': [dict(item) for item in self.announce_stats.get('recent', [])],
+            }
+
+        handlers = []
+        for handler in list(getattr(self, 'announce_handlers', [])):
+            handlers.append({
+                'aspect': getattr(handler, 'aspect', None),
+                'aspect_filter': getattr(handler, 'aspect_filter', None),
+                'paused': bool(getattr(handler, 'paused', False)),
+                'receive_path_responses': bool(getattr(handler, 'receive_path_responses', False)),
+            })
+
+        db_by_aspect = {}
+        db_total = 0
+        db_last = None
+        try:
+            with self.db_lock:
+                conn = sqlite3.connect(self.peers_db, timeout=10)
+                c = conn.cursor()
+                c.execute('''
+                    SELECT aspect, COUNT(*), MAX(last_seen)
+                    FROM destinations
+                    WHERE app_data IS NOT NULL
+                    GROUP BY aspect
+                ''')
+                for aspect, count, last_seen in c.fetchall():
+                    db_by_aspect[str(aspect or 'unknown')] = {
+                        'count': int(count or 0),
+                        'last_seen': last_seen,
+                    }
+                    db_total += int(count or 0)
+                    if last_seen and (db_last is None or last_seen > db_last):
+                        db_last = last_seen
+                conn.close()
+        except Exception as exc:
+            print(f"⚠️ Errore statistiche announce DB: {exc}")
+
+        stats.update({
+            'handlers': handlers,
+            'db_total': db_total,
+            'db_by_aspect': db_by_aspect,
+            'db_last_seen': db_last,
+        })
+        return stats
+
+    def _record_telemetry_event(self, kind, event=None):
+        """Registra eventi telemetria in memoria per la diagnostica UI."""
+        event = dict(event or {})
+        with self.telemetry_stats_lock:
+            if kind == 'request_sent':
+                self.telemetry_stats['requests_sent'] += 1
+                self.telemetry_stats['last_request'] = event
+            elif kind == 'response_received':
+                self.telemetry_stats['responses_received'] += 1
+                self.telemetry_stats['last_response'] = event
+            elif kind == 'response_sent':
+                self.telemetry_stats['responses_sent'] += 1
+            elif kind == 'request_ignored':
+                self.telemetry_stats['requests_ignored'] += 1
+                self.telemetry_stats['last_ignored'] = event
+
+    def get_telemetry_stats(self):
+        """Diagnostica telemetria: richieste, risposte e permessi."""
+        with self.telemetry_stats_lock:
+            stats = {
+                'requests_sent': self.telemetry_stats.get('requests_sent', 0),
+                'responses_received': self.telemetry_stats.get('responses_received', 0),
+                'responses_sent': self.telemetry_stats.get('responses_sent', 0),
+                'requests_ignored': self.telemetry_stats.get('requests_ignored', 0),
+                'last_request': dict(self.telemetry_stats['last_request']) if self.telemetry_stats.get('last_request') else None,
+                'last_response': dict(self.telemetry_stats['last_response']) if self.telemetry_stats.get('last_response') else None,
+                'last_ignored': dict(self.telemetry_stats['last_ignored']) if self.telemetry_stats.get('last_ignored') else None,
+            }
+
+        stats['allow_telemetry_requests'] = bool(self.config.get('allow_telemetry_requests', False))
+        stats['allow_remote_commands'] = bool(self.config.get('allow_remote_commands', False))
+        stats['last_request_status'] = None
+
+        last_request = stats.get('last_request')
+        if last_request and last_request.get('hash'):
+            try:
+                with self.db_lock:
+                    conn = sqlite3.connect(self.peers_db, timeout=10)
+                    c = conn.cursor()
+                    c.execute('SELECT status FROM sent_messages WHERE hash = ?', (last_request['hash'],))
+                    row = c.fetchone()
+                    conn.close()
+                if row:
+                    stats['last_request_status'] = row[0]
+            except Exception as exc:
+                print(f"⚠️ Errore stato telemetria: {exc}")
+
+        return stats
+
     def get_delivery_hash(self):
         return self.dest.hash.hex()
 
@@ -2386,29 +3111,34 @@ class Messenger:
             row = c.fetchone()
             conn.close()
             if row:
-                return row[0]
+                return clean_display_name(row[0], dest_hash[:8])
             return dest_hash[:8]
 
-    def list_peers(self):
-        """Restituisce una lista di tutte le identità (con nome, identity_hash e appearance)"""
+    def list_peers(self, aspect='lxmf.delivery'):
+        """Restituisce le identità con una destinazione per l'aspect richiesto."""
+        aspect = str(aspect or 'lxmf.delivery')
         with self.db_lock:
             conn = sqlite3.connect(self.peers_db, timeout=10)
             c = conn.cursor()
             
-            # 🔴 CORREZIONE: group_name NON esiste in identities, ma in destinations!
             c.execute('''
-                SELECT i.identity_hash, i.display_name, d.group_name, d.appearance
+                SELECT i.identity_hash, i.display_name,
+                       COALESCE(i.is_favorite, 0),
+                       MAX(d.appearance),
+                       (SELECT GROUP_CONCAT(pg.group_name)
+                        FROM peer_groups pg
+                        WHERE pg.identity_hash = i.identity_hash) AS groups_csv
                 FROM identities i
-                LEFT JOIN destinations d ON i.identity_hash = d.identity_hash 
-                    AND d.aspect = 'lxmf.delivery'
+                JOIN destinations d ON i.identity_hash = d.identity_hash
+                    AND d.aspect = ?
                 GROUP BY i.identity_hash
-            ''')
+            ''', (aspect,))
             rows = c.fetchall()
             conn.close()
         
         # Ordina
         def sort_key(row):
-            name = row[1] or ""
+            name = clean_display_name(row[1], '') or ''
             clean = re.sub(r'^[^a-zA-Z0-9]+', '', name)
             return clean.lower()
         
@@ -2417,21 +3147,26 @@ class Messenger:
         # Costruisci risultato con appearance
         result = []
         for row in rows:
+            groups = [group for group in str(row[4] or '').split(',') if group]
+            display_name = clean_display_name(row[1], None)
+            if display_name and is_hash_preview_name(display_name, row[0]):
+                display_name = None
             peer = {
                 'hash': row[0],
-                'name': row[1],
-                'group': row[2] or 'public'  # 🔴 group_name viene da destinations!
+                'name': display_name,
+                'favorite': bool(row[2]),
+                'groups': groups,
+                'group': groups[0] if groups else None,
+                'aspect': aspect
             }
             
             # 🔴 DECODIFICA APPEARANCE SE PRESENTE
             if row[3]:
                 try:
                     app_data = json.loads(row[3])
-                    peer['appearance'] = [
-                        app_data.get('icon', 'account-outline'),
-                        app_data.get('fg', '4c9aff'),
-                        app_data.get('bg', '1a1f2e')
-                    ]
+                    peer['appearance'] = sanitize_appearance(
+                        app_data.get('icon'), app_data.get('fg'), app_data.get('bg')
+                    )
                 except:
                     peer['appearance'] = None
             else:
@@ -2441,7 +3176,157 @@ class Messenger:
         
         return result
 
+    @staticmethod
+    def _validate_group(group):
+        group = str(group or '').strip()
+        if group not in PEER_GROUPS:
+            raise ValueError(f'Gruppo non valido: {group}')
+        return group
+
+    def set_peer_favorite(self, identity_hash, favorite):
+        """Imposta/rimuove il preferito (identities + destinations)."""
+        value = 1 if favorite else 0
+        with self.db_lock:
+            conn = sqlite3.connect(self.peers_db, timeout=10)
+            c = conn.cursor()
+            c.execute('UPDATE identities SET is_favorite = ? WHERE identity_hash = ?', (value, identity_hash))
+            found = c.rowcount > 0
+            c.execute('''
+                UPDATE destinations SET is_favorite = ?
+                WHERE identity_hash = ? AND aspect = 'lxmf.delivery'
+            ''', (value, identity_hash))
+            conn.commit()
+            conn.close()
+        return found
+
+    def set_peer_groups(self, identity_hash, groups):
+        """Sostituisce i gruppi N:N e allinea il gruppo primario."""
+        if isinstance(groups, str):
+            groups = [groups]
+        if not isinstance(groups, (list, tuple)):
+            raise ValueError('groups deve essere una lista')
+        valid = []
+        for group in groups:
+            group = self._validate_group(group)
+            if group not in valid and group != 'favorite':
+                valid.append(group)
+        primary = valid[0] if valid else None
+        now = time.time()
+        with self.db_lock:
+            conn = sqlite3.connect(self.peers_db, timeout=10)
+            c = conn.cursor()
+            c.execute('SELECT 1 FROM identities WHERE identity_hash = ?', (identity_hash,))
+            if not c.fetchone():
+                conn.close()
+                return False, []
+            for group in PEER_GROUPS:
+                c.execute('INSERT OR IGNORE INTO groups (group_name, description, trust_level, created_at) VALUES (?, ?, ?, ?)',
+                          (group, PEER_GROUPS[group].get('name'), PEER_GROUPS[group].get('trust', 0), now))
+            c.execute('DELETE FROM peer_groups WHERE identity_hash = ?', (identity_hash,))
+            for group in valid:
+                c.execute('INSERT OR IGNORE INTO peer_groups (identity_hash, group_name, added_at) VALUES (?, ?, ?)',
+                          (identity_hash, group, now))
+            c.execute('UPDATE identities SET group_name = ? WHERE identity_hash = ?', (primary, identity_hash))
+            found = c.rowcount > 0
+            c.execute('UPDATE destinations SET group_name = ? WHERE identity_hash = ?', (primary, identity_hash))
+            conn.commit()
+            conn.close()
+        return found, valid
+
+    def reset_all_groups(self):
+        """Rimuove tutti i gruppi da tutti i contatti (i preferiti restano)."""
+        with self.db_lock:
+            conn = sqlite3.connect(self.peers_db, timeout=10)
+            try:
+                c = conn.cursor()
+                c.execute('UPDATE identities SET group_name = NULL')
+                identities = c.rowcount
+                c.execute('UPDATE destinations SET group_name = NULL')
+                destinations = c.rowcount
+                c.execute('DELETE FROM peer_groups')
+                links = c.rowcount
+                c.execute("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('groups_reset_v2', '1')")
+                conn.commit()
+            finally:
+                conn.close()
+        return {'identities': identities, 'destinations': destinations, 'group_links': links}
+
+    def update_peer_settings(self, identity_hash, data):
+        """Aggiorna gruppo/permessi/note/preferito di un peer."""
+        if not isinstance(data, dict):
+            raise ValueError('Dati non validi')
+        ident_updates = {}
+        dest_updates = {}
+
+        if 'groups' in data:
+            found_groups, groups = self.set_peer_groups(identity_hash, data['groups'])
+            if not found_groups:
+                return False
+            ident_updates['group_name'] = groups[0] if groups else None
+            dest_updates['group_name'] = groups[0] if groups else None
+        elif 'group' in data:
+            group = self._validate_group(data['group'])
+            found_groups, groups = self.set_peer_groups(identity_hash, [group])
+            if not found_groups:
+                return False
+            ident_updates['group_name'] = groups[0] if groups else None
+            dest_updates['group_name'] = groups[0] if groups else None
+
+        if 'trust_level' in data:
+            try:
+                trust = int(data['trust_level'])
+            except (TypeError, ValueError):
+                raise ValueError('trust_level non valido')
+            if not 0 <= trust <= 3:
+                raise ValueError('trust_level fuori range')
+            dest_updates['trust_level'] = trust
+
+        if 'allow_telemetry' in data:
+            dest_updates['allow_telemetry'] = 1 if data['allow_telemetry'] else 0
+        if 'allow_commands' in data:
+            dest_updates['allow_commands'] = 1 if data['allow_commands'] else 0
+        if 'favorite' in data:
+            fav = 1 if data['favorite'] else 0
+            ident_updates['is_favorite'] = fav
+            dest_updates['is_favorite'] = fav
+        if 'notes' in data:
+            notes = str(data['notes'] or '')[:2000]
+            ident_updates['notes'] = notes
+            dest_updates['notes'] = notes
+
+        found = False
+        with self.db_lock:
+            conn = sqlite3.connect(self.peers_db, timeout=10)
+            c = conn.cursor()
+            if ident_updates:
+                cols = ', '.join(f'{k}=?' for k in ident_updates)
+                c.execute(f'UPDATE identities SET {cols} WHERE identity_hash = ?',
+                          list(ident_updates.values()) + [identity_hash])
+                found = c.rowcount > 0
+            if dest_updates:
+                cols = ', '.join(f'{k}=?' for k in dest_updates)
+                c.execute(f'UPDATE destinations SET {cols} WHERE identity_hash = ?',
+                          list(dest_updates.values()) + [identity_hash])
+                found = found or c.rowcount > 0
+            conn.commit()
+            conn.close()
+        return found
+
+    def list_favorite_hashes(self):
+        with self.db_lock:
+            conn = sqlite3.connect(self.peers_db, timeout=10)
+            c = conn.cursor()
+            c.execute('''
+                SELECT identity_hash FROM identities
+                WHERE is_favorite = 1
+                ORDER BY LOWER(display_name) ASC
+            ''')
+            rows = c.fetchall()
+            conn.close()
+        return [row[0] for row in rows]
+
     def add_peer_manual(self, identity_hash, name, group=None):
+        group = self._validate_group(group) if group else None
         with self.db_lock:
             conn = sqlite3.connect(self.peers_db, timeout=10)
             c = conn.cursor()
@@ -2451,9 +3336,13 @@ class Messenger:
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(identity_hash) DO UPDATE SET
                     display_name = excluded.display_name,
-                    last_seen = excluded.last_seen,
-                    group_name = excluded.group_name
+                    last_seen = excluded.last_seen
             ''', (identity_hash, name, now, now, group))
+            if group:
+                c.execute('INSERT OR IGNORE INTO groups (group_name, description, trust_level, created_at) VALUES (?, ?, ?, ?)',
+                          (group, PEER_GROUPS[group].get('name'), PEER_GROUPS[group].get('trust', 0), now))
+                c.execute('INSERT OR REPLACE INTO peer_groups (identity_hash, group_name, added_at) VALUES (?, ?, ?)',
+                          (identity_hash, group, now))
             conn.commit()
             conn.close()
         print(f"✅ Identità {name} aggiunta con hash {identity_hash}")
@@ -2509,19 +3398,20 @@ class Messenger:
                             RNS.log(f"Errore decoding app_data per {dest_hash}: {e}", RNS.LOG_WARNING)
                     if not display_name:
                         display_name = dest_hash[:8]
+                    display_name = clean_display_name(display_name, dest_hash[:8])
 
                     if identity_hash:
                         dst_c.execute('''
-                            INSERT INTO identities (identity_hash, display_name, first_seen, last_seen)
-                            VALUES (?, ?, ?, ?)
+                            INSERT INTO identities (identity_hash, display_name, first_seen, last_seen, group_name)
+                            VALUES (?, ?, ?, ?, NULL)
                             ON CONFLICT(identity_hash) DO UPDATE SET
                                 display_name = excluded.display_name,
                                 last_seen = excluded.last_seen
                         ''', (identity_hash, display_name, ts, ts))
 
                     dst_c.execute('''
-                        INSERT INTO destinations (destination_hash, identity_hash, aspect, last_seen, hops, rssi, snr, q, app_data)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO destinations (destination_hash, identity_hash, aspect, last_seen, hops, rssi, snr, q, app_data, group_name)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
                         ON CONFLICT(destination_hash) DO UPDATE SET
                             identity_hash = excluded.identity_hash,
                             last_seen = excluded.last_seen,
@@ -2569,7 +3459,7 @@ class Messenger:
 
     def _failed_callback(self, message):
         if hasattr(message, 'try_propagation_on_fail') and message.try_propagation_on_fail:
-            message.desired_method = 0x03
+            message.desired_method = LXMF.LXMessage.PROPAGATED
             message.try_propagation_on_fail = False
             message.delivery_attempts = 0
             message.packed = None
@@ -2602,50 +3492,133 @@ class Messenger:
                 del self.sent_messages[msg_hash]
 
 class AnnounceHandler:
-    def __init__(self, messenger):
+    def __init__(self, messenger, aspect='lxmf.delivery'):
         self.messenger = messenger
-        self.aspect_filter = "lxmf.delivery"
+        self.aspect = str(aspect or 'lxmf.delivery')
+        self.aspect_filter = self.aspect
+        # RNS only forwards packet.context == PATH_RESPONSE to handlers
+        # that opt in explicitly.
+        self.receive_path_responses = True
 
-    def received_announce(self, destination_hash, announced_identity, app_data):
+    def received_announce(self, destination_hash, announced_identity, app_data, announce_packet_hash=None, **kwargs):
         peer_hash = destination_hash.hex()
-        RNS.log(f"📢 Annuncio ricevuto da {peer_hash}", RNS.LOG_INFO)
+        is_path_response = bool(kwargs.get('is_path_response'))
+        RNS.log(f"📢 Annuncio {self.aspect} da {peer_hash}", RNS.LOG_INFO)
+
         display_name = None
-        if app_data:
+        announce_info = None
+        if app_data and is_discovery_aspect(self.aspect):
+            announce_info = parse_interface_discovery_app_data(app_data)
+            if announce_info:
+                display_name = announce_info.get('name')
+                RNS.log(
+                    f"   Interfaccia scoperta: {announce_info.get('type')} / {display_name}",
+                    RNS.LOG_INFO,
+                )
+        elif app_data:
             try:
                 display_name = LXMF.display_name_from_app_data(app_data)
                 RNS.log(f"   Nome estratto: {display_name}", RNS.LOG_INFO)
             except Exception as e:
                 RNS.log(f"   Errore estrazione nome: {e}", RNS.LOG_WARNING)
-        if not display_name:
-            display_name = peer_hash[:8]
-            RNS.log(f"   Nome di default: {display_name}", RNS.LOG_INFO)
+        display_name = clean_display_name(display_name, peer_hash[:8])
 
-        hops = RNS.Transport.hops_to(destination_hash)
         identity_hash = announced_identity.hash.hex() if announced_identity else None
+        if announce_info is not None and identity_hash:
+            announce_info.setdefault('network_id', identity_hash)
 
-        with self.messenger.db_lock:
-            conn = sqlite3.connect(self.messenger.peers_db, timeout=10)
-            c = conn.cursor()
-            now = time.time()
+        hops = None
+        try:
+            hops = RNS.Transport.hops_to(destination_hash)
+        except Exception:
+            pass
 
-            if identity_hash:
-                c.execute('''
-                    INSERT INTO identities (identity_hash, display_name, first_seen, last_seen)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(identity_hash) DO UPDATE SET
-                        display_name = excluded.display_name,
-                        last_seen = excluded.last_seen
-                ''', (identity_hash, display_name, now, now))
+        now = time.time()
 
-            c.execute('''
-                INSERT INTO destinations (destination_hash, identity_hash, aspect, last_seen, hops, app_data)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(destination_hash) DO UPDATE SET
-                    identity_hash = excluded.identity_hash,
-                    last_seen = excluded.last_seen,
-                    hops = excluded.hops,
-                    app_data = excluded.app_data
-            ''', (peer_hash, identity_hash, 'lxmf.delivery', now, hops, app_data.hex() if app_data else None))
+        rssi = snr = q = None
+        if announce_packet_hash:
+            try:
+                reticulum = RNS.Reticulum.get_instance()
+                if reticulum:
+                    rssi = reticulum.get_packet_rssi(announce_packet_hash)
+                    snr = reticulum.get_packet_snr(announce_packet_hash)
+                    q = reticulum.get_packet_q(announce_packet_hash)
+            except Exception:
+                pass
 
-            conn.commit()
-            conn.close()
+        event = {
+            'aspect': self.aspect,
+            'identity_hash': identity_hash,
+            'destination_hash': peer_hash,
+            'display_name': display_name,
+            'hops': hops,
+            'rssi': rssi,
+            'snr': snr,
+            'q': q,
+            'time': now,
+            'is_path_response': is_path_response,
+            'announce_packet_hash': announce_packet_hash.hex() if announce_packet_hash else None,
+            'announce_info': announce_info,
+        }
+        recorder = getattr(self.messenger, '_record_announce_event', None)
+        if recorder:
+            try:
+                recorder(event)
+            except Exception as e:
+                RNS.log(f"Errore registrazione evento announce: {e}", RNS.LOG_WARNING)
+
+        try:
+            with self.messenger.db_lock:
+                conn = sqlite3.connect(self.messenger.peers_db, timeout=10)
+                try:
+                    c = conn.cursor()
+
+                    if identity_hash:
+                        c.execute('''
+                            INSERT INTO identities (identity_hash, display_name, first_seen, last_seen, group_name)
+                            VALUES (?, ?, ?, ?, NULL)
+                            ON CONFLICT(identity_hash) DO UPDATE SET
+                                display_name = excluded.display_name,
+                                last_seen = excluded.last_seen
+                        ''', (identity_hash, display_name, now, now))
+
+                    c.execute('''
+                        INSERT INTO destinations (destination_hash, identity_hash, aspect, last_seen, hops, app_data, rssi, snr, q, group_name)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                        ON CONFLICT(destination_hash) DO UPDATE SET
+                            identity_hash = excluded.identity_hash,
+                            last_seen = excluded.last_seen,
+                            hops = COALESCE(excluded.hops, destinations.hops),
+                            app_data = excluded.app_data,
+                            rssi = COALESCE(excluded.rssi, destinations.rssi),
+                            snr = COALESCE(excluded.snr, destinations.snr),
+                            q = COALESCE(excluded.q, destinations.q)
+                    ''', (peer_hash, identity_hash, self.aspect, now, hops,
+                          app_data.hex() if app_data else None, rssi, snr, q))
+
+                    conn.commit()
+                finally:
+                    conn.close()
+        except Exception as e:
+            RNS.log(f"Errore salvataggio annuncio {self.aspect}: {e}", RNS.LOG_ERROR)
+            return
+
+        callback = getattr(self.messenger, 'announce_callback', None)
+        if callback:
+            try:
+                callback({
+                    'aspect': self.aspect,
+                    'identity_hash': identity_hash,
+                    'destination_hash': peer_hash,
+                    'display_name': display_name,
+                    'hops': hops,
+                    'rssi': rssi,
+                    'snr': snr,
+                    'q': q,
+                    'app_data': app_data.hex() if app_data else None,
+                    'time': now,
+                    'is_path_response': is_path_response,
+                    'announce_info': announce_info,
+                })
+            except Exception as e:
+                RNS.log(f"Errore callback annuncio {self.aspect}: {e}", RNS.LOG_WARNING)

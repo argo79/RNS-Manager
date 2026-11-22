@@ -29,6 +29,10 @@ RNS-Manager/
 │   ├── requirements.txt
 │   └── README.md / README.ru.md
 ├── legacy/           # unused historical material (not included in builds)
+├── tests/            # unit tests (unittest)
+├── tools/            # helper scripts (inline JS validation)
+├── sideband_plugins/ # Sideband rangetest command plugin
+├── .github/          # CI workflow
 ├── LICENSE
 └── .gitignore
 ```
@@ -55,6 +59,15 @@ python3 lxmf_chat.py -p 5012     # or ./start.sh
 
 Open <http://127.0.0.1:5012/>.
 
+## 🧪 Tests
+
+```bash
+python -m unittest discover -s tests -v
+python tools/check_inline_js.py
+```
+
+CI: `.github/workflows/ci.yml` (Python compile, inline JS validation, unit tests).
+
 ## 📸 Screenshots
 
 | Identity Manager | Aspect Monitor |
@@ -72,9 +85,10 @@ The repository **does not contain** personal or runtime data: caches, SQLite dat
 Application data stays in the user's home directory:
 
 ```ini
-~/.rns_manager/storage/     # RNS identities
-~/.rns_manager/config.json  # messenger configuration
-~/.rns_manager/uploads/     # uploaded attachments
+~/.rns_manager/storage/          # RNS identities and peers databases
+~/.rns_manager/config.json       # messenger configuration
+~/.rns_manager/uploads/          # uploaded attachments
+~/.rns_manager/cache/announces.db  # announce cache shared by Manager and Messenger
 ```
 
 ## 🧰 Common requirements
