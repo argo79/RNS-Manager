@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 try:
     from version import APP_VERSION
 except ImportError:
-    APP_VERSION = "1.2.0"
+    APP_VERSION = "1.2.1"
 
 STATS_CACHE_TTL = float(os.environ.get('RNS_STATS_CACHE_TTL', '30'))
 

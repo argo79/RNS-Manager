@@ -69,7 +69,7 @@ except Exception as e:
 try:
     from version import APP_VERSION
 except ImportError:
-    APP_VERSION = "1.2.0"
+    APP_VERSION = "1.2.1"
 
 # 🔴 COSTANTI LXMF
 FIELD_TELEMETRY = 0x02

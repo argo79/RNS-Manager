@@ -34,7 +34,7 @@ import modules.rns_monitor as rns_monitor
 try:
     from version import APP_VERSION, APP_NAME, APP_AUTHOR, APP_URL, DONATION_ADDRESSES
 except ImportError:
-    APP_VERSION = "1.2.0"
+    APP_VERSION = "1.2.1"
     APP_NAME = "RNS Manager"
     APP_AUTHOR = "argo79"
     APP_URL = "https://github.com/argo79/RNS-Manager"

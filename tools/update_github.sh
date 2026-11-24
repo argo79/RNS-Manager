@@ -64,7 +64,7 @@ if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
 fi
 
 VERSION="$(sed -n 's/^APP_VERSION *= *"\(.*\)"/\1/p' messenger/version.py | head -1)"
-RELEASE_TAG="${GITHUB_RELEASE_TAG:-v${VERSION:-1.2.0}}"
+RELEASE_TAG="${GITHUB_RELEASE_TAG:-v${VERSION:-1.2.1}}"
 RUN_DIR="$ROOT/dist"
 
 mapfile -t ALL_RUNS < <(
