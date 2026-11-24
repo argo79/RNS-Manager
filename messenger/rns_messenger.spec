@@ -12,7 +12,20 @@ hiddenimports = [
     'socketio',
     'engineio',
     'engineio.async_drivers.threading',
+    'core.reticulum_config',
+    'lxst_telephony',
+    'lxst_telephony.bridge',
+    'lxst_telephony.core',
+    'lxst_telephony.discovery',
+    'lxst_telephony.errors',
+    'lxst_telephony.models',
+    'lxst_telephony.native',
 ]
+
+TELEPHONY_DIR = os.path.abspath(os.path.join(os.path.dirname(SPEC), '..', 'lxst-telephony'))
+telephony_license = os.path.join(TELEPHONY_DIR, 'THIRD_PARTY_LICENSES')
+if os.path.isdir(telephony_license):
+    datas.append((telephony_license, 'THIRD_PARTY_LICENSES'))
 
 for package in ('RNS', 'LXMF', 'LXST', 'pycodec2'):
     tmp_ret = collect_all(package)
@@ -45,7 +58,7 @@ EXCLUDES = [
 
 a = Analysis(
     ['lxmf_chat.py'],
-    pathex=[],
+    pathex=[TELEPHONY_DIR],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

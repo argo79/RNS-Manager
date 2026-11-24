@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lxst-telephony"
+version = "0.1.0"
+description = "Importable LXST peer-to-peer telephony endpoint"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "rns>=1.0.0",
+    "lxst>=0.6.0",
+    "numpy>=1.24",
+]
+
+[project.scripts]
+lxst-telephony = "lxst_telephony.cli:main"
+
+[tool.setuptools]
+packages = ["lxst_telephony"]

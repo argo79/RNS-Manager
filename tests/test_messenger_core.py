@@ -51,7 +51,7 @@ class MessengerCoreTests(unittest.TestCase):
         self.msg.announces_cache_db = os.path.join(self.tmp, 'missing.db')
         M.Messenger._init_peers_db(self.msg)
         self.ids = ['a' * 32, 'b' * 32, 'c' * 32]
-        self.dests = ['d' * 32, 'e' * 32]
+        self.dests = ['d' * 32, 'e' * 32, 'f' * 32]
         conn = sqlite3.connect(self.msg.peers_db)
         c = conn.cursor()
         for i, ident in enumerate(self.ids[:2]):
@@ -63,6 +63,10 @@ class MessengerCoreTests(unittest.TestCase):
                 "INSERT INTO destinations (destination_hash, identity_hash, aspect, last_seen) VALUES (?,?,?,?)",
                 (self.dests[i], ident, 'lxmf.delivery', 1),
             )
+        c.execute(
+            "INSERT INTO destinations (destination_hash, identity_hash, aspect, last_seen) VALUES (?,?,?,?)",
+            (self.dests[2], self.ids[0], 'lxst.telephony', 1),
+        )
         conn.commit()
         conn.close()
 
@@ -91,7 +95,11 @@ class MessengerCoreTests(unittest.TestCase):
         c = conn.cursor()
         c.execute('SELECT group_name, is_favorite, notes FROM identities WHERE identity_hash=?', (self.ids[0],))
         self.assertEqual(c.fetchone(), ('friends', 1, 'nota'))
-        c.execute('SELECT trust_level, allow_commands, allow_telemetry, group_name FROM destinations WHERE identity_hash=?', (self.ids[0],))
+        c.execute(
+            "SELECT trust_level, allow_commands, allow_telemetry, group_name "
+            "FROM destinations WHERE identity_hash=? AND aspect='lxmf.delivery'",
+            (self.ids[0],),
+        )
         self.assertEqual(c.fetchone(), (2, 1, 1, 'friends'))
         conn.close()
 
@@ -110,6 +118,74 @@ class MessengerCoreTests(unittest.TestCase):
         self.assertTrue(self.msg.update_peer_settings(self.ids[1], {'trust_level': 1}))
         with self.assertRaises(ValueError):
             self.msg.set_peer_groups(self.ids[0], ['invalid-group'])
+
+    def test_lxst_contacts_share_favorite_and_groups(self):
+        self.assertTrue(self.msg.set_peer_favorite(self.ids[0], True))
+        found, groups = self.msg.set_peer_groups(self.ids[0], ['home', 'work'])
+        self.assertTrue(found)
+        self.assertEqual(groups, ['home', 'work'])
+
+        lxst_peers = self.msg.list_peers('lxst.telephony')
+        self.assertEqual(len(lxst_peers), 1)
+        self.assertEqual(lxst_peers[0]['hash'], self.ids[0])
+        self.assertTrue(lxst_peers[0]['favorite'])
+        self.assertEqual(lxst_peers[0]['groups'], ['home', 'work'])
+
+        conn = sqlite3.connect(self.msg.peers_db)
+        c = conn.cursor()
+        c.execute(
+            'SELECT is_favorite FROM destinations WHERE identity_hash=? AND aspect=?',
+            (self.ids[0], 'lxst.telephony'),
+        )
+        self.assertEqual(c.fetchone(), (1,))
+        conn.close()
+
+    def test_aspect_hash_uses_identity(self):
+        self.msg.identity = types.SimpleNamespace(hash=bytes.fromhex(self.ids[0]))
+        with mock.patch.object(
+            RNS.Destination,
+            'hash_from_name_and_identity',
+            return_value=b'\x99' * 16,
+        ) as hasher:
+            self.assertEqual(self.msg.get_aspect_hash('lxst.telephony'), '99' * 16)
+        hasher.assert_called_once_with('lxst.telephony', bytes.fromhex(self.ids[0]))
+
+        self.msg.dest = types.SimpleNamespace(hash=bytes.fromhex('88' * 16))
+        self.assertEqual(self.msg.get_aspect_hash('lxmf.delivery'), '88' * 16)
+
+    def test_identity_display_name_helper(self):
+        self.assertEqual(self.msg.get_peer_name_by_identity(self.ids[0]), 'Peer 0')
+        self.assertEqual(self.msg.get_peer_name_by_identity(self.ids[1]), 'Peer 1')
+        self.assertEqual(self.msg.get_peer_name_by_identity('f' * 32), 'f' * 8)
+
+    def test_call_history_persistence_and_filter(self):
+        call = types.SimpleNamespace(to_dict=lambda: {
+            'peer_hash': self.ids[0],
+            'destination_hash': self.dests[2],
+            'direction': 'outgoing',
+            'state': 'ended',
+            'started_at': 10.0,
+            'answered_at': 11.0,
+            'ended_at': 20.0,
+            'duration': 9.0,
+            'error': None,
+        })
+        self.assertTrue(self.msg.record_call(call))
+        self.assertFalse(self.msg.record_call(call))
+
+        calls = self.msg.list_call_history(self.ids[0])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]['name'], 'Peer 0')
+        self.assertEqual(calls[0]['duration'], 9.0)
+        self.assertTrue(calls[0]['was_connected'])
+        self.assertEqual(self.msg.list_call_history(self.ids[1]), [])
+
+        active = types.SimpleNamespace(to_dict=lambda: {
+            'peer_hash': self.ids[0],
+            'state': 'connected',
+            'started_at': 30.0,
+        })
+        self.assertFalse(self.msg.record_call(active))
 
     def test_reset_all_groups(self):
         self.msg.set_peer_groups(self.ids[0], ['home', 'work'])

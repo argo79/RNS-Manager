@@ -346,6 +346,7 @@ class Messenger:
             'recent': [],
         }
         self.announce_stats_lock = threading.Lock()
+        self.identity_cache = {}
         self.telemetry_stats = {
             'requests_sent': 0,
             'responses_received': 0,
@@ -755,6 +756,25 @@ class Messenger:
                     FOREIGN KEY(group_name) REFERENCES groups(group_name) ON DELETE CASCADE
                 )
             ''')
+
+            # ============================================
+            # CRONOLOGIA CHIAMATE LXST
+            # ============================================
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS call_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    peer_hash TEXT NOT NULL,
+                    destination_hash TEXT,
+                    direction TEXT,
+                    state TEXT,
+                    started_at REAL,
+                    answered_at REAL,
+                    ended_at REAL,
+                    duration REAL,
+                    error TEXT,
+                    UNIQUE(peer_hash, started_at)
+                )
+            ''')
             
             # Migrazione: preferiti e gruppo anche sulla tabella identities
             # (così un peer è configurabile anche prima di avere una destination)
@@ -844,6 +864,7 @@ class Messenger:
             c.execute('CREATE INDEX IF NOT EXISTS idx_peer_groups_group ON peer_groups(group_name)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_identities_favorite ON identities(is_favorite)')
             c.execute('CREATE INDEX IF NOT EXISTS idx_identities_group ON identities(group_name)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_call_history_peer ON call_history(peer_hash, started_at)')
             
             conn.commit()
             conn.close()
@@ -3099,6 +3120,17 @@ class Messenger:
     def get_delivery_hash(self):
         return self.dest.hash.hex()
 
+    def get_aspect_hash(self, aspect):
+        """Calcola l'hash di una destinazione per un aspect senza crearne una."""
+        aspect = str(aspect or 'lxmf.delivery').strip().lower()
+        if not aspect:
+            raise ValueError('Aspect non valido')
+        if aspect == 'lxmf.delivery' and getattr(self, 'dest', None) is not None:
+            return self.dest.hash.hex()
+        return RNS.Destination.hash_from_name_and_identity(
+            aspect, self.identity.hash
+        ).hex()
+
     def get_peer_name(self, dest_hash):
         with self.db_lock:
             conn = sqlite3.connect(self.peers_db, timeout=10)
@@ -3113,6 +3145,25 @@ class Messenger:
             if row:
                 return clean_display_name(row[0], dest_hash[:8])
             return dest_hash[:8]
+
+    def get_peer_name_by_identity(self, identity_hash):
+        # Nome visualizzato di un peer a partire dall'identity hash.
+        identity_hash = str(identity_hash or '').strip().lower()
+        if not identity_hash:
+            return 'Peer'
+        with self.db_lock:
+            conn = sqlite3.connect(self.peers_db, timeout=10)
+            try:
+                c = conn.cursor()
+                c.execute(
+                    'SELECT display_name FROM identities WHERE identity_hash = ?',
+                    (identity_hash,),
+                )
+                row = c.fetchone()
+            finally:
+                conn.close()
+        name = clean_display_name(row[0], None) if row else None
+        return name or identity_hash[:8]
 
     def list_peers(self, aspect='lxmf.delivery'):
         """Restituisce le identità con una destinazione per l'aspect richiesto."""
@@ -3193,7 +3244,7 @@ class Messenger:
             found = c.rowcount > 0
             c.execute('''
                 UPDATE destinations SET is_favorite = ?
-                WHERE identity_hash = ? AND aspect = 'lxmf.delivery'
+                WHERE identity_hash = ?
             ''', (value, identity_hash))
             conn.commit()
             conn.close()
@@ -3324,6 +3375,108 @@ class Messenger:
             rows = c.fetchall()
             conn.close()
         return [row[0] for row in rows]
+
+    def record_call(self, call):
+        """Registra in modo idempotente una chiamata LXST terminata."""
+        if call is None:
+            return False
+        try:
+            data = call.to_dict() if hasattr(call, 'to_dict') else dict(call)
+        except Exception:
+            return False
+
+        peer_hash = str(data.get('peer_hash') or '').strip().lower()
+        raw_state = data.get('state')
+        state = str(getattr(raw_state, 'value', raw_state) or '').strip().lower()
+        if not peer_hash or state not in ('ended', 'failed', 'busy', 'rejected'):
+            return False
+
+        try:
+            started_at = float(data.get('started_at') or time.time())
+            answered_at = data.get('answered_at')
+            ended_at = data.get('ended_at')
+            duration = data.get('duration')
+            if duration is None and ended_at is not None:
+                duration = max(0.0, float(ended_at) - float(answered_at or started_at))
+            with self.db_lock:
+                conn = sqlite3.connect(self.peers_db, timeout=10)
+                try:
+                    c = conn.cursor()
+                    c.execute('''
+                        INSERT OR IGNORE INTO call_history (
+                            peer_hash, destination_hash, direction, state,
+                            started_at, answered_at, ended_at, duration, error
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        peer_hash,
+                        data.get('destination_hash'),
+                        data.get('direction'),
+                        state,
+                        started_at,
+                        answered_at,
+                        ended_at,
+                        duration,
+                        data.get('error'),
+                    ))
+                    inserted = c.rowcount > 0
+                    conn.commit()
+                finally:
+                    conn.close()
+            return inserted
+        except Exception as exc:
+            print(f"⚠️ Errore registrazione chiamata: {exc}")
+            return False
+
+    def list_call_history(self, peer_hash=None, limit=50):
+        """Restituisce la cronologia chiamate, opzionalmente filtrata per peer."""
+        peer_hash = str(peer_hash or '').strip().lower() or None
+        try:
+            limit = max(1, min(int(limit), 200))
+        except (TypeError, ValueError):
+            limit = 50
+
+        query = '''
+            SELECT h.id, h.peer_hash, COALESCE(i.display_name, ''),
+                   h.destination_hash, h.direction, h.state,
+                   h.started_at, h.answered_at, h.ended_at,
+                   h.duration, h.error
+            FROM call_history h
+            LEFT JOIN identities i ON i.identity_hash = h.peer_hash
+        '''
+        params = []
+        if peer_hash:
+            query += ' WHERE h.peer_hash = ?'
+            params.append(peer_hash)
+        query += ' ORDER BY h.started_at DESC LIMIT ?'
+        params.append(limit)
+
+        with self.db_lock:
+            conn = sqlite3.connect(self.peers_db, timeout=10)
+            try:
+                c = conn.cursor()
+                c.execute(query, params)
+                rows = c.fetchall()
+            finally:
+                conn.close()
+
+        calls = []
+        for row in rows:
+            name = clean_display_name(row[2], None)
+            calls.append({
+                'id': row[0],
+                'peer_hash': row[1],
+                'name': name or row[1][:8],
+                'destination_hash': row[3],
+                'direction': row[4],
+                'state': row[5],
+                'started_at': row[6],
+                'answered_at': row[7],
+                'ended_at': row[8],
+                'duration': row[9],
+                'was_connected': row[7] is not None,
+                'error': row[10],
+            })
+        return calls
 
     def add_peer_manual(self, identity_hash, name, group=None):
         group = self._validate_group(group) if group else None
@@ -3524,6 +3677,10 @@ class AnnounceHandler:
         display_name = clean_display_name(display_name, peer_hash[:8])
 
         identity_hash = announced_identity.hash.hex() if announced_identity else None
+        if identity_hash and announced_identity is not None:
+            cache = getattr(self.messenger, 'identity_cache', None)
+            if cache is not None:
+                cache[identity_hash] = announced_identity
         if announce_info is not None and identity_hash:
             announce_info.setdefault('network_id', identity_hash)
 

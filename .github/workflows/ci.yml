@@ -33,6 +33,11 @@ jobs:
             messenger/telemetry_provider.py \
             messenger/audio_codec.py \
             messenger/core/telemeter.py \
+            lxst-telephony/lxst_telephony/core.py \
+            lxst-telephony/lxst_telephony/discovery.py \
+            lxst-telephony/lxst_telephony/native.py \
+            lxst-telephony/lxst_telephony/cli.py \
+            lxst-telephony/lxst_telephony/models.py \
             sideband_plugins/rangetest.py
 
       - name: Validate inline JavaScript

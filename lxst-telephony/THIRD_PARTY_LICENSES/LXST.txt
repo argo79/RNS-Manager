@@ -1,0 +1,12 @@
+LXST - Lightweight Extensible Signal Transport
+Copyright 2024-2026 Mark Qvist
+https://git.unsigned.io/markqvist/lxst
+https://github.com/markqvist/LXST
+
+License: CC BY-NC-ND 4.0
+https://creativecommons.org/licenses/by-nc-nd/4.0/
+
+LXST is used as an external dependency and is not bundled or modified by this
+package. It is free for non-commercial, personal and humanitarian use.
+No derivatives are allowed without explicit permission from the author.
+Commercial use requires a separate license from the LXST author.

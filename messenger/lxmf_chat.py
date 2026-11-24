@@ -5,6 +5,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 from flask_socketio import SocketIO, emit
 import json
 import os
+import sys
 import time
 import threading
 import queue
@@ -19,6 +20,7 @@ import hmac
 import ipaddress
 import re
 import io
+import shutil
 import subprocess
 import wave
 from functools import lru_cache
@@ -35,9 +37,34 @@ from core.aspects import (
     normalize_announce_aspects,
     parse_interface_discovery_app_data,
 )
+from core.reticulum_config import (
+    ReticulumConfigError,
+    add_interface,
+    disable_interface as disable_reticulum_interface,
+    list_interfaces as list_reticulum_interfaces,
+    set_interface_enabled as set_reticulum_interface_enabled,
+)
 import audio_codec
 import LXMF
 import RNS
+import numpy as np
+
+LXST_TELEPHONY_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "lxst-telephony",
+)
+if os.path.isdir(LXST_TELEPHONY_DIR) and LXST_TELEPHONY_DIR not in sys.path:
+    sys.path.insert(0, LXST_TELEPHONY_DIR)
+
+try:
+    from lxst_telephony import BridgeTelephony
+    from lxst_telephony.errors import CallBusyError, NoIdentityError
+    TELEPHONY_AVAILABLE = True
+except Exception as e:
+    BridgeTelephony = None
+    CallBusyError = NoIdentityError = Exception
+    TELEPHONY_AVAILABLE = False
+    print(f"⚠️ LXST telephony non disponibile: {e}")
 
 try:
     from version import APP_VERSION
@@ -449,6 +476,8 @@ def _request_too_large(_e):
 
 # Istanza globale del messenger
 messenger = None
+telephony = None
+telephony_lock = threading.Lock()
 message_queue = queue.Queue()
 messenger_lock = threading.Lock()
 
@@ -548,6 +577,11 @@ def message_callback(msg):
             'commands': commands,
             'telemetry_data': telemetry_data,
         }
+        if messenger is not None and msg.get('from'):
+            try:
+                serializable_msg['from_name'] = messenger.get_peer_name(msg.get('from'))
+            except Exception:
+                serializable_msg['from_name'] = None
         
         socketio.emit('new_message', serializable_msg)
         message_queue.put(serializable_msg)
@@ -562,6 +596,106 @@ def announce_callback(peer):
     except Exception as e:
         print(f"Errore in announce_callback: {e}")
         traceback.print_exc()
+
+
+def _telephony_payload(call):
+    if call is None:
+        return None
+    payload = call.to_dict()
+    peer_hash = payload.get('peer_hash')
+    if messenger is not None and peer_hash:
+        try:
+            payload['peer_name'] = messenger.get_peer_name_by_identity(peer_hash)
+        except Exception:
+            payload['peer_name'] = str(peer_hash)[:8]
+    return payload
+
+
+def _record_telephony_call(call):
+    """Salva nel DB la chiamata LXST quando raggiunge uno stato terminale."""
+    if messenger is None or call is None:
+        return False
+    try:
+        recorded = messenger.record_call(call)
+        if recorded:
+            socketio.emit('telephony_history_updated', {
+                'peer_hash': getattr(call, 'peer_hash', None),
+            })
+        return recorded
+    except Exception as e:
+        print(f"⚠️ Errore cronologia telephony: {e}")
+        return False
+
+
+def telephony_incoming_callback(call):
+    payload = _telephony_payload(call)
+    socketio.emit('telephony_state', {'call': payload})
+    socketio.emit('telephony_incoming', payload)
+
+
+def telephony_state_callback(call):
+    socketio.emit('telephony_state', {'call': _telephony_payload(call)})
+    state = getattr(getattr(call, 'state', None), 'value', None)
+    if state is None:
+        state = str(getattr(call, 'state', '') or '').lower()
+    if state in ('ended', 'failed', 'busy', 'rejected'):
+        _record_telephony_call(call)
+
+
+def telephony_ended_callback(call):
+    socketio.emit('telephony_state', {'call': _telephony_payload(call)})
+    socketio.emit('telephony_ended', _telephony_payload(call))
+    _record_telephony_call(call)
+
+
+def telephony_audio_callback(frame):
+    if frame is None:
+        return
+    samples = np.asarray(frame, dtype=np.float32).reshape(-1)
+    pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype('<i2')
+    socketio.emit('telephony_audio', pcm.tobytes())
+
+
+def start_telephony():
+    global telephony
+    if not TELEPHONY_AVAILABLE or messenger is None:
+        return False
+    with telephony_lock:
+        if telephony is not None:
+            return True
+        try:
+            aspects = list(getattr(messenger, 'announce_aspects', []) or [])
+            if 'lxst.telephony' not in aspects:
+                messenger.set_announce_aspects(aspects + ['lxst.telephony'])
+            telephony = BridgeTelephony(
+                messenger.identity,
+                on_incoming=telephony_incoming_callback,
+                on_state=telephony_state_callback,
+                on_ended=telephony_ended_callback,
+                on_audio=telephony_audio_callback,
+            )
+            telephony.start()
+            telephony.announce()
+            print(f"📞 LXST telephony attivo: {messenger.identity.hash.hex()}")
+            return True
+        except Exception as e:
+            telephony = None
+            print(f"⚠️ Errore avvio LXST telephony: {e}")
+            traceback.print_exc()
+            return False
+
+
+def stop_telephony():
+    global telephony
+    with telephony_lock:
+        if telephony is None:
+            return
+        try:
+            telephony.stop()
+        except Exception:
+            pass
+        telephony = None
+
 
 def create_messenger(identity_file=None, display_name=None):
     """Crea una nuova istanza del messenger con l'identità specificata"""
@@ -593,6 +727,7 @@ def create_messenger(identity_file=None, display_name=None):
             messenger.message_callback = message_callback
             messenger.announce_callback = announce_callback
             messenger.announce()
+        start_telephony()
         
         print(f"✅ Messenger inizializzato: {messenger.display_name}")
         print(f"🆔 Identity hash: {messenger.get_hash()}")
@@ -633,6 +768,30 @@ def get_status():
         'propagation_node': messenger.config.get('propagation_node'),
         'connected': True
     })
+
+
+@app.route('/api/aspect_hash')
+def get_aspect_hash():
+    """Restituisce l'hash della destinazione locale per un aspect."""
+    if not messenger:
+        return jsonify({'success': False, 'error': 'Messenger non inizializzato'}), 404
+    aspect = (request.args.get('aspect') or 'lxmf.delivery').strip().lower()
+    if not _is_valid_aspect(aspect):
+        return jsonify({'success': False, 'error': 'Aspect non valido'}), 400
+    try:
+        aspect_hash = messenger.get_aspect_hash(aspect)
+        return jsonify({
+            'success': True,
+            'aspect': aspect,
+            'label': ASPECT_LABELS.get(aspect, aspect),
+            'identity_hash': messenger.get_hash(),
+            'aspect_hash': aspect_hash,
+        })
+    except Exception as e:
+        print(f"❌ Errore hash aspect {aspect}: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/identities')
 def list_identities():
@@ -1141,6 +1300,113 @@ def send_command():
     result = messenger.send_command(dest, cmd_type, cmd_data)
     return jsonify(result)
 
+
+@app.route('/api/telephony/state')
+def get_telephony_state():
+    if not TELEPHONY_AVAILABLE:
+        return jsonify({'success': False, 'error': 'LXST telephony non disponibile'}), 503
+    if telephony is None:
+        start_telephony()
+    if telephony is None:
+        return jsonify({'success': False, 'error': 'Telephony non inizializzata'}), 503
+    call = telephony.active_call or telephony.last_call
+    return jsonify({
+        'success': True,
+        'call': call.to_dict() if call else None,
+        'available': telephony.active_call is None,
+        'identity_hash': telephony.identity.hash.hex(),
+    })
+
+
+@app.route('/api/telephony/peers')
+def get_telephony_peers():
+    if telephony is None:
+        start_telephony()
+    if telephony is None:
+        return jsonify({'success': False, 'error': 'Telephony non inizializzata'}), 503
+    return jsonify({
+        'success': True,
+        'peers': [peer.to_dict() for peer in telephony.peers.list_peers()],
+    })
+
+
+@app.route('/api/telephony/history')
+def get_telephony_history():
+    """Cronologia chiamate LXST, globale o filtrata per identity hash."""
+    if not messenger:
+        return jsonify({'success': False, 'error': 'Messenger non inizializzato'}), 404
+    peer_hash = (request.args.get('peer_hash') or '').strip().lower()
+    if peer_hash and not _is_hex_hash(peer_hash, (32,)):
+        return jsonify({'success': False, 'error': 'Peer hash non valido'}), 400
+    try:
+        limit = max(1, min(int(request.args.get('limit', 50)), 200))
+    except (TypeError, ValueError):
+        limit = 50
+    try:
+        return jsonify({
+            'success': True,
+            'calls': messenger.list_call_history(peer_hash or None, limit),
+        })
+    except Exception as e:
+        print(f"❌ Errore cronologia telephony: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/telephony/call', methods=['POST'])
+def telephony_call():
+    if telephony is None:
+        start_telephony()
+    if telephony is None:
+        return jsonify({'success': False, 'error': 'Telephony non inizializzata'}), 503
+    data = request.get_json(silent=True) or {}
+    identity_hash = str(data.get('identity_hash') or data.get('destination') or '').strip()
+    if not _is_hex_hash(identity_hash, (32,)):
+        return jsonify({'success': False, 'error': 'Identity hash non valido'}), 400
+    try:
+        identity = getattr(messenger, 'identity_cache', {}).get(identity_hash)
+        if identity is not None:
+            call = telephony.call(identity)
+        else:
+            call = telephony.call_hash(identity_hash)
+        return jsonify({'success': True, 'call': call.to_dict()})
+    except CallBusyError as e:
+        return jsonify({'success': False, 'error': str(e)}), 409
+    except NoIdentityError as e:
+        return jsonify({'success': False, 'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/telephony/answer', methods=['POST'])
+def telephony_answer():
+    if telephony is None:
+        return jsonify({'success': False, 'error': 'Telephony non inizializzata'}), 503
+    try:
+        telephony.answer()
+        return jsonify({'success': True, 'call': telephony.active_call.to_dict() if telephony.active_call else None})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/telephony/hangup', methods=['POST'])
+def telephony_hangup():
+    if telephony is None:
+        return jsonify({'success': False, 'error': 'Telephony non inizializzata'}), 503
+    telephony.hangup()
+    return jsonify({'success': True})
+
+
+@app.route('/api/telephony/announce', methods=['POST'])
+def telephony_announce():
+    if telephony is None:
+        start_telephony()
+    if telephony is None:
+        return jsonify({'success': False, 'error': 'Telephony non inizializzata'}), 503
+    telephony.announce()
+    return jsonify({'success': True, 'identity_hash': telephony.identity.hash.hex()})
+
+
 @app.route('/api/telemetry/request', methods=['POST'])
 def request_telemetry():
     """Richiede telemetria"""
@@ -1489,6 +1755,104 @@ def handle_config():
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
 
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+@app.route('/api/rns/status')
+def get_rns_status():
+    """Return raw `rnstatus` output without invoking a shell."""
+    binary = shutil.which('rnstatus')
+    if not binary:
+        return jsonify({
+            'success': False,
+            'available': False,
+            'error': 'rnstatus non trovato nel PATH',
+        }), 503
+    try:
+        proc = subprocess.run(
+            [binary],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+        output = (proc.stdout or '') + (proc.stderr or '')
+        output = ANSI_ESCAPE_RE.sub('', output).strip()
+        truncated = False
+        if len(output) > 20000:
+            output = output[:20000]
+            truncated = True
+        return jsonify({
+            'success': proc.returncode == 0,
+            'available': True,
+            'returncode': proc.returncode,
+            'command': os.path.basename(binary),
+            'output': output or '(nessun output)',
+            'truncated': truncated,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'available': True,
+            'error': 'rnstatus ha impiegato troppo tempo',
+        }), 504
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'available': True,
+            'error': str(e),
+        }), 500
+
+
+@app.route('/api/reticulum/interfaces')
+def get_reticulum_interfaces():
+    """Elenca le interfacce configurate in ~/.reticulum/config."""
+    try:
+        result = list_reticulum_interfaces()
+        return jsonify({'success': True, **result})
+    except ReticulumConfigError as e:
+        return jsonify({'success': False, 'error': str(e)}), e.status
+    except Exception as e:
+        print(f"❌ Errore lettura config Reticulum: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/reticulum/interface', methods=['POST'])
+def update_reticulum_interface():
+    """Aggiunge un RNode o disattiva un'interfaccia nel config Reticulum."""
+    data = request.get_json(silent=True) or {}
+    action = str(data.get('action') or '').strip().lower()
+    try:
+        if action == 'add':
+            result = add_interface(data)
+        elif action in ('set_enabled', 'enable', 'disable'):
+            if action == 'enable':
+                enabled = True
+            elif action == 'disable':
+                enabled = False
+            else:
+                raw_enabled = data.get('enabled')
+                if isinstance(raw_enabled, str):
+                    enabled = raw_enabled.strip().lower() in ('1', 'true', 'yes', 'on')
+                else:
+                    enabled = bool(raw_enabled)
+            result = set_reticulum_interface_enabled(
+                data.get('name'),
+                enabled,
+                expected_type=data.get('type') or None,
+            )
+        else:
+            return jsonify({'success': False, 'error': 'Azione non valida'}), 400
+        return jsonify({'success': True, **result})
+    except ReticulumConfigError as e:
+        return jsonify({'success': False, 'error': str(e)}), e.status
+    except Exception as e:
+        print(f"❌ Errore modifica config Reticulum: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/propagation', methods=['POST'])
 def update_propagation_node():
     """Imposta o rimuove immediatamente il nodo propagation configurato."""
@@ -1576,6 +1940,7 @@ def _cleanup_messenger():
     """Ripulisce il messenger corrente. Usata da shutdown e da exit."""
     global messenger
     try:
+        stop_telephony()
         if messenger:
             print("🛑 Arresto del messenger in corso...")
 
@@ -1987,6 +2352,18 @@ def handle_connect():
 def handle_disconnect():
     print('❌ Client web disconnesso')
 
+@socketio.on('telephony_audio_in')
+def handle_telephony_audio(data):
+    if telephony is None or data is None:
+        return
+    try:
+        raw = bytes(data)
+        samples = np.frombuffer(raw, dtype='<i2').astype(np.float32) / 32768.0
+        telephony.send_audio(samples)
+    except Exception as e:
+        print(f"Errore audio telephony: {e}")
+
+
 @socketio.on('ping_server')
 def handle_ping():
     emit('pong', {'time': time.time()})
@@ -1995,7 +2372,7 @@ def handle_ping():
 
 def parse_arguments():
     """Parsing degli argomenti da riga di comando"""
-    parser = argparse.ArgumentParser(description='LXMF Web Chat Server')
+    parser = argparse.ArgumentParser(description='RNS Messenger')
     parser.add_argument('-i', '--identity', 
                         type=str,
                         help='Percorso al file identità da caricare (es: ~/.rns_manager/storage/Prova1)')
@@ -2059,7 +2436,7 @@ if __name__ == '__main__':
     host = args.host
     
     print("="*50)
-    print(f"🚀 LXMF WEB SERVER v{APP_VERSION}")
+    print(f"🚀 RNS MESSENGER v{APP_VERSION}")
     print("="*50)
     print(f"📡 Server in ascolto su http://{host}:{port}")
     if args.identity:

@@ -113,6 +113,27 @@ class DummyMessenger:
     def get_hash(self):
         return 'a' * 32
 
+    def get_aspect_hash(self, aspect):
+        self.calls.append(('aspect_hash', aspect))
+        return 'd' * 32 if aspect == 'lxmf.delivery' else 'e' * 32
+
+    def list_call_history(self, peer_hash=None, limit=50):
+        self.calls.append(('call_history', peer_hash, limit))
+        return [{
+            'id': 1,
+            'peer_hash': 'a' * 32,
+            'name': 'Peer A',
+            'destination_hash': 'b' * 32,
+            'direction': 'outgoing',
+            'state': 'ended',
+            'started_at': 10,
+            'answered_at': 11,
+            'ended_at': 20,
+            'duration': 9,
+            'was_connected': True,
+            'error': None,
+        }]
+
 
 @unittest.skipUnless(HAS_CHAT, 'RNS/LXMF/LXST/Flask-SocketIO non disponibili')
 class MessengerRouteTests(unittest.TestCase):
@@ -219,6 +240,132 @@ class MessengerRouteTests(unittest.TestCase):
         rules = {str(rule) for rule in chat.app.url_map.iter_rules()}
         self.assertIn('/api/peer/<identity_hash>/favorite', rules)
         self.assertIn('/api/peer/<identity_hash>/groups', rules)
+
+    def test_aspect_hash_and_telephony_history_routes(self):
+        chat.messenger = DummyMessenger()
+        headers = {'Host': 'localhost'}
+        identity = 'a' * 32
+
+        response = self.client.get(
+            '/api/aspect_hash?aspect=lxst.telephony', headers=headers
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        self.assertEqual(payload['aspect'], 'lxst.telephony')
+        self.assertEqual(payload['identity_hash'], identity)
+        self.assertEqual(payload['aspect_hash'], 'e' * 32)
+        self.assertEqual(payload['label'], 'LXST · Telephony')
+
+        self.assertEqual(
+            self.client.get('/api/aspect_hash?aspect=bad!', headers=headers).status_code,
+            400,
+        )
+
+        response = self.client.get(
+            f'/api/telephony/history?peer_hash={identity}&limit=10',
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        self.assertEqual(payload['calls'][0]['name'], 'Peer A')
+        self.assertIn(('call_history', identity, 10), chat.messenger.calls)
+        self.assertEqual(
+            self.client.get('/api/telephony/history?peer_hash=zz', headers=headers).status_code,
+            400,
+        )
+
+    def test_reticulum_config_routes(self):
+        headers = {'Host': 'localhost', 'Origin': 'http://localhost:5012'}
+        with mock.patch.object(chat, 'list_reticulum_interfaces', return_value={
+            'config_path': '/tmp/reticulum/config',
+            'interfaces': [{'name': 'RNode A', 'type': 'RNodeInterface', 'enabled': True}],
+        }) as list_interfaces:
+            response = self.client.get('/api/reticulum/interfaces', headers={'Host': 'localhost'})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()['success'])
+        self.assertEqual(response.get_json()['interfaces'][0]['name'], 'RNode A')
+        list_interfaces.assert_called_once_with()
+
+        with mock.patch.object(chat, 'add_interface', return_value={
+            'created': True,
+            'requires_restart': True,
+            'interface': {'name': 'RNode A', 'type': 'RNodeInterface'},
+        }) as add_interface:
+            response = self.client.post(
+                '/api/reticulum/interface',
+                json={'action': 'add', 'type': 'RNodeInterface', 'name': 'RNode A'},
+                headers=headers,
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()['created'])
+        add_interface.assert_called_once()
+
+        with mock.patch.object(chat, 'set_reticulum_interface_enabled', return_value={
+            'enabled': False,
+            'disabled': True,
+            'requires_restart': True,
+            'interface': {'name': 'RNode A', 'type': 'RNodeInterface', 'enabled': False},
+        }) as set_enabled:
+            response = self.client.post(
+                '/api/reticulum/interface',
+                json={'action': 'set_enabled', 'name': 'RNode A', 'type': 'RNodeInterface', 'enabled': False},
+                headers=headers,
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()['disabled'])
+        set_enabled.assert_called_once_with('RNode A', False, expected_type='RNodeInterface')
+
+        with mock.patch.object(chat, 'set_reticulum_interface_enabled', return_value={
+            'enabled': True,
+            'disabled': False,
+            'requires_restart': True,
+            'interface': {'name': 'RNode A', 'type': 'RNodeInterface', 'enabled': True},
+        }) as set_enabled:
+            response = self.client.post(
+                '/api/reticulum/interface',
+                json={'action': 'set_enabled', 'name': 'RNode A', 'type': 'RNodeInterface', 'enabled': True},
+                headers=headers,
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()['enabled'])
+        set_enabled.assert_called_once_with('RNode A', True, expected_type='RNodeInterface')
+
+        response = self.client.post(
+            '/api/reticulum/interface',
+            json={'action': 'invalid'},
+            headers=headers,
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_rns_status_route(self):
+        headers = {'Host': 'localhost'}
+        with mock.patch.object(chat.shutil, 'which', return_value='/usr/bin/rnstatus') as which:
+            with mock.patch.object(chat.subprocess, 'run') as run:
+                run.return_value = mock.Mock(
+                    returncode=0,
+                    stdout=chr(27) + '[32mPath: OK' + chr(27) + '[0m' + chr(10),
+                    stderr='',
+                )
+                response = self.client.get('/api/rns/status', headers=headers)
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertTrue(data['available'])
+        self.assertEqual(data['output'], 'Path: OK')
+        run.assert_called_once_with(
+            ['/usr/bin/rnstatus'],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+
+        with mock.patch.object(chat.shutil, 'which', return_value=None):
+            response = self.client.get('/api/rns/status', headers=headers)
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(response.get_json()['available'])
 
     def test_command_route_accepts_rangetest(self):
         chat.messenger = DummyMessenger()

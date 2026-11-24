@@ -68,11 +68,13 @@ DISCOVERY_ASPECTS = {DISCOVERY_ASPECT, LEGACY_DISCOVERY_ASPECT}
 DEFAULT_ANNOUNCE_ASPECTS = [
     'lxmf.delivery',
     'lxmf.propagation',
+    'lxst.telephony',
     DISCOVERY_ASPECT,
 ]
 ASPECT_LABELS = {
     'lxmf.delivery': 'LXMF · Delivery',
     'lxmf.propagation': 'LXMF · Propagation',
+    'lxst.telephony': 'LXST · Telephony',
     DISCOVERY_ASPECT: 'Reticulum · Interface Discovery',
     LEGACY_DISCOVERY_ASPECT: 'Reticulum · Interface Discovery (legacy)',
 }

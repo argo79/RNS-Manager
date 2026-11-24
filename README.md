@@ -32,6 +32,7 @@ RNS-Manager/
 ├── tests/            # unit tests (unittest)
 ├── tools/            # helper scripts (inline JS validation)
 ├── sideband_plugins/ # Sideband rangetest command plugin
+├── lxst-telephony/   # importable LXST peer-to-peer telephony endpoint
 ├── .github/          # CI workflow
 ├── LICENSE
 └── .gitignore
@@ -49,7 +50,7 @@ python3 rns_manager.py     # or ./start.sh
 
 Open <http://127.0.0.1:5010/>.
 
-### Messenger (LXMF Chat)
+### RNS Messenger
 
 ```bash
 cd messenger
@@ -76,7 +77,7 @@ CI: `.github/workflows/ci.yml` (Python compile, inline JS validation, unit tests
 
 | LXMF Messenger | Monitor mobile |
 |---|---|
-| ![LXMF Chat](messenger/img/lxmf-chat.jpg) | ![Monitor mobile](manager/img/monitor-mobile-live.jpg) |
+| ![RNS Messenger](messenger/img/lxmf-chat.jpg) | ![Monitor mobile](manager/img/monitor-mobile-live.jpg) |
 
 ## 🔒 Data and privacy
 
@@ -100,6 +101,11 @@ Application data stays in the user's home directory:
 ## 📝 License
 
 Distributed under the MIT License. See [LICENSE](LICENSE).
+
+Third-party notice: the optional `lxst_telephony` package and the Messenger
+voice functionality use **LXST**, distributed under **CC BY-NC-ND 4.0**.
+LXST is free for non-commercial use; commercial use requires a separate
+license from its author. See [`lxst-telephony/THIRD_PARTY_LICENSES/LXST.txt`](lxst-telephony/THIRD_PARTY_LICENSES/LXST.txt).
 
 ## 📧 Contact
 

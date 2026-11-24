@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>RNS Manager - LXMF Web Client</title>
+    <title data-i18n="app_title">RNS Messenger</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=yes">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -17,43 +17,100 @@
         <video id="modalVideo" class="lxmf-modal-content" controls style="display: none;"></video>
     </div>
 
+    <div id="notificationStack" class="notification-stack" aria-live="polite"></div>
+
+    <div id="callOverlay" class="call-overlay" style="display:none;" role="dialog" aria-live="assertive">
+        <div class="call-overlay-icon">📞</div>
+        <div class="call-overlay-main">
+            <div id="callOverlayName" class="call-overlay-name">Peer</div>
+            <div id="callOverlayStatus" class="call-overlay-status"></div>
+        </div>
+        <div class="call-overlay-actions">
+            <button id="callOverlayAnswerBtn" type="button" class="call-overlay-btn answer" onclick="answerTelephonyCall()" title="Rispondi" data-i18n-title="notification_answer">✅</button>
+            <button id="callOverlayMuteBtn" type="button" class="call-overlay-btn" onclick="toggleTelephonyMute()" title="Muto" data-i18n-title="notification_mute">🔇</button>
+            <button id="callOverlayHangupBtn" type="button" class="call-overlay-btn hangup" onclick="hangupTelephonyCall()" title="Chiudi" data-i18n-title="notification_hangup">❌</button>
+        </div>
+    </div>
+
+    <div id="notificationSettingsModal" class="notification-settings-modal" style="display:none;" onclick="closeNotificationSettings(event)">
+        <div class="notification-settings-card" onclick="event.stopPropagation()">
+            <div class="notification-settings-head">
+                <h3 data-i18n="notification_settings_title">🔔 Notifiche</h3>
+                <button type="button" class="notification-settings-close" onclick="closeNotificationSettings()">✕</button>
+            </div>
+            <label><input type="checkbox" id="notifDesktop"> <span data-i18n="notification_desktop">Notifiche browser</span></label>
+            <label><input type="checkbox" id="notifMessageSound"> <span data-i18n="notification_message_sound">Suono messaggi</span></label>
+            <label><input type="checkbox" id="notifCallSound"> <span data-i18n="notification_call_sound">Suono chiamate</span></label>
+            <label><input type="checkbox" id="notifVibration"> <span data-i18n="notification_vibration">Vibrazione</span></label>
+            <label class="notification-volume-label">
+                <span data-i18n="notification_volume">Volume</span>
+                <input type="range" id="notifVolume" min="0" max="1" step="0.05">
+            </label>
+            <div id="notificationPermissionStatus" class="notification-permission-status"></div>
+            <button type="button" id="notificationPermissionBtn" class="notification-permission-btn" onclick="requestNotificationPermission()" data-i18n="notification_enable">Abilita notifiche</button>
+            <button type="button" class="notification-settings-done" onclick="closeNotificationSettings()" data-i18n="notification_close">Chiudi</button>
+        </div>
+    </div>
+
+    <div id="rnsStatusModal" class="rns-status-modal" style="display:none;" onclick="closeRnsStatus(event)">
+        <div class="rns-status-card" onclick="event.stopPropagation()">
+            <div class="rns-status-head">
+                <h3 data-i18n="rns_status_title">📶 STATO RNS</h3>
+                <button type="button" class="rns-status-close" onclick="closeRnsStatus()">✕</button>
+            </div>
+            <div id="rnsStatusBody" class="rns-status-body">
+                <div class="rns-status-muted" data-i18n="rns_status_loading">Caricamento...</div>
+            </div>
+            <div class="rns-status-actions">
+                <button type="button" class="rns-status-refresh" onclick="loadRnsStatus()" data-i18n="rns_status_refresh">↻ Aggiorna</button>
+                <button type="button" class="rns-status-done" onclick="closeRnsStatus()" data-i18n="rns_status_close">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
     <div class="lxmf-chat">
         <!-- HEADER - STATO IDENTITÀ -->
         <div class="lxmf-header">
             <div class="header-left">
-                <h1>📨 LXMF WEB CHAT</h1>
+                <h1 data-i18n="header_title">📨 RNS MESSENGER</h1>
             </div>
             <div class="identity-info">
                 <div class="identity-badge" id="identityDisplay">
                     <span id="identityStatus">⚪</span>
-                    <span id="identityName">Nessuna identità</span>
+                    <span id="identityName" data-i18n="header_identity_none">Nessuna identità</span>
                 </div>
                 <div id="identityHash" class="identity-hash"></div>
                 <div id="connectionStatus" class="status offline"></div>
                 <div class="header-actions">
-                    <button id="announceButton" class="lxmf-header-btn" onclick="announceIdentity()" style="background:#4c9aff; color:#fff;" title="Invia un annuncio della mia identità">📢 ANNOUNCIA</button>
-                    <button id="changeIdentityBtn" class="lxmf-header-btn" onclick="showIdentityPanel()" title="Cambia identità">🔄 CAMBIA IDENTITÀ</button>
-                    <button id="exitButton" class="lxmf-header-btn exit" onclick="exitApp()" title="Arresta il server e chiudi">⏻ ESCI</button>
+                    <select id="messengerLanguageSelector" class="language-select" title="Lingua" data-i18n-title="language_title" onchange="changeLanguage(this.value)">
+                        <option value="it">🇮🇹 Italiano</option>
+                        <option value="en">🇬🇧 English</option>
+                    </select>
+                    <button id="rnsStatusBtn" class="lxmf-header-btn" onclick="openRnsStatus()" title="Stato RNS" data-i18n-title="rns_status_open_title" data-i18n="rns_status_button">📶 STATO RNS</button>
+                    <button id="notificationSettingsBtn" class="lxmf-header-btn" onclick="openNotificationSettings()" title="Notifiche" data-i18n-title="notification_settings_title">🔔<span id="notificationBellBadge" class="notification-bell-badge" style="display:none;">0</span></button>
+                    <button id="announceButton" class="lxmf-header-btn" onclick="announceIdentity()" style="background:#4c9aff; color:#fff;" title="Invia un annuncio della mia identità" data-i18n-title="header_announce_title" data-i18n="header_announce">📢 ANNOUNCIA</button>
+                    <button id="changeIdentityBtn" class="lxmf-header-btn" onclick="showIdentityPanel()" title="Cambia identità" data-i18n-title="header_change_identity_title" data-i18n="header_change_identity">🔄 CAMBIA IDENTITÀ</button>
+                    <button id="exitButton" class="lxmf-header-btn exit" onclick="exitApp()" title="Arresta il server e chiudi" data-i18n-title="header_exit_title" data-i18n="header_exit">⏻ ESCI</button>
                 </div>
             </div>
         </div>
 
         <!-- PANNELLO SELEZIONE IDENTITÀ -->
         <div id="initPanel" class="lxmf-init-panel">
-            <h2>🔐 SELEZIONA IDENTITÀ</h2>
+            <h2 data-i18n="init_title">🔐 SELEZIONA IDENTITÀ</h2>
             <div class="lxmf-identity-selector">
-                <label>Identità in ~/.rns_manager/storage/</label>
+                <label data-i18n="init_identity_label">Identità in ~/.rns_manager/storage/</label>
                 <select id="identitySelect">
-                    <option value="">Caricamento...</option>
+                    <option value="" data-i18n="init_loading">Caricamento...</option>
                 </select>
             </div>
             <div>
-                <label>Nome visualizzato (opzionale):</label>
-                <input type="text" id="displayNameInput" placeholder="Il tuo nome" class="config-input">
+                <label data-i18n="init_name_label">Nome visualizzato (opzionale):</label>
+                <input type="text" id="displayNameInput" placeholder="Il tuo nome" class="config-input" data-i18n-placeholder="init_name_placeholder">
             </div>
-            <button id="initButton" class="lxmf-init-button" onclick="selectIdentity()">AVVIA CHAT</button>
-            <button id="cancelIdentityBtn" class="lxmf-header-btn" style="display:none; margin-left:8px;" onclick="cancelIdentityChange()">ANNULLA</button>
-            <div id="initStatus" class="lxmf-init-status">Pronto</div>
+            <button id="initButton" class="lxmf-init-button" onclick="selectIdentity()" data-i18n="init_start">AVVIA CHAT</button>
+            <button id="cancelIdentityBtn" class="lxmf-header-btn" style="display:none; margin-left:8px;" onclick="cancelIdentityChange()" data-i18n="init_cancel">ANNULLA</button>
+            <div id="initStatus" class="lxmf-init-status" data-i18n="init_ready">Pronto</div>
         </div>
 
         <!-- CHAT PRINCIPALE -->
@@ -62,63 +119,69 @@
             <!-- COLONNA 1 - PEER LIST (20%) -->
             <div class="lxmf-peer-column">
                 <div class="lxmf-peer-header">
-                    <h3 id="peerColumnTitle">🔍 PEER</h3>
-                    <select id="peerAspectSelect" class="peer-aspect-select" title="Filtra per tipo di annuncio"></select>
-                    <button onclick="importPeersFromCache()" class="lxmf-file-btn" style="padding: 5px 10px;">📥</button>
+                    <h3 id="peerColumnTitle" data-i18n="peer_title">🔍 PEER</h3>
+                    <select id="peerAspectSelect" class="peer-aspect-select" title="Filtra per tipo di annuncio" data-i18n-title="peer_aspect_title"></select>
+                    <button onclick="importPeersFromCache()" class="lxmf-file-btn" style="padding: 5px 10px;" title="Importa peer dalla cache" data-i18n-title="peer_import_title">📥</button>
                     <span class="lxmf-peer-count" id="peerCount">0</span>
                 </div>
 
                 <div id="interfaceFilterPanel" class="interface-filter-panel" style="display: none;">
                     <div class="interface-filter-head">
-                        <span>🗺️ FILTRI MAPPA</span>
-                        <button type="button" onclick="clearInterfaceFilter()" title="Mostra tutti i tipi">✕</button>
+                        <span data-i18n="peer_filter_map_title">🗺️ FILTRI MAPPA</span>
+                        <button type="button" onclick="clearInterfaceFilter()" title="Mostra tutti i tipi" data-i18n-title="peer_clear_filter_title">✕</button>
                     </div>
                     <div id="interfaceFilterChips" class="interface-filter-chips"></div>
                 </div>
 
-                <!-- Info identità corrente -->
-                <div class="identity-box" style="padding: 10px; background: #1a1f2e; margin: 10px; border-radius: 6px;">
+                <!-- Identità compatta: nome + hash di destinazione -->
+                <div class="identity-box compact">
                     <div class="identity-name-large" id="sidebarIdentityName">-</div>
-                    <div class="aspect-badge-sidebar" style="font-size: 0.8rem; color: #4c9aff;">lxmf.delivery</div>
-                    <div class="delivery-hash-box" id="sidebarDeliveryHash" style="font-family: monospace; font-size: 0.7rem; word-break: break-all;"></div>
-                    <div class="identity-hash-small" id="sidebarIdentityHash" style="font-family: monospace; font-size: 0.7rem; color: #8a9bb5;"></div>
+                    <div class="destination-label" data-i18n="peer_destination_hash">HASH DESTINAZIONE</div>
+                    <div class="delivery-hash-box" id="sidebarDestinationHash" title=""></div>
                 </div>
 
                 <!-- Ricerca -->
                 <div class="lxmf-peer-search" style="padding: 10px;">
                     <div class="search-container">
-                        <input type="text" id="peerSearch" placeholder="Filtra...">
+                        <input type="text" id="peerSearch" placeholder="Filtra..." data-i18n-placeholder="peer_search_placeholder">
                         <span class="search-clear" onclick="document.getElementById('peerSearch').value=''; displayPeers();">✕</span>
                     </div>
                 </div>
 
+                <!-- Filtro posizione -->
+                <div id="positionFilterControls" class="position-filter-controls" role="group" title="Filtro posizione" data-i18n-title="position_filter_title">
+                    <button type="button" class="position-filter-btn active" data-position-filter="all" onclick="setPositionFilter('all', event)" data-i18n="position_filter_all">Tutti</button>
+                    <button type="button" class="position-filter-btn" data-position-filter="with" onclick="setPositionFilter('with', event)" data-i18n="position_filter_with">📍 Con posizione</button>
+                    <button type="button" class="position-filter-btn" data-position-filter="without" onclick="setPositionFilter('without', event)" data-i18n="position_filter_without">Senza posizione</button>
+                </div>
+
                 <!-- Pulsanti ordinamento -->
                 <div class="lxmf-sort-controls" style="display: flex; gap: 2px; padding: 0 10px 10px 10px;">
-                    <button onclick="sortPeers('time', event)" class="lxmf-sort-btn" style="flex:1; padding:5px;" title="Ordina per tempo ricezione">🕐</button>
-                    <button onclick="sortPeers('hops', event)" class="lxmf-sort-btn" style="flex:1; padding:5px;" title="Ordina per hops">🔄</button>
-                    <button onclick="sortPeers('signal', event)" class="lxmf-sort-btn" style="flex:1; padding:5px;" title="Ordina per segnale (RSSI/Q)">📶</button>
+                    <button onclick="sortPeers('time', event)" class="lxmf-sort-btn" style="flex:1; padding:5px;" title="Ordina per tempo ricezione" data-i18n-title="peer_sort_time_title">🕐</button>
+                    <button onclick="sortPeers('hops', event)" class="lxmf-sort-btn" style="flex:1; padding:5px;" title="Ordina per hops" data-i18n-title="peer_sort_hops_title">🔄</button>
+                    <button onclick="sortPeers('signal', event)" class="lxmf-sort-btn" style="flex:1; padding:5px;" title="Ordina per segnale (RSSI/Q)" data-i18n-title="peer_sort_signal_title">📶</button>
                 </div>
 
                 <!-- PULSANTI GRUPPI (9+1) -->
                 <div id="peerGroupControls" class="lxmf-group-controls" style="display: flex; flex-wrap: wrap; gap: 2px; padding: 0 10px 10px 10px; border-top: 1px solid #2a3142; margin-top: 5px; padding-top: 10px;">
-                    <button onclick="filterGroup('favorite', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #ffd70020; color: #ffd700;" title="Preferiti">⭐</button>
-                    <button onclick="filterGroup('home', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #4c9aff20; color: #4c9aff;" title="Casa">🏠</button>
-                    <button onclick="filterGroup('work', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #4caf5020; color: #4caf50;" title="Lavoro">💼</button>
-                    <button onclick="filterGroup('family', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #e91e6320; color: #e91e63;" title="Famiglia">👨‍👩‍👧</button>
-                    <button onclick="filterGroup('friends', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #9c27b020; color: #9c27b0;" title="Amici">👥</button>
-                    <button onclick="filterGroup('server', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #607d8b20; color: #607d8b;" title="Server">🖥️</button>
-                    <button onclick="filterGroup('bot', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #79554820; color: #795548;" title="Bot">🤖</button>
-                    <button onclick="filterGroup('monitor', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #ff980020; color: #ff9800;" title="Monitoraggio">📡</button>
-                    <button onclick="filterGroup('research', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #00968820; color: #009688;" title="Ricerca">🔬</button>
-                    <button onclick="filterGroup('public', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #9e9e9e20; color: #9e9e9e;" title="Pubblico">🌐</button>
-                    <button onclick="filterGroup('_none', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #55555520; color: #bbbbbb;" title="Senza gruppo">∅</button>
-                    <button onclick="resetAllGroups(event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #aa333320; color: #ff8888;" title="Reset tutti i gruppi">🧹</button>
-                    <button onclick="clearGroupFilter(event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #2a3142; color: #8a9bb5;" title="Mostra tutti">✕</button>
+                    <button onclick="filterGroup('favorite', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #ffd70020; color: #ffd700;" title="Preferiti" data-i18n-title="peer_group_favorite">⭐</button>
+                    <button onclick="filterGroup('home', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #4c9aff20; color: #4c9aff;" title="Casa" data-i18n-title="peer_group_home">🏠</button>
+                    <button onclick="filterGroup('work', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #4caf5020; color: #4caf50;" title="Lavoro" data-i18n-title="peer_group_work">💼</button>
+                    <button onclick="filterGroup('family', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #e91e6320; color: #e91e63;" title="Famiglia" data-i18n-title="peer_group_family">👨‍👩‍👧</button>
+                    <button onclick="filterGroup('friends', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #9c27b020; color: #9c27b0;" title="Amici" data-i18n-title="peer_group_friends">👥</button>
+                    <button onclick="filterGroup('server', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #607d8b20; color: #607d8b;" title="Server" data-i18n-title="peer_group_server">🖥️</button>
+                    <button onclick="filterGroup('bot', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #79554820; color: #795548;" title="Bot" data-i18n-title="peer_group_bot">🤖</button>
+                    <button onclick="filterGroup('monitor', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #ff980020; color: #ff9800;" title="Monitoraggio" data-i18n-title="peer_group_monitor">📡</button>
+                    <button onclick="filterGroup('research', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #00968820; color: #009688;" title="Ricerca" data-i18n-title="peer_group_research">🔬</button>
+                    <button onclick="filterGroup('public', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #9e9e9e20; color: #9e9e9e;" title="Pubblico" data-i18n-title="peer_group_public">🌐</button>
+                    <button onclick="filterGroup('_none', event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #55555520; color: #bbbbbb;" title="Senza gruppo" data-i18n-title="peer_group_none">∅</button>
+                    <button onclick="resetAllGroups(event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #aa333320; color: #ff8888;" title="Reset tutti i gruppi" data-i18n-title="peer_group_reset_title">🧹</button>
+                    <button onclick="clearGroupFilter(event)" class="lxmf-group-btn" style="flex:0 0 auto; padding:5px 8px; background: #2a3142; color: #8a9bb5;" title="Mostra tutti" data-i18n-title="peer_group_clear_title">✕</button>
                 </div>
 
                 <!-- Lista peer -->
                 <div class="lxmf-peer-list" id="peerList">
-                    <div class="lxmf-loading" style="text-align: center; color: #8a9bb5;">Caricamento peer...</div>
+                    <div class="lxmf-loading" style="text-align: center; color: #8a9bb5;" data-i18n="peer_loading">Caricamento peer...</div>
                 </div>
 
                 <!-- Statistiche peer -->
@@ -131,22 +194,26 @@
             <!-- COLONNA 2 - MESSAGGI (50%) -->
             <div class="lxmf-message-column">
                 <div class="lxmf-message-header">
-                    <h3>💬 MESSAGGI</h3>
-                    <div class="lxmf-selected-peer" id="selectedPeerDisplay" style="font-size: 0.9rem; color: #8a9bb5;">Nessun peer</div>
+                    <h3 id="messageColumnTitle" data-i18n="message_title">💬 MESSAGGI</h3>
+                    <div class="lxmf-selected-peer" id="selectedPeerDisplay" style="font-size: 0.9rem; color: #8a9bb5;" data-i18n="peer_empty">Nessun peer</div>
                     <div class="lxmf-peer-signal" id="selectedPeerSignal"></div>
                     <div class="lxmf-message-actions" style="display: flex; gap: 5px;">
-                        <button onclick="clearMessages()" style="background: #2a3142; padding: 5px 10px;" title="Pulisci">🗑️</button>
-                        <button onclick="toggleRawView()" id="rawViewBtn" style="background: #2a3142; padding: 5px 10px;" title="RAW">🔬</button>
-                        <button onclick="exportConversation()" style="background: #2a3142; padding: 5px 10px;" title="Esporta">📥</button>
-                        <button onclick="requestLiveTelemetry()" style="background: #2a3142; padding: 5px 10px;" title="Richiedi telemetria live">📍</button>
-                        <button onclick="promptRangetest()" style="background: #ffaa00; padding: 5px 10px; color: black;" title="Avvia rangetest">📏</button>
-                        <button onclick="stopRangetest()" style="background: #dc3545; padding: 5px 10px;" title="Ferma rangetest">⏹️</button>
+                        <button onclick="clearMessages()" style="background: #2a3142; padding: 5px 10px;" title="Pulisci" data-i18n-title="message_clear_title">🗑️</button>
+                        <button onclick="toggleRawView()" id="rawViewBtn" style="background: #2a3142; padding: 5px 10px;" title="RAW" data-i18n-title="message_raw_title">🔬</button>
+                        <button onclick="exportConversation()" style="background: #2a3142; padding: 5px 10px;" title="Esporta" data-i18n-title="message_export_title">📥</button>
+                        <button onclick="requestLiveTelemetry()" style="background: #2a3142; padding: 5px 10px;" title="Richiedi telemetria live" data-i18n-title="message_telemetry_title">📍</button>
+                        <button onclick="promptRangetest()" style="background: #ffaa00; padding: 5px 10px; color: black;" title="Avvia rangetest" data-i18n-title="message_rangetest_title">📏</button>
+                        <button onclick="stopRangetest()" style="background: #dc3545; padding: 5px 10px;" title="Ferma rangetest" data-i18n-title="message_rangetest_stop_title">⏹️</button>
+                        <button id="telephonyCallBtn" onclick="startTelephonyCall()" style="background: #4c9aff; padding: 5px 10px;" title="Chiama il peer selezionato" data-i18n-title="message_call_title">📞</button>
+                        <button id="telephonyAnswerBtn" onclick="answerTelephonyCall()" style="display:none; background: #4caf50; padding: 5px 10px;" title="Rispondi" data-i18n-title="message_answer_title">✅</button>
+                        <button id="telephonyHangupBtn" onclick="hangupTelephonyCall()" style="display:none; background: #dc3545; padding: 5px 10px;" title="Chiudi chiamata" data-i18n-title="message_hangup_title">❌</button>
+                        <span id="telephonyStatus" style="font-size:0.7rem; color:#8a9bb5; align-self:center;"></span>
                     </div>
                 </div>
 
                 <!-- LISTA MESSAGGI -->
                 <div class="lxmf-message-list" id="messageList">
-                    <div class="lxmf-no-peer" style="text-align: center; color: #8a9bb5; margin-top: 50px;">👈 Seleziona un peer</div>
+                    <div class="lxmf-no-peer" style="text-align: center; color: #8a9bb5; margin-top: 50px;" data-i18n="message_no_peer">👈 Seleziona un peer</div>
                 </div>
 
                 <!-- Area anteprima file -->
@@ -154,10 +221,10 @@
 
                 <!-- INPUT AREA -->
                 <div class="lxmf-input-area" id="messageComposer">
-                    <input type="text" id="messageInput" placeholder="Scrivi... (Invio)" autocomplete="off" disabled>
+                    <input type="text" id="messageInput" placeholder="Scrivi... (Invio)" autocomplete="off" disabled data-i18n-placeholder="message_composer_placeholder">
                     <button class="lxmf-file-btn" id="fileBtn" onclick="document.getElementById('fileInput').click()" disabled>📎</button>
                     <button class="lxmf-voice-btn" id="voiceBtn" onclick="toggleVoiceRecording()" disabled>🎤</button>
-                    <button id="sendButton" onclick="sendMessage()" disabled>INVIA</button>
+                    <button id="sendButton" onclick="sendMessage()" disabled data-i18n="message_send">INVIA</button>
                     <input type="file" id="fileInput" class="lxmf-file-input" style="display: none;" onchange="handleFileSelect()">
                 </div>
 
@@ -170,7 +237,7 @@
                 <!-- Statistiche trasferimento -->
                 <div class="lxmf-transfer-stats" id="transferStats" style="padding: 5px; font-size: 0.8rem; color: #8a9bb5; text-align: center;"></div>
 
-                <div class="lxmf-shortcut-hint" style="padding: 5px; font-size: 0.7rem; color: #4a5568; text-align: center;">
+                <div class="lxmf-shortcut-hint" style="padding: 5px; font-size: 0.7rem; color: #4a5568; text-align: center;" data-i18n="message_shortcut_hint">
                     Enter | 📎 | 🔬 RAW | 📍 Live Tracking | 📏 Rangetest
                 </div>
             </div>
@@ -178,8 +245,8 @@
             <!-- COLONNA 3 - MONITOR (30%) -->
             <div class="lxmf-raw-monitor" id="rawMonitor">
                 <div class="lxmf-raw-header">
-                    <h3>📡 TELEMETRIA & MONITOR</h3>
-                    <button onclick="clearMonitorLog()" style="background: #2a3142; padding: 5px 10px; border: none; color: white; border-radius: 4px;">Pulisci</button>
+                    <h3 data-i18n="raw_monitor_title">📡 TELEMETRIA & MONITOR</h3>
+                    <button onclick="clearMonitorLog()" style="background: #2a3142; padding: 5px 10px; border: none; color: white; border-radius: 4px;" data-i18n="raw_clear">Pulisci</button>
                 </div>
 
                 <div class="telemetry-container">
@@ -189,7 +256,7 @@
                         <div class="telemetry-compact-area" id="telemetryCompactArea">
                             <div id="telemetryDashboard" class="telemetry-dashboard">
                                 <div class="telemetry-peer-mini" id="telemetryPeerInfo" style="display: none;"></div>
-                                <div class="telemetry-empty">👈 In attesa dati...</div>
+                                <div class="telemetry-empty" data-i18n="telemetry_empty">👈 In attesa dati...</div>
                             </div>
                         </div>
 
@@ -198,30 +265,30 @@
                             <div class="telemetry-map" id="telemetryMap">
                                 <div class="map-controls">
                                     <select id="mapLayerSelect" class="map-layer-select" title="Livello mappa" onchange="setMapStyle(this.value)">
-                                        <option value="street">Esri Stradale</option>
-                                        <option value="topo">Esri Topografica</option>
-                                        <option value="satellite">Esri Satellite</option>
-                                        <option value="osm">OpenStreetMap</option>
-                                        <option value="open_topo">OpenTopoMap</option>
-                                        <option value="cyclosm">CyclOSM</option>
+                                        <option value="street" data-i18n="map_layer_street">Esri Stradale</option>
+                                        <option value="topo" data-i18n="map_layer_topo">Esri Topografica</option>
+                                        <option value="satellite" data-i18n="map_layer_satellite">Esri Satellite</option>
+                                        <option value="osm" data-i18n="map_layer_osm">OpenStreetMap</option>
+                                        <option value="open_topo" data-i18n="map_layer_open_topo">OpenTopoMap</option>
+                                        <option value="cyclosm" data-i18n="map_layer_cyclosm">CyclOSM</option>
                                     </select>
-                                    <button class="map-style-btn" onclick="fitMapToMarkers()" title="Adatta ai marker">🎯</button>
-                                    <button class="map-style-btn" onclick="centerOnMe()" title="Centra su di me">📍</button>
-                                    <button class="map-style-btn" onclick="retryMap()" title="Riprova mappa">↻</button>
-                                    <button class="map-style-btn" id="mapModeBtn" onclick="toggleMapMode()" title="Espandi mappa">🗺️</button>
+                                    <button class="map-style-btn" onclick="fitMapToMarkers()" title="Adatta ai marker" data-i18n-title="map_fit_title">🎯</button>
+                                    <button class="map-style-btn" onclick="centerOnMe()" title="Centra su di me" data-i18n-title="map_center_title">📍</button>
+                                    <button class="map-style-btn" onclick="retryMap()" title="Riprova mappa" data-i18n-title="map_retry_title">↻</button>
+                                    <button class="map-style-btn" id="mapModeBtn" onclick="toggleMapMode()" title="Espandi mappa" data-i18n-title="map_expand_title">🗺️</button>
                                 </div>
                                 <div class="map-measure-controls">
-                                    <select id="mapMeasureTool" class="map-measure-select" title="Strumento misura" onchange="setMeasureTool(this.value)">
-                                        <option value="">📐 Nessuno</option>
-                                        <option value="distance">📏 Distanza</option>
-                                        <option value="circle">⭕ Area cerchio</option>
-                                        <option value="rectangle">▭ Area rettangolo</option>
+                                    <select id="mapMeasureTool" class="map-measure-select" title="Strumento misura" data-i18n-title="map_measure_title" onchange="setMeasureTool(this.value)">
+                                        <option value="" data-i18n="map_measure_none">📐 Nessuno</option>
+                                        <option value="distance" data-i18n="map_measure_distance">📏 Distanza</option>
+                                        <option value="circle" data-i18n="map_measure_circle">⭕ Area cerchio</option>
+                                        <option value="rectangle" data-i18n="map_measure_rectangle">▭ Area rettangolo</option>
                                     </select>
-                                    <button class="map-style-btn" onclick="clearMeasurements()" title="Pulisci misurazioni">🧹</button>
+                                    <button class="map-style-btn" onclick="clearMeasurements()" title="Pulisci misurazioni" data-i18n-title="map_measure_clear_title">🧹</button>
                                     <span id="mapMeasureInfo" class="map-measure-info"></span>
                                 </div>
                                 <div class="map-placeholder" id="mapPlaceholder">
-                                    <span>🗺️ Nessuna posizione</span>
+                                    <span data-i18n="map_no_positions">🗺️ Nessuna posizione</span>
                                 </div>
                                 <div id="mapContainer" class="map-container" style="display: none;"></div>
                                 <div id="mapStatus" class="map-status"></div>
@@ -232,9 +299,9 @@
                     <!-- 40% INFERIORE: tabs -->
                     <div class="telemetry-bottom-section">
                         <div class="lxmf-raw-tabs">
-                            <button class="lxmf-raw-tab active" onclick="switchRawTab('packets')" id="tabPackets">📦 PACCHETTI</button>
-                            <button class="lxmf-raw-tab" onclick="switchRawTab('history')" id="tabHistory">📊 STORICO</button>
-                            <button class="lxmf-raw-tab" onclick="switchRawTab('config')" id="tabConfig">⚙️ CONFIG</button>
+                            <button class="lxmf-raw-tab active" onclick="switchRawTab('packets')" id="tabPackets" data-i18n="raw_tab_packets">📦 PACCHETTI</button>
+                            <button class="lxmf-raw-tab" onclick="switchRawTab('history')" id="tabHistory" data-i18n="raw_tab_history">📊 STORICO</button>
+                            <button class="lxmf-raw-tab" onclick="switchRawTab('config')" id="tabConfig" data-i18n="raw_tab_config">⚙️ CONFIG</button>
                         </div>
 
                         <div class="lxmf-raw-content" id="rawContent" style="display: block;">
@@ -247,7 +314,7 @@
                         </div>
 
                         <div class="lxmf-raw-content" id="configContent" style="display: none;">
-                            <h3 style="margin-bottom: 10px;">⚙️ CONFIGURAZIONE</h3>
+                            <h3 style="margin-bottom: 10px;" data-i18n="config_title">⚙️ CONFIGURAZIONE</h3>
 
                             <div class="config-section">
                                 <label>📡 NODO PROPAGATION</label>
@@ -318,30 +385,30 @@
                             <div class="config-section">
                                 <label>📍 FONTE POSIZIONE</label>
                                 <select id="locationSource" class="config-input">
-                                    <option value="fixed">🗺️ Posizione fissa</option>
-                                    <option value="gpsd">🛰️ GPSD</option>
+                                    <option value="fixed" data-i18n="config_fixed_location">🗺️ Posizione fissa</option>
+                                    <option value="gpsd" data-i18n="config_gpsd">🛰️ GPSD</option>
                                 </select>
                             </div>
 
                             <div id="fixedLocationFields" class="config-section">
-                                <label>Latitudine</label>
+                                <label data-i18n="config_latitude">Latitudine</label>
                                 <input type="number" id="fixedLatitude" step="0.000001" value="45.605" class="config-input">
-                                <label>Longitudine</label>
+                                <label data-i18n="config_longitude">Longitudine</label>
                                 <input type="number" id="fixedLongitude" step="0.000001" value="12.243" class="config-input">
-                                <label>Altitudine (m)</label>
+                                <label data-i18n="config_altitude">Altitudine (m)</label>
                                 <input type="number" id="fixedAltitude" step="0.1" value="12" class="config-input">
                             </div>
 
                             <div id="gpsdFields" class="config-section" style="display: none;">
-                                <label>GPSD Host</label>
+                                <label data-i18n="config_gpsd_host">GPSD Host</label>
                                 <input type="text" id="gpsdHost" value="localhost" class="config-input">
-                                <label>GPSD Port</label>
+                                <label data-i18n="config_gpsd_port">GPSD Port</label>
                                 <input type="number" id="gpsdPort" value="2947" class="config-input">
                             </div>
 
                             <!-- SELEZIONE ICONA MDI - SOLO NOMI -->
                             <div class="config-section">
-                                <label>🎨 ICONA PEER (MDI)</label>
+                                <label data-i18n="config_appearance_icon">🎨 ICONA PEER (MDI)</label>
                                 <select id="appearanceIcon" class="config-input">
                                     <option value="antenna">antenna</option>
                                     <option value="satellite-uplink">satellite-uplink</option>
@@ -378,17 +445,17 @@
                                     <option value="apple">apple</option>
                                     <option value="android">android</option>
                                 </select>
-                                <label>Colore icona (hex senza #)</label>
+                                <label data-i18n="config_appearance_fg">Colore icona (hex senza #)</label>
                                 <input type="text" id="appearanceFg" value="E54040" class="config-input" placeholder="es. 4c9aff">
-                                <label>Colore sfondo (hex senza #)</label>
+                                <label data-i18n="config_appearance_bg">Colore sfondo (hex senza #)</label>
                                 <input type="text" id="appearanceBg" value="160606" class="config-input" placeholder="es. 1a1f2e">
                             </div>
 
                             <div class="config-actions">
-                                <button onclick="saveConfig()" style="background:#4c9aff; color:white;">💾 SALVA</button>
-                                <button onclick="loadConfig()" style="background:#2a3142; color:white;">↻ CARICA</button>
-                                <button onclick="saveTelemetryConfig()" style="background:#ffaa00; color:black;">📍 SALVA POSIZIONE</button>
-                                <button onclick="syncMessages()" style="background:#ffaa00; color:black;">📡 SYNC</button>
+                                <button onclick="saveConfig()" style="background:#4c9aff; color:white;" data-i18n="config_save">💾 SALVA</button>
+                                <button onclick="loadConfig()" style="background:#2a3142; color:white;" data-i18n="config_load">↻ CARICA</button>
+                                <button onclick="saveTelemetryConfig()" style="background:#ffaa00; color:black;" data-i18n="config_save_position">📍 SALVA POSIZIONE</button>
+                                <button onclick="syncMessages()" style="background:#ffaa00; color:black;" data-i18n="config_sync">📡 SYNC</button>
                             </div>
 
                             <div id="configStatus" class="config-status" style="margin-top:10px; font-size:0.8rem; color:#8a9bb5; text-align:center;"></div>
@@ -407,7 +474,103 @@
 
     <script>
         // ==================== CONFIGURAZIONE ====================
+        const APP_VERSION = "{{ version }}";
         const socket = io();
+
+        // ==================== I18N ====================
+        let translations = {};
+        let italianTranslations = {};
+        let currentLang = 'it';
+        const SUPPORTED_LANGS = ['it', 'en'];
+        const TRANSLATIONS_URL = '/static/messenger_translations.json?v={{ version }}';
+
+        function detectBrowserLanguage() {
+            try {
+                const browserLang = navigator.language || navigator.userLanguage || 'it';
+                const shortLang = browserLang.split('-')[0].toLowerCase();
+                return SUPPORTED_LANGS.includes(shortLang) ? shortLang : 'it';
+            } catch (error) {
+                return 'it';
+            }
+        }
+
+        function initialLanguage() {
+            const saved = localStorage.getItem('rns_messenger_language');
+            return SUPPORTED_LANGS.includes(saved) ? saved : detectBrowserLanguage();
+        }
+
+        async function loadTranslations(lang) {
+            const requested = SUPPORTED_LANGS.includes(lang) ? lang : 'it';
+            try {
+                const response = await fetch(TRANSLATIONS_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                italianTranslations = data.it || {};
+                translations = Object.assign({}, italianTranslations, data[requested] || {});
+                currentLang = requested;
+                localStorage.setItem('rns_messenger_language', requested);
+                document.documentElement.lang = requested;
+                const selector = document.getElementById('messengerLanguageSelector');
+                if (selector) selector.value = requested;
+                document.title = t('app_title');
+                translatePage();
+                translateDynamicContent();
+                return true;
+            } catch (error) {
+                console.error('Errore caricamento traduzioni:', error);
+                return false;
+            }
+        }
+
+        function t(key, params = {}) {
+            let text = translations[key];
+            if (text === undefined || text === null) {
+                text = italianTranslations[key];
+            }
+            if (text === undefined || text === null) {
+                console.warn(`Traduzione mancante: ${key}`);
+                return key;
+            }
+            Object.keys(params).forEach(param => {
+                const regex = new RegExp(`\{${param}\}`, 'g');
+                text = text.replace(regex, escapeHtml(String(params[param])));
+            });
+            text = text.replace(/\{version\}/g, APP_VERSION);
+            return text;
+        }
+
+        function translatePage() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                const text = t(key);
+                if (text === key) return;
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                    el.placeholder = text;
+                } else {
+                    el.textContent = text;
+                }
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const text = t(el.getAttribute('data-i18n-placeholder'));
+                if (text !== el.getAttribute('data-i18n-placeholder')) el.placeholder = text;
+            });
+            document.querySelectorAll('[data-i18n-title]').forEach(el => {
+                const text = t(el.getAttribute('data-i18n-title'));
+                if (text !== el.getAttribute('data-i18n-title')) el.title = text;
+            });
+        }
+
+        function translateDynamicContent() {
+            if (typeof updateAspectUi === 'function') updateAspectUi();
+            if (typeof updateSelectedPeerUI === 'function' && currentPeer) updateSelectedPeerUI();
+            if (typeof displayPeers === 'function') displayPeers();
+            if (typeof displayMessages === 'function') displayMessages();
+        }
+
+        async function changeLanguage(lang) {
+            await loadTranslations(lang);
+            translateDynamicContent();
+        }
         let currentIdentity = null;
         let currentPeer = null;
         let peers = [];
@@ -421,16 +584,41 @@
         let recordingTimer = null;
         let recordingSeconds = 0;
         let recordingStream = null;
+        let telephonyCall = null;
+        let telephonyMuted = false;
+        let telephonyCallStartedAt = null;
+        let callOverlayTimer = null;
+        let notificationAudioContext = null;
+        let notificationAudioUnlocked = false;
+        let callRingtoneTimer = null;
+        let notificationSettings = {
+            desktop: false,
+            messageSound: true,
+            callSound: true,
+            vibration: true,
+            volume: 0.7
+        };
+        const NOTIFICATION_STORAGE_KEY = 'rns_messenger_notifications';
+        let telephonyHistory = [];
+        let telephonyHistoryLoading = false;
+        let telephonyHistoryPeer = null;
+        let telephonyHistoryRequestId = 0;
+        let telephonyAudioContext = null;
+        let telephonyMediaStream = null;
+        let telephonyProcessor = null;
+        let telephonyPlaybackTime = 0;
         let map = null;
         let mapInitialized = false;
         let currentTab = 'packets';
         let currentSort = 'time';
         let sortDirection = 'desc';
         let currentGroupFilter = null;
+        let currentPositionFilter = 'all';
         let currentPeerAspect = 'lxmf.delivery';
         let aspectLabels = {};
         let aspectMapCapable = [];
         let aspectMarkerSignature = '';
+        let aspectHashRequestId = 0;
         let selectedInterfaceTypes = new Set();
         let currentPropagationNode = null;
         let peerRefreshTimer = null;
@@ -457,6 +645,10 @@
         const DISCOVERY_ASPECTS = new Set([
             'rnstransport.discovery.interface',
             'discovery.interface'
+        ]);
+        const CONTACT_ASPECTS = new Set([
+            'lxmf.delivery',
+            'lxst.telephony'
         ]);
         const INTERFACE_TYPE_STYLES = {
             BackboneInterface: { label: 'Backbone', short: 'BB', icon: 'server-network', color: '#4c9aff' },
@@ -523,10 +715,470 @@
         window.aspectMarkersByHash = {};
         window.historyMarkers = [];
         const MAX_MAP_PEERS = 200;
+        let reticulumInterfaces = [];
+        let reticulumConfigPath = null;
 
-        document.addEventListener('DOMContentLoaded', () => {
+        // ==================== NOTIFICHE ====================
+        function loadNotificationSettings() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(NOTIFICATION_STORAGE_KEY) || '{}');
+                notificationSettings = Object.assign(notificationSettings, saved || {});
+            } catch (error) {
+                console.debug('Impostazioni notifiche non valide:', error);
+            }
+            if (notificationSettings.desktop && !notificationSupported()) {
+                notificationSettings.desktop = false;
+            }
+            if (notificationSettings.desktop && Notification.permission !== 'granted') {
+                notificationSettings.desktop = false;
+            }
+        }
+
+        function saveNotificationSettings() {
+            try {
+                localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(notificationSettings));
+            } catch (error) {
+                console.debug('Salvataggio notifiche non disponibile:', error);
+            }
+        }
+
+        function notificationSupported() {
+            return typeof window !== 'undefined' && 'Notification' in window;
+        }
+
+        function notificationPermissionText() {
+            if (!notificationSupported()) return t('notification_permission_unsupported');
+            if (Notification.permission === 'granted') return t('notification_permission_granted');
+            if (Notification.permission === 'denied') return t('notification_permission_denied');
+            return t('notification_permission_default');
+        }
+
+        function syncNotificationSettingsUI() {
+            const desktop = document.getElementById('notifDesktop');
+            const messageSound = document.getElementById('notifMessageSound');
+            const callSound = document.getElementById('notifCallSound');
+            const vibration = document.getElementById('notifVibration');
+            const volume = document.getElementById('notifVolume');
+            const status = document.getElementById('notificationPermissionStatus');
+            if (desktop) desktop.checked = !!notificationSettings.desktop;
+            if (messageSound) messageSound.checked = !!notificationSettings.messageSound;
+            if (callSound) callSound.checked = !!notificationSettings.callSound;
+            if (vibration) vibration.checked = !!notificationSettings.vibration;
+            if (volume) volume.value = String(notificationSettings.volume);
+            if (status) status.textContent = notificationPermissionText();
+        }
+
+        function bindNotificationSettings() {
+            const bind = (id, key, transform = value => value) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', () => {
+                    notificationSettings[key] = transform(el.type === 'checkbox' ? el.checked : el.value);
+                    saveNotificationSettings();
+                    syncNotificationSettingsUI();
+                });
+            };
+            bind('notifDesktop', 'desktop');
+            bind('notifMessageSound', 'messageSound');
+            bind('notifCallSound', 'callSound');
+            bind('notifVibration', 'vibration');
+            bind('notifVolume', 'volume', value => Number(value));
+        }
+
+        function openNotificationSettings() {
+            const modal = document.getElementById('notificationSettingsModal');
+            if (modal) modal.style.display = 'flex';
+            syncNotificationSettingsUI();
+        }
+
+        function closeNotificationSettings(event) {
+            if (event) event.stopPropagation();
+            const modal = document.getElementById('notificationSettingsModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function openRnsStatus() {
+            const modal = document.getElementById('rnsStatusModal');
+            if (modal) modal.style.display = 'flex';
+            loadRnsStatus();
+        }
+
+        function closeRnsStatus(event) {
+            const modal = document.getElementById('rnsStatusModal');
+            if (!modal) return;
+            if (event && event.target && event.target !== modal) return;
+            modal.style.display = 'none';
+        }
+
+        async function loadRnsStatus() {
+            const body = document.getElementById('rnsStatusBody');
+            if (!body) return;
+            body.innerHTML = `<div class="rns-status-muted">${escapeHtml(t('rns_status_loading'))}</div>`;
+            try {
+                const response = await fetch('/api/rns/status');
+                const data = await response.json();
+                if (!data.available) {
+                    body.innerHTML = `<div class="rns-status-error">${escapeHtml(data.error || t('rns_status_unavailable'))}</div>`;
+                    return;
+                }
+                const output = String(data.output || '');
+                const summary = data.success
+                    ? t('rns_status_ok', { code: data.returncode })
+                    : t('rns_status_exit', { code: data.returncode });
+                const truncated = data.truncated
+                    ? `<div class="rns-status-muted">${escapeHtml(t('rns_status_truncated'))}</div>`
+                    : '';
+                body.innerHTML = `<div class="rns-status-summary ${data.success ? 'ok' : 'warn'}">${escapeHtml(summary)}</div>
+                    ${truncated}
+                    <details class="rns-status-details" open>
+                        <summary>${escapeHtml(t('rns_status_raw'))}</summary>
+                        <pre id="rnsStatusOutput" class="rns-status-output"></pre>
+                    </details>`;
+                const outputEl = document.getElementById('rnsStatusOutput');
+                if (outputEl) outputEl.textContent = output;
+            } catch (error) {
+                body.innerHTML = `<div class="rns-status-error">${escapeHtml(t('rns_status_error', { error: error.message }))}</div>`;
+            }
+        }
+
+        async function requestNotificationPermission() {
+            if (!notificationSupported()) {
+                syncNotificationSettingsUI();
+                return;
+            }
+            try {
+                const permission = await Notification.requestPermission();
+                notificationSettings.desktop = permission === 'granted';
+                saveNotificationSettings();
+                syncNotificationSettingsUI();
+            } catch (error) {
+                console.debug('Permesso notifiche non disponibile:', error);
+                syncNotificationSettingsUI();
+            }
+        }
+
+        function showBrowserNotification(title, body, options = {}) {
+            if (!notificationSettings.desktop || !notificationSupported() || Notification.permission !== 'granted') {
+                return;
+            }
+            try {
+                const notification = new Notification(title, {
+                    body: body,
+                    icon: '/static/favicon.ico',
+                    tag: options.tag,
+                    requireInteraction: !!options.requireInteraction,
+                    silent: true
+                });
+                notification.onclick = () => {
+                    window.focus();
+                    if (typeof options.onClick === 'function') options.onClick();
+                    notification.close();
+                };
+            } catch (error) {
+                console.debug('Notifica browser non disponibile:', error);
+            }
+        }
+
+        function vibrate(pattern) {
+            if (notificationSettings.vibration && navigator.vibrate) {
+                try { navigator.vibrate(pattern); } catch (error) {}
+            }
+        }
+
+        function ensureNotificationAudio() {
+            if (notificationAudioContext) return notificationAudioContext;
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return null;
+            try {
+                notificationAudioContext = new AudioCtx();
+            } catch (error) {
+                console.debug('Audio notifiche non disponibile:', error);
+                notificationAudioContext = null;
+            }
+            return notificationAudioContext;
+        }
+
+        async function unlockNotificationAudio() {
+            const ctx = ensureNotificationAudio();
+            if (!ctx) return;
+            try {
+                if (ctx.state === 'suspended') await ctx.resume();
+                notificationAudioUnlocked = ctx.state === 'running';
+            } catch (error) {
+                console.debug('Sblocco audio non riuscito:', error);
+            }
+        }
+
+        function playNotificationTone(frequency, duration, offset = 0, volume = 0.16, type = 'sine') {
+            const ctx = ensureNotificationAudio();
+            if (!ctx || ctx.state !== 'running') return;
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const start = ctx.currentTime + offset;
+            oscillator.type = type;
+            oscillator.frequency.value = frequency;
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume * notificationSettings.volume), start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+            oscillator.start(start);
+            oscillator.stop(start + duration + 0.02);
+        }
+
+        function playMessageSound() {
+            if (!notificationSettings.messageSound) return;
+            unlockNotificationAudio().then(() => {
+                playNotificationTone(880, 0.14, 0, 0.13);
+                playNotificationTone(1174, 0.18, 0.17, 0.11);
+            });
+        }
+
+        function playCallPattern() {
+            if (!notificationSettings.callSound) return;
+            playNotificationTone(660, 0.22, 0, 0.18);
+            playNotificationTone(880, 0.22, 0.28, 0.18);
+            playNotificationTone(660, 0.22, 0.56, 0.18);
+        }
+
+        function startCallRingtone() {
+            if (!notificationSettings.callSound || callRingtoneTimer) return;
+            unlockNotificationAudio().then(() => {
+                if (!notificationSettings.callSound || callRingtoneTimer) return;
+                playCallPattern();
+                callRingtoneTimer = setInterval(playCallPattern, 1800);
+            });
+        }
+
+        function stopCallRingtone() {
+            if (callRingtoneTimer) {
+                clearInterval(callRingtoneTimer);
+                callRingtoneTimer = null;
+            }
+        }
+
+        document.addEventListener('pointerdown', unlockNotificationAudio, { once: true });
+        document.addEventListener('keydown', unlockNotificationAudio, { once: true });
+
+        function showInAppToast({ title, body, kind = 'message', id = null, onClick = null, timeout = 8000 }) {
+            const stack = document.getElementById('notificationStack');
+            if (!stack) return;
+            if (id) {
+                const existing = Array.from(stack.children).find(el => el.dataset.notificationId === id);
+                if (existing) return;
+            }
+            while (stack.children.length >= 3) stack.removeChild(stack.firstElementChild);
+
+            const toast = document.createElement('div');
+            toast.className = `notification-toast ${kind}`;
+            toast.dataset.notificationId = id || '';
+            toast.setAttribute('role', 'status');
+
+            const icon = document.createElement('div');
+            icon.className = 'notification-toast-icon';
+            icon.textContent = kind === 'call' ? '📞' : '💬';
+            const main = document.createElement('div');
+            main.className = 'notification-toast-main';
+            const titleEl = document.createElement('div');
+            titleEl.className = 'notification-toast-title';
+            titleEl.textContent = title || '';
+            const bodyEl = document.createElement('div');
+            bodyEl.className = 'notification-toast-body';
+            bodyEl.textContent = body || '';
+            main.appendChild(titleEl);
+            main.appendChild(bodyEl);
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'notification-toast-close';
+            close.textContent = '✕';
+            close.title = t('close');
+            close.addEventListener('click', event => {
+                event.stopPropagation();
+                toast.remove();
+            });
+            toast.appendChild(icon);
+            toast.appendChild(main);
+            toast.appendChild(close);
+            if (typeof onClick === 'function') {
+                toast.addEventListener('click', onClick);
+            }
+            stack.appendChild(toast);
+            setTimeout(() => toast.remove(), timeout);
+        }
+
+        function totalUnreadCount() {
+            return Object.values(unreadCounts).reduce((sum, value) => sum + Number(value || 0), 0);
+        }
+
+        function updateUnreadUi() {
+            const total = totalUnreadCount();
+            const badge = document.getElementById('notificationBellBadge');
+            if (badge) {
+                badge.textContent = String(total);
+                badge.style.display = total > 0 ? 'inline-flex' : 'none';
+            }
+            const base = t('app_title');
+            const call = telephonyCall && telephonyCall.state === 'ringing';
+            document.title = call ? `📞 ${base}` : (total > 0 ? `(${total}) ${base}` : base);
+        }
+
+        function findPeerForMessage(msg) {
+            const from = String(msg && msg.from || '').toLowerCase();
+            if (!from) return null;
+            return (peers || []).find(p =>
+                String(p.hash || '').toLowerCase() === from ||
+                String(p.dest_hash || '').toLowerCase() === from
+            ) || (mapPeers || []).find(p =>
+                String(p.hash || '').toLowerCase() === from ||
+                String(p.dest_hash || '').toLowerCase() === from
+            ) || null;
+        }
+
+        function messageSenderName(msg) {
+            const peer = findPeerForMessage(msg);
+            return (peer && peer.name) || (msg && msg.from_name) || String(msg && msg.from || '').substring(0, 8) || 'Peer';
+        }
+
+        function markPeerRead(peerHash, destHash = null) {
+            if (peerHash) delete unreadCounts[peerHash];
+            if (destHash) delete unreadCounts[destHash];
+            updateUnreadUi();
+            if (typeof displayPeers === 'function') displayPeers();
+        }
+
+        function markCurrentPeerRead() {
+            if (!currentPeer) return;
+            markPeerRead(currentPeer.hash, currentPeer.dest_hash);
+        }
+
+        function notifyMessage(msg) {
+            const name = messageSenderName(msg);
+            const preview = String(msg.content || msg.title || '').replace(/\s+/g, ' ').slice(0, 160);
+            const body = preview || t('message_no_messages');
+            showInAppToast({
+                title: t('notification_message_from', { name }),
+                body,
+                kind: 'message',
+                id: msg.hash ? `message-${msg.hash}` : null,
+                onClick: () => {
+                    const peer = findPeerForMessage(msg);
+                    if (peer) selectPeer(peer.hash, peer.dest_hash || peer.hash);
+                }
+            });
+            playMessageSound();
+            vibrate([120, 70, 120]);
+            if (document.hidden || !document.hasFocus()) {
+                showBrowserNotification(
+                    t('notification_message_from', { name }),
+                    body,
+                    { tag: msg.hash ? `message-${msg.hash}` : 'message' }
+                );
+            }
+        }
+
+        function callDisplayName(call) {
+            if (!call) return 'Peer';
+            if (call.peer_name) return call.peer_name;
+            const peer = (peers || []).find(p => p.hash === call.peer_hash || p.dest_hash === call.peer_hash) ||
+                (mapPeers || []).find(p => p.hash === call.peer_hash || p.dest_hash === call.peer_hash);
+            return (peer && peer.name) || String(call.peer_hash || '').substring(0, 8) || 'Peer';
+        }
+
+        function formatCallClock(seconds) {
+            const total = Math.max(0, Math.floor(Number(seconds) || 0));
+            const minutes = Math.floor(total / 60);
+            const secs = total % 60;
+            if (minutes >= 60) {
+                return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+            return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function updateCallOverlayTimer() {
+            if (!telephonyCall || !telephonyCallStartedAt) return;
+            const elapsed = (Date.now() - telephonyCallStartedAt) / 1000;
+            const status = document.getElementById('callOverlayStatus');
+            if (status) status.textContent = formatCallClock(elapsed);
+        }
+
+        function startCallOverlayTimer(call) {
+            telephonyCallStartedAt = Number(call.answered_at || call.started_at || Date.now() / 1000) * 1000;
+            if (callOverlayTimer) clearInterval(callOverlayTimer);
+            updateCallOverlayTimer();
+            callOverlayTimer = setInterval(updateCallOverlayTimer, 1000);
+        }
+
+        function stopCallOverlayTimer() {
+            if (callOverlayTimer) clearInterval(callOverlayTimer);
+            callOverlayTimer = null;
+            telephonyCallStartedAt = null;
+        }
+
+        function updateCallOverlay(call) {
+            const overlay = document.getElementById('callOverlay');
+            if (!overlay) return;
+            if (!call || ['ended', 'failed', 'busy', 'rejected'].includes(call.state)) {
+                overlay.style.display = 'none';
+                stopCallOverlayTimer();
+                return;
+            }
+            const incoming = call.direction === 'incoming';
+            const state = call.state;
+            const answerBtn = document.getElementById('callOverlayAnswerBtn');
+            const hangupBtn = document.getElementById('callOverlayHangupBtn');
+            const muteBtn = document.getElementById('callOverlayMuteBtn');
+            const nameEl = document.getElementById('callOverlayName');
+            const statusEl = document.getElementById('callOverlayStatus');
+            overlay.style.display = 'flex';
+            if (nameEl) nameEl.textContent = callDisplayName(call);
+            if (statusEl) {
+                if (state === 'ringing') statusEl.textContent = incoming ? t('telephony_incoming') : t('telephony_ringing');
+                else if (state === 'calling') statusEl.textContent = t('telephony_connecting');
+                else if (state === 'connecting') statusEl.textContent = t('telephony_audio_connecting');
+                else if (state === 'connected') updateCallOverlayTimer();
+                else statusEl.textContent = state || '';
+            }
+            if (answerBtn) answerBtn.style.display = incoming && state === 'ringing' ? 'inline-flex' : 'none';
+            if (hangupBtn) hangupBtn.style.display = ['calling', 'ringing', 'connecting', 'connected'].includes(state) ? 'inline-flex' : 'none';
+            if (muteBtn) {
+                muteBtn.style.display = state === 'connected' ? 'inline-flex' : 'none';
+                muteBtn.textContent = telephonyMuted ? '🔊' : '🔇';
+                muteBtn.title = telephonyMuted ? t('notification_unmute') : t('notification_mute');
+            }
+            if (state === 'connected') {
+                if (!callOverlayTimer) startCallOverlayTimer(call);
+                stopCallRingtone();
+            }
+        }
+
+        function notifyIncomingCall(call) {
+            if (!call) return;
+            startCallRingtone();
+            vibrate([300, 120, 300, 120, 300]);
+            showBrowserNotification(
+                t('notification_call_from', { name: callDisplayName(call) }),
+                t('notification_incoming_call'),
+                {
+                    tag: `call-${call.id || call.peer_hash}`,
+                    requireInteraction: true,
+                    onClick: () => {
+                        const peer = (peers || []).find(p => p.hash === call.peer_hash) ||
+                            (mapPeers || []).find(p => p.hash === call.peer_hash);
+                        if (peer) selectPeer(peer.hash, peer.dest_hash || peer.hash);
+                    }
+                }
+            );
+            updateUnreadUi();
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadTranslations(initialLanguage());
+            loadNotificationSettings();
+            bindNotificationSettings();
+            syncNotificationSettingsUI();
+            updateUnreadUi();
             loadIdentities();
             setupSocketListeners();
+            loadReticulumInterfaces();
 
             // Verifica se c'è già un messenger attivo
             fetch('/api/status')
@@ -543,8 +1195,7 @@
                         document.getElementById('identityName').textContent = data.name || 'Utente';
                         document.getElementById('identityHash').textContent = String(data.identity || '');
                         document.getElementById('sidebarIdentityName').textContent = data.name || 'Utente';
-                        document.getElementById('sidebarDeliveryHash').textContent = String(data.aspect_hash || '');
-                        document.getElementById('sidebarIdentityHash').textContent = String(data.identity || '');
+                        updateAspectSidebar();
 
                         document.getElementById('initPanel').style.display = 'none';
                         document.getElementById('chatContainer').style.display = 'flex';
@@ -570,6 +1221,10 @@
             document.getElementById('peerSearch').addEventListener('input', displayPeers);
             document.getElementById('peerAspectSelect').addEventListener('change', function() {
                 currentPeerAspect = this.value || 'lxmf.delivery';
+                currentPositionFilter = 'all';
+                document.querySelectorAll('.position-filter-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.positionFilter === 'all');
+                });
                 currentPeer = null;
                 expandedPeerHash = null;
                 messages = [];
@@ -580,7 +1235,10 @@
                 aspectMarkerSignature = '';
                 selectedInterfaceTypes.clear();
                 clearAspectMapMarkers();
+                resetTelephonyHistory();
                 updateAspectUi();
+                updateAspectSidebar();
+                if (isTelephonyAspect()) loadTelephonyHistory(null);
                 displayMessages();
                 displayPeers();
                 schedulePeerRefresh(0);
@@ -594,6 +1252,9 @@
             setInterval(() => {
                 if (!document.hidden && currentPeer) refreshCurrentConversation();
             }, 15000);
+            setInterval(() => {
+                if (!document.hidden) updatePeerAgeLabels();
+            }, 5000);
         });
 
         // ==================== PROGRESS BAR PER MESSAGGI ====================
@@ -749,8 +1410,36 @@
 
                 if (msg.time) msg.time = msg.time * 1000;
 
+                // Aggiorna subito il monitor pacchetti: non deve dipendere dal
+                // rendering della chat o da notifiche/telemetria che possono fallire.
+                if (msg.raw_hex) {
+                    try {
+                        addRawEntry(msg);
+                    } catch (error) {
+                        console.error('Errore aggiornamento monitor pacchetti:', error);
+                    }
+                } else if (msg.hash) {
+                    // Fallback per eventi legacy/senza raw nel payload: recupera
+                    // il pacchetto dal server per non lasciare il monitor fermo.
+                    fetch(`/api/raw/${msg.hash}`)
+                        .then(rawResponse => rawResponse.json())
+                        .then(raw => {
+                            if (!raw || !raw.hex) return;
+                            addRawEntry({
+                                ...msg,
+                                raw_hex: raw.hex,
+                                raw_ascii: raw.ascii || '',
+                                packed_size: Math.floor(raw.hex.length / 2)
+                            });
+                        })
+                        .catch(error => console.debug('Raw messaggio non disponibile:', error));
+                }
+
                 const belongs = messageBelongsToCurrentPeer(msg);
                 const duplicate = messages.some(m => m.hash && msg.hash && m.hash === msg.hash);
+                const senderPeer = findPeerForMessage(msg);
+                const unreadKey = senderPeer ? senderPeer.hash : String(msg.from || '').toLowerCase();
+                const isBackground = document.hidden || !document.hasFocus();
 
                 if (belongs && !duplicate) {
                     messages.push(msg);
@@ -766,13 +1455,16 @@
 
                     displayMessages();
                     scrollMessagesToBottom();
-                } else if (!belongs) {
-                    const key = String(msg.from || '').toLowerCase();
-                    if (key) {
-                        unreadCounts[key] = (unreadCounts[key] || 0) + 1;
+                } else if (!belongs && !duplicate) {
+                    displayPeers();
+                }
+
+                if (!duplicate && (!belongs || isBackground)) {
+                    if (unreadKey) {
+                        unreadCounts[unreadKey] = (unreadCounts[unreadKey] || 0) + 1;
                     }
-                    const sender = key ? key.substring(0, 8) : 'peer';
-                    showTransferStats(`📨 Nuovo messaggio da ${sender}`);
+                    updateUnreadUi();
+                    notifyMessage(msg);
                     displayPeers();
                 }
 
@@ -783,9 +1475,6 @@
 
                 schedulePeerRefresh(300);
 
-                if (msg.raw_hex) {
-                    addRawEntry(msg);
-                }
             });
 
             socket.on('delivery_update', (info) => {
@@ -820,8 +1509,8 @@
                 document.getElementById('identityName').textContent = data.name || 'Utente';
                 document.getElementById('identityHash').textContent = String(data.identity || '');
                 document.getElementById('sidebarIdentityName').textContent = data.name || 'Utente';
-                document.getElementById('sidebarDeliveryHash').textContent = String(data.aspect_hash || '');
-                document.getElementById('sidebarIdentityHash').textContent = String(data.identity || '');
+                updateAspectSidebar();
+                resetTelephonyHistory();
 
                 document.getElementById('initPanel').style.display = 'none';
                 document.getElementById('chatContainer').style.display = 'flex';
@@ -903,8 +1592,7 @@
                     document.getElementById('identityName').textContent = data.name || 'Utente';
                     document.getElementById('identityHash').textContent = String(data.identity || '');
                     document.getElementById('sidebarIdentityName').textContent = data.name || 'Utente';
-                    document.getElementById('sidebarDeliveryHash').textContent = String(data.aspect_hash || '');
-                    document.getElementById('sidebarIdentityHash').textContent = String(data.identity || '');
+                    updateAspectSidebar();
 
                     document.getElementById('initPanel').style.display = 'none';
                     document.getElementById('chatContainer').style.display = 'flex';
@@ -916,7 +1604,9 @@
 
                     currentPeer = null;
                     messages = [];
+                    resetTelephonyHistory();
                     Object.keys(unreadCounts).forEach(key => delete unreadCounts[key]);
+                    updateUnreadUi();
                     lastPeersSignature = '';
                     displayMessages();
                     loadPeerAspects().finally(() => loadPeers());
@@ -1032,6 +1722,10 @@
                     select.value = currentPeerAspect;
                 }
                 updateAspectUi();
+                updateAspectSidebar();
+                if (isTelephonyAspect()) {
+                    loadTelephonyHistory(currentPeer ? currentPeer.hash : null);
+                }
             } catch (error) {
                 console.debug('Aspetti annunci non disponibili:', error);
             }
@@ -1043,6 +1737,14 @@
 
         function isDiscoveryAspect() {
             return DISCOVERY_ASPECTS.has(currentPeerAspect);
+        }
+
+        function isTelephonyAspect() {
+            return (currentPeerAspect || '') === 'lxst.telephony';
+        }
+
+        function supportsContactGroups() {
+            return CONTACT_ASPECTS.has(currentPeerAspect || 'lxmf.delivery');
         }
 
         function interfaceTypeForPeer(peer) {
@@ -1058,29 +1760,59 @@
             const delivery = isDeliveryAspect();
             const discovery = isDiscoveryAspect();
             const propagation = currentPeerAspect === 'lxmf.propagation';
+            const telephony = isTelephonyAspect();
+            const contactGroups = supportsContactGroups();
+            const aspectLabel = aspectLabels[currentPeerAspect] || currentPeerAspect || 'lxmf.delivery';
             const title = document.getElementById('peerColumnTitle');
             if (title) {
                 title.textContent = delivery
-                    ? '🔍 PEER'
-                    : propagation
-                        ? '📡 PROPAGATION'
-                        : discovery
-                            ? '🛰️ INTERFACCE'
-                            : '📡 ANNUNCI';
+                    ? t('peer_title')
+                    : discovery
+                        ? '🛰️ INTERFACCE'
+                        : `${telephony ? '📞' : '📡'} ${aspectLabel}`;
+            }
+            const messageTitle = document.getElementById('messageColumnTitle');
+            if (messageTitle) {
+                messageTitle.textContent = telephony ? t('message_calls_title') : t('message_title');
             }
             const groups = document.getElementById('peerGroupControls');
-            if (groups) groups.style.display = delivery ? 'flex' : 'none';
-            if (!delivery) {
+            if (groups) groups.style.display = contactGroups ? 'flex' : 'none';
+            if (!contactGroups) {
                 currentGroupFilter = null;
                 document.querySelectorAll('.lxmf-group-btn.active').forEach(btn => btn.classList.remove('active'));
             }
             if (discovery) {
                 setMapMode(true);
-            } else if (propagation) {
+            } else if (propagation || telephony) {
                 setMapMode(false);
             }
             updateMapFilterPanelVisibility();
             updateComposerState();
+            displayMessages();
+        }
+
+        async function updateAspectSidebar() {
+            const aspect = currentPeerAspect || 'lxmf.delivery';
+            const hashEl = document.getElementById('sidebarDestinationHash');
+            if (!currentIdentity || !currentIdentity.identity || !hashEl) return;
+
+            const requestId = ++aspectHashRequestId;
+            try {
+                const response = await fetch(
+                    `/api/aspect_hash?aspect=${encodeURIComponent(aspect)}`
+                );
+                const data = await response.json();
+                if (requestId !== aspectHashRequestId) return;
+                if (!data.success) throw new Error(data.error || 'Hash aspetto non disponibile');
+                hashEl.textContent = String(data.aspect_hash || '');
+                hashEl.title = `${t('peer_destination_hash')} · ${aspect}`;
+            } catch (error) {
+                if (requestId !== aspectHashRequestId) return;
+                hashEl.textContent = aspect === 'lxmf.delivery'
+                    ? String((currentIdentity && currentIdentity.aspect_hash) || '')
+                    : '';
+                console.debug('Hash destinazione non disponibile:', error);
+            }
         }
 
         function setMapMode(enabled) {
@@ -1091,7 +1823,7 @@
             const btn = document.getElementById('mapModeBtn');
             if (btn) {
                 btn.textContent = enabled ? '💬' : '🗺️';
-                btn.title = enabled ? 'Torna alla chat' : 'Espandi mappa';
+                btn.title = enabled ? t('map_collapse_title') : t('map_expand_title');
             }
             if (enabled) {
                 loadMapPeers();
@@ -1143,8 +1875,20 @@
             }
         }
 
+        function peerHasLocation(peer) {
+            const loc = peer && peer.last_location;
+            return !!(loc && loc.latitude !== null && loc.latitude !== undefined &&
+                loc.longitude !== null && loc.longitude !== undefined);
+        }
+
+        function matchesPositionFilter(peer) {
+            if (currentPositionFilter === 'with') return peerHasLocation(peer);
+            if (currentPositionFilter === 'without') return !peerHasLocation(peer);
+            return true;
+        }
+
         function visiblePeersForAspect() {
-            let list = [...peers];
+            let list = [...peers].filter(matchesPositionFilter);
             if (isDiscoveryAspect() && selectedInterfaceTypes.size) {
                 list = list.filter(peer => selectedInterfaceTypes.has(interfaceTypeForPeer(peer)));
             }
@@ -1153,10 +1897,21 @@
 
         function visibleMapPeers() {
             return (mapPeers || []).filter(peer => {
+                if (!matchesPositionFilter(peer)) return false;
                 if (peer.source === 'contact') return showContactMarkers;
                 if (!selectedInterfaceTypes.size) return true;
                 return selectedInterfaceTypes.has(peer.interface_type || 'Other');
             });
+        }
+
+        function setPositionFilter(filter, event) {
+            if (event) event.stopPropagation();
+            currentPositionFilter = ['all', 'with', 'without'].includes(filter) ? filter : 'all';
+            document.querySelectorAll('.position-filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.positionFilter === currentPositionFilter);
+            });
+            displayPeers();
+            renderAspectMapMarkers();
         }
 
         function renderInterfaceTypeFilters() {
@@ -1382,7 +2137,7 @@
 
                 const total = Number(data.total || 0);
                 const dbTotal = Number(data.db_total || 0);
-                let text = `📢 ${total} annunci`;
+                let text = t('peer_announce_count', { count: total });
                 if (data.last && data.last.time) {
                     const when = new Date(data.last.time * 1000).toLocaleTimeString();
                     const name = data.last.display_name || (data.last.identity_hash || '').substring(0, 8);
@@ -1599,10 +2354,31 @@
             }
         }
 
+        function formatPeerAge(lastSeen) {
+            if (lastSeen === undefined || lastSeen === null || lastSeen === '') {
+                return t('peer_age_never');
+            }
+            const timestamp = Number(lastSeen);
+            if (!Number.isFinite(timestamp)) return t('peer_age_never');
+            const seconds = Math.max(0, Math.floor(Date.now() / 1000 - timestamp));
+            if (seconds < 60) return t('peer_age_seconds', { value: seconds });
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return t('peer_age_minutes', { value: minutes });
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return t('peer_age_hours', { value: hours });
+            return t('peer_age_days', { value: Math.floor(hours / 24) });
+        }
+
+        function updatePeerAgeLabels() {
+            document.querySelectorAll('.peer-compact-age[data-last-seen]').forEach(el => {
+                el.textContent = `🕐 ${formatPeerAge(el.dataset.lastSeen)}`;
+            });
+        }
+
         function displayPeers() {
             const searchTerm = document.getElementById('peerSearch').value.toLowerCase();
             const container = document.getElementById('peerList');
-            const showGroups = isDeliveryAspect();
+            const showGroups = supportsContactGroups();
 
             let displayList = visiblePeersForAspect();
 
@@ -1633,7 +2409,10 @@
             updatePeerCounter(displayList.length);
 
             if (displayList.length === 0) {
-                container.innerHTML = '<div style="text-align: center; color: #8a9bb5; padding: 20px;">Nessun peer</div>';
+                const emptyKey = currentPositionFilter === 'with'
+                    ? 'peer_empty_with_location'
+                    : (currentPositionFilter === 'without' ? 'peer_empty_without_location' : 'peer_empty');
+                container.innerHTML = `<div style="text-align: center; color: #8a9bb5; padding: 20px;">${escapeHtml(t(emptyKey))}</div>`;
                 return;
             }
 
@@ -1646,13 +2425,18 @@
                 const displayName = peer.name || identityHashFull.substring(0, 8);
                 const safeDisplayName = escapeHtml(displayName);
                 const announceInfo = peer.announce_info || null;
-                const typeMeta = announceInfo ? interfaceTypeMeta(announceInfo.type) : null;
                 const isPropagationAspect = currentPeerAspect === 'lxmf.propagation';
                 const isCurrentPropagation = isPropagationAspect && currentPropagationNode ===
                     String(destHash || '').toLowerCase();
-                const compactTypeLabel = announceInfo
-                    ? `🛰️ ${typeMeta.label}`
-                    : (isPropagationAspect ? '📡 PROPAGATION' : '');
+                const ageLabel = formatPeerAge(peer.last_seen);
+                const lastSeenTitle = peer.last_seen
+                    ? new Date(peer.last_seen * 1000).toLocaleString()
+                    : t('peer_age_never');
+                const hopsKnown = peer.hops !== undefined && peer.hops !== null;
+                const hopsLabel = hopsKnown ? `H${peer.hops}` : 'H?';
+                const hopsTitle = hopsKnown
+                    ? `${t('peer_hops')}: ${peer.hops}`
+                    : t('peer_hops_unknown');
 
                 let iconHtml, iconColor, bgColor;
 
@@ -1706,19 +2490,21 @@
                     : '';
                 const groupIndicators = showGroups ? groups.map(group => {
                     const info = PEER_GROUPS[group];
-                    return info ? `<span class="peer-group-badge" style="color: ${info.color};" title="${info.name}">${info.icon} ${info.name}</span>` : '';
+                    const label = t(`peer_group_${group}`);
+                    return info ? `<span class="peer-group-badge" style="color: ${info.color};" title="${escapeHtml(label)}">${info.icon} ${escapeHtml(label)}</span>` : '';
                 }).join(' ') : '';
 
                 const compactGroupIcons = showGroups ? (groups.map(group => {
                     const info = PEER_GROUPS[group];
-                    return info ? `<span class="peer-group-badge" title="${info.name}" style="color: ${info.color};">${info.icon}</span>` : '';
-                }).join(' ') || '<span class="no-group" title="Nessun gruppo">—</span>') : '';
+                    const label = t(`peer_group_${group}`);
+                    return info ? `<span class="peer-group-badge" title="${escapeHtml(label)}" style="color: ${info.color};">${info.icon}</span>` : '';
+                }).join(' ') || `<span class="no-group" title="${t('peer_group_none')}">—</span>`) : '';
 
                 const groupButtons = showGroups ? ['home', 'work', 'family', 'friends', 'server', 'bot', 'monitor', 'research', 'public']
                     .map(group => {
                         const info = PEER_GROUPS[group];
                         const active = groups.includes(group);
-                        return `<button class="peer-group-btn ${active ? 'active' : ''}" onclick="togglePeerGroup('${escapeJsString(peer.hash)}', '${group}', event)" style="padding: 2px 6px; border-radius: 4px; background: ${active ? info.color : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="${info.name}">${info.icon}</button>`;
+                        return `<button class="peer-group-btn ${active ? 'active' : ''}" onclick="togglePeerGroup('${escapeJsString(peer.hash)}', '${group}', event)" style="padding: 2px 6px; border-radius: 4px; background: ${active ? info.color : '#2a3142'}; color: white; border: none; cursor: pointer; font-size: 0.7rem;" title="${escapeHtml(t(`peer_group_${group}`))}">${info.icon}</button>`;
                     }).join('') : '';
 
                 const propagationAction = isPropagationAspect
@@ -1731,7 +2517,9 @@
 
                 const isExpanded = expandedPeerHash === peer.hash;
                 html += `
-                    <div class="lxmf-peer-item ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}" onclick="togglePeerCard('${escapeJsString(peer.hash)}', '${escapeJsString(destHash)}', event)">
+                    <div class="lxmf-peer-item ${isSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}"
+                        data-peer-hash="${escapeHtml(identityHashFull)}" data-dest-hash="${escapeHtml(deliveryHashFull)}"
+                        onclick="togglePeerCard('${escapeJsString(peer.hash)}', '${escapeJsString(destHash)}', event)">
                         <div class="peer-card-head" style="display: flex; align-items: center; gap: 8px;">
                             <div class="peer-icon" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: ${bgColor}; color: ${iconColor}; border-radius: 4px; font-size: 16px;">
                                 ${iconHtml}
@@ -1743,7 +2531,8 @@
                         </div>
                         <div class="peer-compact-meta">
                             <span class="peer-short-hash" title="Identity Hash breve">🆔 ${escapeHtml(identityHashFull.substring(0, 8))}</span>
-                            ${compactTypeLabel ? `<span class="peer-announce-type" title="${escapeHtml(interfaceLabel || compactTypeLabel)}">${escapeHtml(compactTypeLabel)}</span>` : ''}
+                            <span class="peer-compact-age" data-last-seen="${peer.last_seen !== undefined && peer.last_seen !== null ? peer.last_seen : ''}" title="${escapeHtml(lastSeenTitle)}">🕐 ${escapeHtml(ageLabel)}</span>
+                            <span class="peer-compact-hops" title="${escapeHtml(hopsTitle)}">🔄 ${escapeHtml(hopsLabel)}</span>
                             ${showGroups ? `<span class="peer-compact-groups">${compactGroupIcons}</span>` : ''}
                         </div>
                         ${isExpanded ? `
@@ -1781,18 +2570,50 @@
             container.innerHTML = html;
         }
 
+        function scrollSelectedPeerIntoView(identityHash, destHash) {
+            const items = document.querySelectorAll('.lxmf-peer-item[data-peer-hash]');
+            for (const item of items) {
+                if (item.dataset.peerHash === identityHash ||
+                    (destHash && item.dataset.destHash === destHash)) {
+                    item.scrollIntoView({ block: 'nearest' });
+                    return;
+                }
+            }
+        }
+
         function togglePeerCard(identityHash, destHash, event) {
             if (event) event.stopPropagation();
             // Clicking a contact both selects it and toggles the compact/details view.
             expandedPeerHash = expandedPeerHash === identityHash ? null : identityHash;
-            selectPeer(identityHash, destHash);
+            selectPeer(identityHash, destHash, { focusMap: true });
         }
 
-        function selectPeer(identityHash, destHash) {
-            const peer = peers.find(p => p.hash === identityHash || p.dest_hash === destHash);
+        function openPeerChatFromMap(peerHash, destHash) {
+            const peer = (peers || []).find(p => p.hash === peerHash || p.dest_hash === destHash) ||
+                (mapPeers || []).find(p => p.hash === peerHash || p.dest_hash === destHash);
+            if (!peer) {
+                showTransferStats('⚠️ Contatto non disponibile');
+                return;
+            }
+            if (!isDeliveryAspect()) {
+                currentPeerAspect = 'lxmf.delivery';
+                const aspectSelect = document.getElementById('peerAspectSelect');
+                if (aspectSelect) aspectSelect.value = currentPeerAspect;
+                updateAspectUi();
+                updateAspectSidebar();
+                schedulePeerRefresh(0);
+            }
+            selectPeer(peer.hash, peer.dest_hash || destHash, { focusMap: false });
+            setMapMode(false);
+        }
+
+        function selectPeer(identityHash, destHash, options = {}) {
+            const peer = peers.find(p => p.hash === identityHash || p.dest_hash === destHash) ||
+                (mapPeers || []).find(p => p.hash === identityHash || p.dest_hash === destHash);
             const displayName = (peer && peer.name) ? peer.name : identityHash.substring(0, 8);
             delete unreadCounts[identityHash];
             if (destHash) delete unreadCounts[destHash];
+            updateUnreadUi();
             currentPeer = {
                 hash: identityHash,
                 dest_hash: destHash,
@@ -1849,15 +2670,22 @@
             }
 
             displayPeers();
+            requestAnimationFrame(() => scrollSelectedPeerIntoView(identityHash, destHash));
             if (isDeliveryAspect()) {
                 loadConversation(destHash);
+            } else if (isTelephonyAspect()) {
+                messages = [];
+                resetTelephonyHistory();
+                loadTelephonyHistory(identityHash);
             } else {
                 messages = [];
                 displayMessages();
             }
             updateComposerState();
             renderAspectMapMarkers();
-            focusPeerOnMap(peer);
+            if (options.focusMap === true) {
+                focusPeerOnMap(currentPeer);
+            }
 
             if (peer && (peer.q || peer.rssi || peer.snr)) {
                 let signalText = '';
@@ -1955,7 +2783,8 @@
                 const container = document.getElementById('rawContent');
                 container.innerHTML = '';
 
-                rawMessages.forEach(msg => {
+                rawMessages.slice().reverse().forEach(msg => {
+                    if (msg.time) msg.time = msg.time * 1000;
                     if (msg.raw_hex) {
                         addRawEntry(msg);
                     }
@@ -1966,16 +2795,160 @@
             }
         }
 
+        function resetTelephonyHistory() {
+            telephonyHistoryRequestId++;
+            telephonyHistory = [];
+            telephonyHistoryLoading = false;
+            telephonyHistoryPeer = null;
+        }
+
+        async function loadTelephonyHistory(peerHash = null) {
+            const aspectAtRequest = currentPeerAspect;
+            const requestId = ++telephonyHistoryRequestId;
+            telephonyHistoryPeer = peerHash || null;
+            telephonyHistoryLoading = true;
+            if (isTelephonyAspect()) displayMessages();
+
+            try {
+                const params = new URLSearchParams({ limit: '50' });
+                if (peerHash) params.set('peer_hash', peerHash);
+                const response = await fetch(`/api/telephony/history?${params.toString()}`);
+                const data = await response.json();
+                if (requestId !== telephonyHistoryRequestId) return;
+                if (aspectAtRequest !== currentPeerAspect || !isTelephonyAspect()) return;
+                if (!data.success) throw new Error(data.error || 'Cronologia non disponibile');
+                telephonyHistory = Array.isArray(data.calls) ? data.calls : [];
+            } catch (error) {
+                if (requestId !== telephonyHistoryRequestId) return;
+                telephonyHistory = [];
+                console.debug('Cronologia chiamate non disponibile:', error);
+            } finally {
+                if (requestId === telephonyHistoryRequestId) {
+                    telephonyHistoryLoading = false;
+                    if (isTelephonyAspect()) displayMessages();
+                }
+            }
+        }
+
+        function formatCallDuration(seconds) {
+            if (seconds === null || seconds === undefined || isNaN(Number(seconds))) {
+                return '';
+            }
+            const total = Math.max(0, Math.round(Number(seconds)));
+            const minutes = Math.floor(total / 60);
+            const secs = total % 60;
+            if (minutes >= 60) {
+                const hours = Math.floor(minutes / 60);
+                return `${hours}h ${String(minutes % 60).padStart(2, '0')}m`;
+            }
+            return `${minutes}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function telephonyCallStateLabel(call) {
+            if (!call) return '';
+            if (call.state === 'busy') return 'Occupato';
+            if (call.state === 'rejected') return 'Rifiutata';
+            if (call.state === 'failed') return 'Fallita';
+            if (call.state === 'ended') {
+                if (call.was_connected) return 'Terminata';
+                return call.direction === 'incoming' ? 'Persa' : 'Senza risposta';
+            }
+            return String(call.state || '');
+        }
+
+        function selectTelephonyPeerFromHistory(peerHash, event) {
+            if (event) event.stopPropagation();
+            const peer = peers.find(p => p.hash === peerHash);
+            if (peer) selectPeer(peer.hash, peer.dest_hash || peer.hash);
+        }
+
+        function recallTelephonyPeer(peerHash) {
+            const peer = peers.find(p => p.hash === peerHash);
+            if (!peer) {
+                showTransferStats('⚠️ Peer non presente nella lista');
+                return;
+            }
+            if (!currentPeer || currentPeer.hash !== peer.hash) {
+                selectPeer(peer.hash, peer.dest_hash || peer.hash);
+            }
+            startTelephonyCall();
+        }
+
+        function renderTelephonyHistory(container) {
+            const peerName = currentPeer
+                ? (currentPeer.name || currentPeer.hash.substring(0, 8))
+                : 'Tutte le chiamate';
+            const title = currentPeer
+                ? `📞 Cronologia chiamate · ${escapeHtml(peerName)}`
+                : '📞 Cronologia chiamate recenti';
+            let html = `<div class="call-history-header">${title}</div>`;
+
+            if (telephonyHistoryLoading && telephonyHistory.length === 0) {
+                html += '<div class="call-history-empty">Caricamento cronologia...</div>';
+                container.innerHTML = html;
+                return;
+            }
+
+            if (!telephonyHistory.length) {
+                html += '<div class="call-history-empty">Nessuna chiamata</div>';
+                container.innerHTML = html;
+                return;
+            }
+
+            telephonyHistory.forEach(call => {
+                const incoming = call.direction === 'incoming';
+                const stateLabel = telephonyCallStateLabel(call);
+                const started = call.started_at
+                    ? new Date(Number(call.started_at) * 1000).toLocaleString()
+                    : '?';
+                const duration = call.was_connected
+                    ? formatCallDuration(call.duration)
+                    : '';
+                const detail = duration ? `Durata ${duration}` : stateLabel;
+                const peerHash = String(call.peer_hash || '');
+                const displayName = call.name || peerHash.substring(0, 8);
+                const stateClass = String(call.state || 'ended').replace(/[^a-z]/g, '');
+                html += `
+                    <div class="call-history-item ${incoming ? 'incoming' : 'outgoing'}"
+                         onclick="selectTelephonyPeerFromHistory('${escapeJsString(peerHash)}', event)"
+                         title="${escapeHtml(displayName)} · ${escapeHtml(started)}">
+                        <div class="call-history-icon">${incoming ? '📥' : '📤'}</div>
+                        <div class="call-history-main">
+                            <div class="call-history-name">
+                                ${escapeHtml(displayName)}
+                                <span class="call-history-state ${stateClass}">${escapeHtml(stateLabel)}</span>
+                            </div>
+                            <div class="call-history-meta">
+                                ${escapeHtml(started)} · ${escapeHtml(detail)}
+                            </div>
+                            <div class="call-history-hash">🆔 ${escapeHtml(peerHash)}</div>
+                            ${call.error ? `<div class="call-history-error">${escapeHtml(call.error)}</div>` : ''}
+                        </div>
+                        <button type="button" class="call-history-recall"
+                                onclick="event.stopPropagation(); recallTelephonyPeer('${escapeJsString(peerHash)}')"
+                                title="Richiama">📞</button>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
         function displayMessages() {
             const container = document.getElementById('messageList');
 
+            if (isTelephonyAspect()) {
+                renderTelephonyHistory(container);
+                return;
+            }
+
             if (!currentPeer) {
-                container.innerHTML = '<div class="lxmf-no-peer">👈 Seleziona un peer</div>';
+                container.innerHTML = `<div class="lxmf-no-peer">${t('message_no_peer')}</div>`;
                 return;
             }
 
             if (messages.length === 0) {
-                container.innerHTML = '<div style="text-align: center; color: #8a9bb5; margin-top: 50px;">Nessun messaggio</div>';
+                container.innerHTML = `<div style="text-align: center; color: #8a9bb5; margin-top: 50px;">${t('message_no_messages')}</div>`;
                 return;
             }
 
@@ -2428,6 +3401,29 @@
                     messages.push(tempMsg);
                     displayMessages();
 
+                    // Aggiorna anche il monitor pacchetti per i messaggi in uscita:
+                    // il raw viene salvato dal server ed è disponibile per hash.
+                    const sentDest = currentPeer.dest_hash || currentPeer.hash;
+                    const sentFrom = currentIdentity && currentIdentity.identity;
+                    if (data.hash) {
+                        fetch(`/api/raw/${data.hash}`)
+                            .then(rawResponse => rawResponse.json())
+                            .then(raw => {
+                                if (!raw || !raw.hex) return;
+                                addRawEntry({
+                                    hash: data.hash,
+                                    from: sentFrom,
+                                    to: sentDest,
+                                    time: Date.now(),
+                                    method: data.method || 'direct',
+                                    packed_size: Math.floor(raw.hex.length / 2),
+                                    raw_hex: raw.hex,
+                                    raw_ascii: raw.ascii || ''
+                                });
+                            })
+                            .catch(error => console.debug('Raw uscita non disponibile:', error));
+                    }
+
                     showTransferStats(`📤 Invio... ${data.method || ''}`);
                 } else {
                     alert(`Errore: ${data.error}`);
@@ -2693,18 +3689,19 @@
             }
         }
 
-        async function requestLiveTelemetry() {
-            if (!currentPeer) {
+        async function requestLiveTelemetry(peer = currentPeer) {
+            if (!peer) {
                 alert('Seleziona un peer');
                 return;
             }
 
             try {
-                showTransferStats(`📡 Richiesta telemetria a ${escapeHtml(currentPeer.name)}...`);
+                const targetName = peer.name || String(peer.hash || '').substring(0, 8);
+                showTransferStats(`📡 Richiesta telemetria a ${escapeHtml(targetName)}...`);
                 const response = await fetch('/api/telemetry/request', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ destination: currentPeer.dest_hash || currentPeer.hash })
+                    body: JSON.stringify({ destination: peer.dest_hash || peer.hash })
                 });
                 const data = await response.json();
                 if (data.success) {
@@ -2718,6 +3715,221 @@
                 showTransferStats('❌ Errore richiesta telemetria');
             }
         }
+
+        function findMapPeer(peerHash, destHash) {
+            return (peers || []).find(p => p.hash === peerHash || p.dest_hash === destHash) ||
+                (mapPeers || []).find(p => p.hash === peerHash || p.dest_hash === destHash) ||
+                null;
+        }
+
+        function requestTelemetryFromMap(peerHash, destHash) {
+            const peer = findMapPeer(peerHash, destHash);
+            if (!peer) {
+                showTransferStats('⚠️ Peer non disponibile');
+                return;
+            }
+            return requestLiveTelemetry(peer);
+        }
+
+
+        function setTelephonyStatus(text) {
+            const el = document.getElementById('telephonyStatus');
+            if (el) el.textContent = text || '';
+        }
+
+        function updateTelephonyUi(call) {
+            telephonyCall = call || null;
+            updateCallOverlay(call);
+            if (call && call.state === 'connected') stopCallRingtone();
+            if (!call || ['ended', 'failed', 'busy', 'rejected'].includes(call.state)) {
+                stopCallRingtone();
+                telephonyMuted = false;
+            }
+            const callBtn = document.getElementById('telephonyCallBtn');
+            const answerBtn = document.getElementById('telephonyAnswerBtn');
+            const hangupBtn = document.getElementById('telephonyHangupBtn');
+            const state = call ? call.state : null;
+            const incoming = call && call.direction === 'incoming';
+            if (callBtn) callBtn.style.display = call ? 'none' : 'inline-block';
+            if (answerBtn) answerBtn.style.display = incoming && state === 'ringing' ? 'inline-block' : 'none';
+            if (hangupBtn) hangupBtn.style.display = call && ['calling', 'ringing', 'connecting', 'connected'].includes(state) ? 'inline-block' : 'none';
+            if (!call) setTelephonyStatus('');
+            else if (state === 'ringing') setTelephonyStatus(incoming ? t('telephony_incoming') : t('telephony_ringing'));
+            else if (state === 'connected') {
+                setTelephonyStatus(t('telephony_in_call', { hash: call.peer_hash.substring(0, 8) }));
+                startTelephonyAudio();
+            } else if (state === 'calling') setTelephonyStatus(t('telephony_connecting'));
+            else if (state === 'connecting') setTelephonyStatus(t('telephony_audio_connecting'));
+            else if (['ended', 'busy', 'rejected', 'failed'].includes(state)) {
+                setTelephonyStatus(state === 'busy' ? t('telephony_busy') : (state === 'rejected' ? t('telephony_rejected') : t('telephony_ended')));
+                stopTelephonyAudio();
+                telephonyCall = null;
+                if (callBtn) callBtn.style.display = 'inline-block';
+                if (answerBtn) answerBtn.style.display = 'none';
+                if (hangupBtn) hangupBtn.style.display = 'none';
+            }
+            updateUnreadUi();
+        }
+
+        function toggleTelephonyMute() {
+            telephonyMuted = !telephonyMuted;
+            updateCallOverlay(telephonyCall);
+            setTelephonyStatus(telephonyMuted ? t('notification_mute') : '');
+        }
+
+        async function startTelephonyCall(peer = currentPeer) {
+            if (!peer) {
+                alert('Seleziona un peer');
+                return;
+            }
+            try {
+                setTelephonyStatus('📞 Chiamata...');
+                const response = await fetch('/api/telephony/call', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identity_hash: peer.hash })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Chiamata fallita');
+                updateTelephonyUi(data.call);
+            } catch (error) {
+                setTelephonyStatus(`❌ ${error.message}`);
+            }
+        }
+
+        function startCallFromMap(peerHash, destHash) {
+            const peer = findMapPeer(peerHash, destHash);
+            if (!peer) {
+                showTransferStats('⚠️ Peer non disponibile');
+                return;
+            }
+            return startTelephonyCall(peer);
+        }
+
+        async function answerTelephonyCall() {
+            try {
+                const response = await fetch('/api/telephony/answer', { method: 'POST' });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Risposta fallita');
+                updateTelephonyUi(data.call);
+                await startTelephonyAudio();
+            } catch (error) {
+                setTelephonyStatus(`❌ ${error.message}`);
+            }
+        }
+
+        async function hangupTelephonyCall() {
+            try {
+                await fetch('/api/telephony/hangup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                stopTelephonyAudio();
+                updateTelephonyUi(null);
+            } catch (error) {
+                setTelephonyStatus(`❌ ${error.message}`);
+            }
+        }
+
+
+        async function startTelephonyAudio() {
+            if (telephonyAudioContext) return;
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                telephonyAudioContext = new AudioCtx({ sampleRate: 48000 });
+                telephonyMediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                });
+                const source = telephonyAudioContext.createMediaStreamSource(telephonyMediaStream);
+                telephonyProcessor = telephonyAudioContext.createScriptProcessor(2048, 1, 1);
+                telephonyProcessor.onaudioprocess = (event) => {
+                    if (!telephonyCall || telephonyCall.state !== 'connected' || telephonyMuted) return;
+                    const input = event.inputBuffer.getChannelData(0);
+                    const pcm = new Int16Array(input.length);
+                    for (let i = 0; i < input.length; i++) {
+                        const sample = Math.max(-1, Math.min(1, input[i]));
+                        pcm[i] = sample < 0 ? sample * 32768 : sample * 32767;
+                    }
+                    socket.emit('telephony_audio_in', pcm.buffer);
+                };
+                const mute = telephonyAudioContext.createGain();
+                mute.gain.value = 0;
+                source.connect(telephonyProcessor);
+                telephonyProcessor.connect(mute);
+                mute.connect(telephonyAudioContext.destination);
+                telephonyPlaybackTime = telephonyAudioContext.currentTime;
+            } catch (error) {
+                console.error('Errore audio telephony:', error);
+                setTelephonyStatus('❌ Microfono non disponibile');
+                stopTelephonyAudio();
+            }
+        }
+
+        function stopTelephonyAudio() {
+            if (telephonyProcessor) {
+                try { telephonyProcessor.disconnect(); } catch (error) {}
+                try { telephonyProcessor.onaudioprocess = null; } catch (error) {}
+            }
+            telephonyProcessor = null;
+            if (telephonyMediaStream) {
+                telephonyMediaStream.getTracks().forEach(track => track.stop());
+            }
+            telephonyMediaStream = null;
+            if (telephonyAudioContext) {
+                try { telephonyAudioContext.close(); } catch (error) {}
+            }
+            telephonyAudioContext = null;
+            telephonyPlaybackTime = 0;
+        }
+
+        function playTelephonyPcm(buffer) {
+            if (!telephonyAudioContext || !buffer) return;
+            const samples = new Int16Array(buffer);
+            if (!samples.length) return;
+            const frame = new Float32Array(samples.length);
+            for (let i = 0; i < samples.length; i++) frame[i] = samples[i] / 32768;
+            const audioBuffer = telephonyAudioContext.createBuffer(1, frame.length, 48000);
+            audioBuffer.copyToChannel(frame, 0);
+            const source = telephonyAudioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(telephonyAudioContext.destination);
+            const now = telephonyAudioContext.currentTime;
+            telephonyPlaybackTime = Math.max(now + 0.02, telephonyPlaybackTime);
+            source.start(telephonyPlaybackTime);
+            telephonyPlaybackTime += audioBuffer.duration;
+        }
+
+        function refreshTelephonyHistoryView() {
+            if (!isTelephonyAspect()) return;
+            loadTelephonyHistory(currentPeer ? currentPeer.hash : null);
+        }
+
+        socket.on('telephony_state', (data) => {
+            const call = data && data.call ? data.call : null;
+            updateTelephonyUi(call);
+            if (call && ['ended', 'busy', 'rejected', 'failed'].includes(call.state)) {
+                refreshTelephonyHistoryView();
+            }
+        });
+        socket.on('telephony_incoming', (call) => {
+            updateTelephonyUi(call);
+            notifyIncomingCall(call);
+        });
+        socket.on('telephony_ended', () => {
+            updateTelephonyUi(null);
+            refreshTelephonyHistoryView();
+        });
+        socket.on('telephony_history_updated', () => refreshTelephonyHistoryView());
+        socket.on('telephony_audio', (data) => {
+            try {
+                if (data instanceof ArrayBuffer) playTelephonyPcm(data);
+                else if (data && data.buffer instanceof ArrayBuffer) playTelephonyPcm(data.buffer);
+                else if (Array.isArray(data)) playTelephonyPcm(new Uint8Array(data).buffer);
+            } catch (error) {
+                console.error('Errore playback telephony:', error);
+            }
+        });
 
         function promptRangetest() {
             if (!currentPeer) {
@@ -2925,11 +4137,11 @@
             const select = document.getElementById('mapMeasureTool');
             if (select && select.value !== measureTool) select.value = measureTool;
             if (measureTool === 'distance') {
-                setMeasureInfo('📏 Clicca i punti sulla mappa');
+                setMeasureInfo(t('map_measure_distance_hint'));
             } else if (measureTool === 'circle') {
-                setMeasureInfo('⭕ Clicca il centro, poi il raggio');
+                setMeasureInfo(t('map_measure_circle_hint'));
             } else if (measureTool === 'rectangle') {
-                setMeasureInfo('▭ Clicca due angoli opposti');
+                setMeasureInfo(t('map_measure_rectangle_hint'));
             } else {
                 setMeasureInfo('');
             }
@@ -3140,8 +4352,12 @@
 
         window.addEventListener('resize', invalidateMapSize);
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) setTimeout(invalidateMapSize, 50);
+            if (!document.hidden) {
+                setTimeout(invalidateMapSize, 50);
+                markCurrentPeerRead();
+            }
         });
+        window.addEventListener('focus', markCurrentPeerRead);
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && measureTool) {
                 setMeasureTool('');
@@ -3273,6 +4489,342 @@
             window.aspectMarkersByHash = {};
         }
 
+        async function loadReticulumInterfaces() {
+            try {
+                const response = await fetch('/api/reticulum/interfaces');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Config Reticulum non disponibile');
+                reticulumInterfaces = Array.isArray(data.interfaces) ? data.interfaces : [];
+                reticulumConfigPath = data.config_path || null;
+            } catch (error) {
+                reticulumInterfaces = [];
+                reticulumConfigPath = null;
+                console.debug('Config Reticulum non disponibile:', error);
+            }
+            if (map) {
+                aspectMarkerSignature = '';
+                renderAspectMapMarkers();
+            }
+        }
+
+        function sameConfigValue(a, b) {
+            if (a === null || a === undefined || b === null || b === undefined) {
+                return false;
+            }
+            return String(a).trim() === String(b).trim();
+        }
+
+        function findConfiguredReticulumInterface(peer) {
+            const info = peer && peer.announce_info;
+            if (!info) return null;
+            const schema = INTERFACE_CONFIG_SCHEMAS[info.type];
+            const localType = (schema && schema.localType) || info.type;
+            const candidates = (reticulumInterfaces || []).filter(entry => {
+                if (!info.type) return true;
+                if (entry.type === localType) return true;
+                // Reticulum treats BackboneInterface with a target_host as a client.
+                return localType === 'BackboneClientInterface' &&
+                    entry.type === 'BackboneInterface' && !!entry.target_host;
+            });
+            const name = info.name || '';
+
+            let found = candidates.find(entry => {
+                return name && (entry.discovery_name === name || entry.name === name);
+            });
+            if (found) return found;
+
+            if (info.type === 'RNodeInterface') {
+                found = candidates.find(entry => {
+                    return sameConfigValue(entry.frequency, info.frequency) &&
+                        sameConfigValue(entry.bandwidth, info.bandwidth) &&
+                        sameConfigValue(entry.spreadingfactor, info.spreading_factor) &&
+                        sameConfigValue(entry.codingrate, info.coding_rate);
+                });
+            } else if (localType === 'BackboneClientInterface' || localType === 'TCPClientInterface') {
+                found = candidates.find(entry => {
+                    return sameConfigValue(entry.target_host, info.reachable_on) &&
+                        sameConfigValue(entry.target_port, info.port);
+                });
+            } else if (info.type === 'I2PInterface' && info.reachable_on) {
+                found = candidates.find(entry => {
+                    return sameConfigValue(entry.peers, info.reachable_on);
+                });
+            }
+            return found || null;
+        }
+
+        function formatFrequencyHz(value) {
+            if (value === null || value === undefined || value === '') return '';
+            const hz = Number(value);
+            if (!isFinite(hz)) return String(value);
+            return `${(hz / 1000000).toFixed(3)} MHz`;
+        }
+
+        function formatBandwidthHz(value) {
+            if (value === null || value === undefined || value === '') return '';
+            const hz = Number(value);
+            if (!isFinite(hz)) return String(value);
+            if (hz >= 1000) return `${(hz / 1000).toFixed(hz % 1000 ? 1 : 0)} kHz`;
+            return `${hz} Hz`;
+        }
+
+        function getPeerMapMarker(peer) {
+            if (!peer) return null;
+            return window.aspectMarkersByHash[`interface:${peer.hash}`] ||
+                window.aspectMarkersByHash[`contact:${peer.hash}`] ||
+                window.aspectMarkersByHash[peer.hash] || null;
+        }
+
+        function interfaceInfoRows(info) {
+            if (!info) return [];
+            const rows = [];
+            if (info.frequency !== null && info.frequency !== undefined) {
+                rows.push(['📻 Frequenza', formatFrequencyHz(info.frequency)]);
+            }
+            if (info.bandwidth !== null && info.bandwidth !== undefined) {
+                rows.push(['📶 Bandwidth', formatBandwidthHz(info.bandwidth)]);
+            }
+            if (info.spreading_factor !== null && info.spreading_factor !== undefined) {
+                rows.push(['📡 SF', `SF${info.spreading_factor}`]);
+            }
+            if (info.coding_rate !== null && info.coding_rate !== undefined) {
+                rows.push(['🔧 CR', `CR${info.coding_rate}`]);
+            }
+            if (info.channel !== null && info.channel !== undefined) {
+                rows.push(['📻 Canale', String(info.channel)]);
+            }
+            if (info.modulation !== null && info.modulation !== undefined) {
+                rows.push(['🌀 Modulazione', String(info.modulation)]);
+            }
+            if (info.reachable_on) {
+                rows.push(['🌐 Host', `${info.reachable_on}${info.port ? ':' + info.port : ''}`]);
+            }
+            return rows;
+        }
+
+        function interfacePopupRows(info, loc, hops) {
+            let html = '';
+            interfaceInfoRows(info).forEach(([label, value]) => {
+                html += `<div class="rnode-info-row"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`;
+            });
+            if (info.transport_id) {
+                html += `<div class="rnode-info-row"><span>🆔 Transport ID</span><b>${escapeHtml(String(info.transport_id).substring(0, 16))}…</b></div>`;
+            }
+            if (info.discovery_hash) {
+                html += `<div class="rnode-info-row"><span>🔎 Discovery ID</span><b>${escapeHtml(String(info.discovery_hash).substring(0, 16))}…</b></div>`;
+            }
+            if (info.operator_lxmf_address) {
+                html += `<div class="rnode-info-row"><span>📨 Operatore LXMF</span><b>${escapeHtml(String(info.operator_lxmf_address).substring(0, 16))}…</b></div>`;
+            }
+            if (info.transport !== null && info.transport !== undefined) {
+                html += `<div class="rnode-info-row"><span>🔀 Transport node</span><b>${info.transport ? 'Sì' : 'No'}</b></div>`;
+            }
+            if (info.implementation || info.version) {
+                const runtime = [info.implementation, info.version].filter(Boolean).join(' ');
+                html += `<div class="rnode-info-row"><span>⚙️ Stack</span><b>${escapeHtml(runtime)}</b></div>`;
+            }
+            if (info.dst_cost !== null && info.dst_cost !== undefined) {
+                html += `<div class="rnode-info-row"><span>💾 DST cost</span><b>${escapeHtml(String(info.dst_cost))}</b></div>`;
+            }
+            if (info.pr_cost !== null && info.pr_cost !== undefined) {
+                html += `<div class="rnode-info-row"><span>📨 PR cost</span><b>${escapeHtml(String(info.pr_cost))}</b></div>`;
+            }
+            if (hops !== null && hops !== undefined && hops !== '') {
+                html += `<div class="rnode-info-row"><span>🔄 Hops</span><b>${escapeHtml(String(hops))}</b></div>`;
+            }
+            if (loc && loc.latitude !== null && loc.latitude !== undefined &&
+                loc.longitude !== null && loc.longitude !== undefined) {
+                html += `<div class="rnode-info-row"><span>📍 Lat/Lon</span><b>${escapeHtml(Number(loc.latitude).toFixed(6))}, ${escapeHtml(Number(loc.longitude).toFixed(6))}</b></div>`;
+                if (loc.altitude !== null && loc.altitude !== undefined) {
+                    html += `<div class="rnode-info-row"><span>⛰️ Alt</span><b>${escapeHtml(Number(loc.altitude).toFixed(1))} m</b></div>`;
+                }
+            } else {
+                html += `<div class="rnode-info-row"><span>📍 Posizione</span><b>${escapeHtml(t('position_unavailable'))}</b></div>`;
+            }
+            return html;
+        }
+
+        const INTERFACE_CONFIG_SCHEMAS = {
+            RNodeInterface: {
+                prefix: 'RNode',
+                fields: [
+                    { key: 'port', label: 'interface_config_port', type: 'text', value: () => '/dev/ttyUSB0' },
+                    { key: 'frequency', label: 'interface_config_frequency', type: 'number', value: info => info.frequency || '' },
+                    { key: 'bandwidth', label: 'interface_config_bandwidth', type: 'number', value: info => info.bandwidth || '' },
+                    { key: 'spreadingfactor', label: 'interface_config_spreadingfactor', type: 'number', value: info => info.spreading_factor || '' },
+                    { key: 'codingrate', label: 'interface_config_codingrate', type: 'number', value: info => info.coding_rate || '' },
+                    { key: 'txpower', label: 'interface_config_txpower', type: 'number', value: () => '17' },
+                ]
+            },
+            BackboneInterface: {
+                prefix: 'Backbone Client',
+                localType: 'BackboneClientInterface',
+                fields: [
+                    { key: 'target_host', label: 'interface_config_target_host', type: 'text', value: info => info.reachable_on || '' },
+                    { key: 'target_port', label: 'interface_config_target_port', type: 'number', value: info => info.port || '4242' },
+                ]
+            },
+            TCPServerInterface: {
+                prefix: 'TCP Client',
+                localType: 'TCPClientInterface',
+                fields: [
+                    { key: 'target_host', label: 'interface_config_target_host', type: 'text', value: info => info.reachable_on || '' },
+                    { key: 'target_port', label: 'interface_config_target_port', type: 'number', value: info => info.port || '4242' },
+                ]
+            },
+            TCPClientInterface: {
+                prefix: 'TCP Client',
+                localType: 'TCPClientInterface',
+                fields: [
+                    { key: 'target_host', label: 'interface_config_target_host', type: 'text', value: info => info.reachable_on || '' },
+                    { key: 'target_port', label: 'interface_config_target_port', type: 'number', value: info => info.port || '4242' },
+                ]
+            },
+            KISSInterface: {
+                prefix: 'KISS',
+                fields: [
+                    { key: 'port', label: 'interface_config_port', type: 'text', value: () => '/dev/ttyUSB0' },
+                    { key: 'speed', label: 'interface_config_speed', type: 'number', value: () => '9600' },
+                ]
+            },
+            WeaveInterface: {
+                prefix: 'Weave',
+                fields: [
+                    { key: 'port', label: 'interface_config_port', type: 'text', value: () => '/dev/ttyUSB0' },
+                    { key: 'speed', label: 'interface_config_speed', type: 'number', value: () => '3000000' },
+                ]
+            },
+            I2PInterface: {
+                prefix: 'I2P',
+                fields: [
+                    { key: 'peers', label: 'interface_config_peers', type: 'text', value: info => info.reachable_on || '' },
+                    { key: 'connectable', label: 'interface_config_connectable', type: 'checkbox', value: () => false },
+                ]
+            }
+        };
+
+        function interfaceConfigHtml(peer, info) {
+            if (!info) return '';
+            const schema = INTERFACE_CONFIG_SCHEMAS[info.type];
+            if (!schema) {
+                return `<div class="interface-config-status">${escapeHtml(t('interface_config_unsupported', { type: info.type || 'Interfaccia' }))}</div>`;
+            }
+            const entry = findConfiguredReticulumInterface(peer);
+            if (entry) {
+                const enabled = entry.enabled === true;
+                const state = enabled ? 'ON' : 'OFF';
+                const hint = enabled ? t('interface_config_restart') : t('interface_config_off_hint');
+                const buttonLabel = enabled ? t('interface_config_off') : t('interface_config_on');
+                const buttonClass = enabled ? 'interface-config-btn danger' : 'interface-config-btn';
+                return `<div class="interface-config-status">${escapeHtml(t('interface_config_present', { name: entry.name, state }))}</div>
+                    <div class="interface-config-hint">${escapeHtml(hint)}</div>
+                    <button type="button" class="${buttonClass}"
+                        onclick="event.stopPropagation(); setReticulumInterfaceEnabledFromPopup('${escapeHtml(escapeJsString(entry.name))}', '${escapeHtml(escapeJsString(entry.type))}', ${enabled ? 'false' : 'true'}, '${escapeHtml(escapeJsString(peer.hash))}')">
+                        ${escapeHtml(buttonLabel)}</button>`;
+            }
+
+            const hash = String(peer.hash || '');
+            const safeHash = escapeJsString(hash);
+            const defaultName = `${schema.prefix} ${info.name || hash.substring(0, 8)}`;
+            const fields = schema.fields.map(field => {
+                const rawValue = field.value(info);
+                const value = rawValue === null || rawValue === undefined ? '' : String(rawValue);
+                if (field.type === 'checkbox') {
+                    return `<label class="interface-config-check"><input data-interface-field="${field.key}" type="checkbox" ${value === 'true' ? 'checked' : ''}> ${escapeHtml(t(field.label))}</label>`;
+                }
+                return `<label>${escapeHtml(t(field.label))}
+                    <input data-interface-field="${field.key}" class="interface-config-input" type="${field.type || 'text'}" value="${escapeHtml(value)}" maxlength="200">
+                </label>`;
+            }).join('');
+            return `<div class="interface-config-form" id="interfaceConfigForm-${hash}">
+                <div class="interface-config-title">${escapeHtml(t('interface_config_title', { type: schema.localType || info.type || 'Interface' }))}</div>
+                <label>${escapeHtml(t('interface_config_name'))}
+                    <input data-interface-field="name" class="interface-config-input" value="${escapeHtml(defaultName)}" maxlength="64">
+                </label>
+                ${fields}
+                <div class="interface-config-hint">${escapeHtml(t('interface_config_fields_hint'))}</div>
+                <button type="button" class="interface-config-btn" onclick="event.stopPropagation(); addInterfaceFromPopup('${safeHash}')">
+                    ${escapeHtml(t('interface_config_add'))}
+                </button>
+            </div>`;
+        }
+
+        function reopenMapPopup(peerHash) {
+            setTimeout(() => {
+                const marker = window.aspectMarkersByHash[`interface:${peerHash}`] ||
+                    window.aspectMarkersByHash[`contact:${peerHash}`];
+                if (marker) {
+                    marker.openPopup();
+                    return;
+                }
+                const peer = findMapPeer(peerHash, null);
+                if (peer) showPeerPopupWithoutLocation(peer);
+            }, 120);
+        }
+
+        async function addInterfaceFromPopup(peerHash) {
+            const peer = (mapPeers || []).find(p => p.hash === peerHash) ||
+                (peers || []).find(p => p.hash === peerHash);
+            const info = peer && peer.announce_info;
+            if (!info) {
+                showTransferStats('⚠️ Dati interfaccia non disponibili');
+                return;
+            }
+            const form = document.getElementById(`interfaceConfigForm-${peerHash}`);
+            if (!form) return;
+            const payload = {
+                action: 'add',
+                type: (INTERFACE_CONFIG_SCHEMAS[info.type] && INTERFACE_CONFIG_SCHEMAS[info.type].localType) || info.type,
+                discovery_name: info.name || '',
+            };
+            form.querySelectorAll('[data-interface-field]').forEach(input => {
+                const key = input.dataset.interfaceField;
+                if (!key) return;
+                payload[key] = input.type === 'checkbox'
+                    ? (input.checked ? 'yes' : 'no')
+                    : input.value;
+            });
+            try {
+                const response = await fetch('/api/reticulum/interface', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Aggiunta fallita');
+                await loadReticulumInterfaces();
+                showTransferStats(data.created
+                    ? `✅ ${t('interface_config_added')}`
+                    : `ℹ️ ${data.message || t('interface_config_exists')}`);
+                reopenMapPopup(peerHash);
+            } catch (error) {
+                showTransferStats(`❌ ${error.message}`);
+            }
+        }
+
+        async function setReticulumInterfaceEnabledFromPopup(name, type, enabled, peerHash) {
+            try {
+                const response = await fetch('/api/reticulum/interface', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'set_enabled', name, type, enabled: !!enabled }),
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Modifica interfaccia fallita');
+                await loadReticulumInterfaces();
+                showTransferStats(enabled
+                    ? t('interface_config_enabled_msg')
+                    : t('interface_config_disabled_msg'));
+                reopenMapPopup(peerHash);
+            } catch (error) {
+                showTransferStats(`❌ ${error.message}`);
+            }
+        }
+
+        async function disableReticulumInterfaceFromPopup(name, type, peerHash) {
+            return setReticulumInterfaceEnabledFromPopup(name, type, false, peerHash);
+        }
+
         function peerMapAppearance(peer) {
             if (peer && peer.announce_info) {
                 const meta = interfaceTypeMeta(peer.announce_info.type);
@@ -3287,6 +4839,41 @@
             const hash = String((peer && peer.hash) || '').substring(0, 8);
             const hue = parseInt(hash, 16) % 360 || 0;
             return { icon: 'map-marker', color: `hsl(${hue}, 80%, 60%)` };
+        }
+
+        function peerPopupHtml(peer, loc, hops) {
+            const info = peer.announce_info;
+            const isInterface = peer.source === 'interface' || !!info;
+            const typeMeta = isInterface ? interfaceTypeMeta(info?.type) : null;
+            const displayName = peer.name || String(peer.hash || '').substring(0, 8);
+            let popup = `<div class="rnode-popup" style="color:#000; font-family:'Segoe UI'; min-width:220px;">
+                <b>${escapeHtml(displayName)}</b><br>`;
+            if (!isInterface) {
+                const safeHash = escapeJsString(peer.hash || '');
+                const safeDest = escapeJsString(peer.dest_hash || '');
+                popup += `<div class="marker-action-row">
+                    <button type="button" class="marker-action-btn primary" onclick="event.stopPropagation(); openPeerChatFromMap('${safeHash}', '${safeDest}')">
+                        💬 ${escapeHtml(t('marker_chat'))}</button>
+                    <button type="button" class="marker-action-btn" onclick="event.stopPropagation(); requestTelemetryFromMap('${safeHash}', '${safeDest}')">
+                        📍 ${escapeHtml(t('marker_telemetry'))}</button>
+                    <button type="button" class="marker-action-btn call" onclick="event.stopPropagation(); startCallFromMap('${safeHash}', '${safeDest}')">
+                        📞 ${escapeHtml(t('marker_call'))}</button>
+                </div>`;
+            }
+            if (info) {
+                popup += `<span class="rnode-popup-type">${escapeHtml(typeMeta ? typeMeta.label : (info.type || 'Interfaccia'))}</span>`;
+                popup += interfacePopupRows(info, loc, hops);
+                popup += interfaceConfigHtml(peer, info);
+            } else if (loc && loc.latitude !== null && loc.latitude !== undefined &&
+                       loc.longitude !== null && loc.longitude !== undefined) {
+                popup += `🔄 Hops: ${escapeHtml(String(hops))}<br>`;
+                popup += `📍 Lat: ${Number(loc.latitude).toFixed(6)} · Lon: ${Number(loc.longitude).toFixed(6)}`;
+                if (loc.altitude !== null && loc.altitude !== undefined) {
+                    popup += `<br>⛰️ Alt: ${Number(loc.altitude).toFixed(1)} m`;
+                }
+            }
+            popup += `<div class="rnode-popup-kind">${isInterface ? 'Interfaccia' : 'Contatto LXMF'}</div></div>`;
+            return popup;
         }
 
         function renderAspectMapMarkers() {
@@ -3347,29 +4934,14 @@
                     popupAnchor: [0, -14]
                 });
                 const marker = L.marker([loc.latitude, loc.longitude], { icon: markerIcon });
-                const info = peer.announce_info;
-                let popup = `<div style="color:#000; font-family:'Segoe UI'; min-width:180px;">
-                    <b>${escapeHtml(displayName)}</b><br>`;
-                if (info) {
-                    popup += `${escapeHtml(typeMeta ? typeMeta.label : (info.type || 'Interfaccia'))}<br>`;
-                    if (info.reachable_on) {
-                        popup += `${escapeHtml(info.reachable_on)}${info.port ? ':' + info.port : ''}<br>`;
-                    }
-                }
-                popup += `🔄 Hops: ${escapeHtml(String(hops))}<br>`;
-                popup += `Lat: ${Number(loc.latitude).toFixed(6)}<br>Lon: ${Number(loc.longitude).toFixed(6)}`;
-                if (loc.altitude !== null && loc.altitude !== undefined) {
-                    popup += `<br>Alt: ${Number(loc.altitude).toFixed(1)}m`;
-                }
-                popup += `<br><small>${info ? 'Interfaccia' : 'Contatto LXMF'}</small></div>`;
-                marker.bindPopup(popup, { autoPan: false });
+                marker.bindPopup(peerPopupHtml(peer, loc, hops), { autoPan: false });
                 marker.on('click', (event) => {
                     if (measureTool) {
                         if (event && event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
                         return;
                     }
                     if (peer.source === 'interface' && !isDiscoveryAspect()) return;
-                    if (peer.hash) selectPeer(peer.hash, peer.dest_hash);
+                    if (peer.hash) selectPeer(peer.hash, peer.dest_hash, { focusMap: false });
                 });
                 layer.addLayer(marker);
                 const markerKey = `${peer.source || 'peer'}:${peer.hash}`;
@@ -3382,17 +4954,44 @@
             invalidateMapSize();
         }
 
+        function showPeerPopupWithoutLocation(peer) {
+            if (!peer || !peer.announce_info) return false;
+            if (!ensureMap()) return false;
+            const mapEl = document.getElementById('mapContainer');
+            const placeholder = document.getElementById('mapPlaceholder');
+            if (mapEl) mapEl.style.display = 'block';
+            if (placeholder) placeholder.style.display = 'none';
+            setTimeout(invalidateMapSize, 30);
+            const hops = peer.hops !== null && peer.hops !== undefined ? peer.hops : '?';
+            L.popup({ maxWidth: 380, autoPan: true, closeOnClick: false })
+                .setLatLng(map.getCenter())
+                .setContent(peerPopupHtml(peer, null, hops))
+                .openOn(map);
+            return true;
+        }
+
         function focusPeerOnMap(peer) {
-            if (!peer || !peer.last_location) return;
+            if (!peer) return;
+            if (!peer.last_location) {
+                if (peer.announce_info) showPeerPopupWithoutLocation(peer);
+                return;
+            }
             const loc = peer.last_location;
             if (!ensureMap(loc.latitude, loc.longitude, 13)) return;
-            const marker = window.aspectMarkersByHash[`contact:${peer.hash}`] ||
-                window.aspectMarkersByHash[`interface:${peer.hash}`] ||
-                window.aspectMarkersByHash[peer.hash];
-            if (marker) {
+
+            const panAndOpen = () => {
+                const marker = getPeerMapMarker(peer);
+                if (!marker) return false;
+                const target = marker.getLatLng ? marker.getLatLng() : [loc.latitude, loc.longitude];
+                // Keep the current zoom: panTo never changes it.
+                map.panTo(target, { animate: true });
                 marker.openPopup();
-            } else {
+                return true;
+            };
+
+            if (!panAndOpen()) {
                 renderAspectMapMarkers();
+                setTimeout(panAndOpen, 80);
             }
         }
 
@@ -3851,6 +5450,7 @@
             entry.addEventListener('click', () => toggleRawEntry(entry));
 
             container.prepend(entry);
+            container.scrollTop = 0;
 
             while (container.children.length > 50) {
                 container.removeChild(container.lastChild);

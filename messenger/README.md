@@ -6,7 +6,7 @@ Web messenger for **LXMF** (Lightweight Extensible Message Format) over Reticulu
 
 This is a separate project from the [Manager](../manager/README.md): the only shared resource is the `~/.rns_manager/` data directory (identities, configuration, uploads).
 
-![LXMF Chat](img/lxmf-chat.jpg)
+![RNS Messenger](img/lxmf-chat.jpg)
 
 ## ✨ Features
 
@@ -22,8 +22,12 @@ This is a separate project from the [Manager](../manager/README.md): the only sh
 - 🎮 LXMF remote commands: telemetry, ping, echo, signal report, rangetest
 - 📡 Propagation nodes: configuration and message synchronisation
 - 📣 Announce sending and peer import from the monitor cache
+- 🌐 Interface translations (Italian and English; easily extensible)
 - ⚡ Real-time updates via **Socket.IO** (send progress, incoming messages)
+- 🔔 In-app/browser message and call notifications, unread badges, ringtone and notification settings
 - 🗃️ Browsable and downloadable raw message archive
+
+- **UI translations**: `static/messenger_translations.json`; the default language follows the browser, can be changed from the header, and is saved in `localStorage`.
 
 ## 🚀 Installation
 
@@ -123,11 +127,12 @@ Identities imported through the Manager are available in the messenger and vice 
 6. Filter the peer list by announce aspect. Defaults are `lxmf.delivery`, `lxmf.propagation` and `rnstransport.discovery.interface`; add more in the **CONFIG** tab or with `announce_aspects` / `LXMF_ANNOUNCE_ASPECTS=a,b`.
 7. In `lxmf.propagation` mode the list shows propagation nodes, with per-node actions to set or replace the current propagation node. The map can be opened in any aspect; in delivery mode it shows contacts with known positions together with discovery interfaces, and markers can be filtered by contact/interface type.
 8. In `rnstransport.discovery.interface` mode the map opens over the central area automatically; interface markers show the interface name and hop count, with type represented by color/icon.
-9. The map uses free, keyless providers (Esri World Street/Topographic/Imagery, OpenStreetMap, OpenTopoMap, CyclOSM) and Leaflet/Socket.IO are served locally from `static/vendor/`. A visible layer selector switches provider without changing the current center/zoom. **The map never follows incoming announcements:** only user pan/zoom, the explicit 🎯 “fit markers” and 📍 “center on me” actions change the view.
+9. The map uses free, keyless providers (Esri World Street/Topographic/Imagery, OpenStreetMap, OpenTopoMap, CyclOSM) and Leaflet/Socket.IO are served locally from `static/vendor/`. A visible layer selector switches provider without changing the current center/zoom. **The map never follows incoming announcements:** only user pan/zoom, the explicit 🎯 “fit markers” and 📍 “center on me” actions change the view. Selecting a peer from the left list pans to its marker while preserving the current zoom; clicking a marker selects the same contact in the left list without panning and opens a popup with Chat, Telemetry and Call actions.
 10. Map tools include distance (📏), circular area (⭕) and rectangular area (▭); the readout and preview update live while moving the mouse. Measurements stay on a separate layer and do not disappear when announcements refresh. Use 🧹 to clear them.
-11. `rnstransport.discovery.interface` announcements are decoded safely: the UI shows interface type/name, host/port and coordinates, but never IFAC net keys or generated config entries. No discovered interface is auto-connected.
+11. `rnstransport.discovery.interface` announcements are decoded safely: the UI shows interface type/name, host/port, coordinates and RNode radio parameters (frequency, bandwidth, SF, CR), but never IFAC net keys or generated config entries. No discovered interface is auto-connected. The interface marker popup can add supported local interface sections (RNode, Backbone Client, TCP Client, KISS, Weave, I2P) to `~/.reticulum/config`; missing local parameters must be entered because they are not published by discovery. Existing interfaces have a single ON/OFF toggle in the popup; missing interfaces can be added from the same form. Config changes require restarting Reticulum/rnsd to take effect.
 12. Configure or remove the propagation node from **CONFIG → NODO PROPAGATION** using **IMPOSTA** / 🗑️. The setting is applied immediately and saved to `config.json`; changing it asks for confirmation when another node is already configured.
-13. **ESCI** stops the server completely; **CAMBIA IDENTITÀ** switches identity without stopping it.
+13. **📶 STATO RNS** opens the raw `rnstatus` output (ANSI stripped) in a modal without invoking a shell; the command is looked up in `PATH` and has an 8 second timeout.
+14. **ESCI** stops the server completely; **CAMBIA IDENTITÀ** switches identity without stopping it.
 
 ### Publishing interface discovery
 
@@ -146,6 +151,8 @@ The Messenger only needs to listen to `rnstransport.discovery.interface`; no Ret
   # Optional: a command printing "lat,lon,alt"
   # location_cmd = /usr/local/bin/gps-location
 ```
+
+When a discovered `BackboneInterface` or `TCPServerInterface` is added from the map popup, RNS Manager writes a **client** interface (`BackboneClientInterface` or `TCPClientInterface`) pointing to the announced `reachable_on:port`; it never opens a local listener.
 
 Only interfaces supporting Reticulum discovery can be published (`BackboneInterface`, `TCPServerInterface`, `TCPClientInterface`, `RNodeInterface`, `WeaveInterface`, `I2PInterface`, `KISSInterface`). Coordinates are public and are displayed only when present in the announcement. Do not enable `discovery_encrypt` unless the receivers have the required network identity. Avoid `publish_ifac` unless you intentionally want to publish IFAC details.
 
@@ -166,6 +173,8 @@ GET  /api/peer/<hash>/telemetry/last
 GET  /api/raw/history             GET  /api/raw/history/<hash>
 GET  /api/raw/<hash>
 GET  /api/config                  POST /api/config
+GET  /api/reticulum/interfaces    POST /api/reticulum/interface
+GET  /api/rns/status
 POST /api/propagation
 POST /api/sync                    POST /api/announce
 POST /api/peers/import            POST /api/cleanup_temp
